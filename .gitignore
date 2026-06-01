@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*~
+
+# 运行产物（按模型分目录的实际输出）
+cases/*/output/model-*/
+
+# 临时文件
+*.log
+*.tmp
+.env
+.env.local
