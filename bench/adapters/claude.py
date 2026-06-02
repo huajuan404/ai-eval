@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ..record import Usage
 from ..registry import RunnerProfile
-from .base import Adapter, ParsedOutput, extract_json_object
+from .base import Adapter, ParsedOutput, extract_result_object
 
 
 class ClaudeAdapter(Adapter):
@@ -34,7 +34,7 @@ class ClaudeAdapter(Adapter):
         return cmd
 
     def parse(self, stdout: str, stderr: str, exit_code: int | None) -> ParsedOutput:
-        obj = extract_json_object(stdout)
+        obj = extract_result_object(stdout)  # 挑 result 事件，跳过 init/system 前缀事件
         if obj is None:
             return ParsedOutput(usage=None, num_turns=None, is_error=exit_code not in (0, None))
         usage_obj = obj.get("usage") or {}
@@ -49,3 +49,9 @@ class ClaudeAdapter(Adapter):
             num_turns=obj.get("num_turns"),
             is_error=is_error,
         )
+
+    def extract_final_text(self, stdout: str) -> str:
+        obj = extract_result_object(stdout)
+        if obj and isinstance(obj.get("result"), str):
+            return obj["result"]
+        return stdout

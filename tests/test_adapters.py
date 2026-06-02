@@ -28,6 +28,36 @@ def test_claude_parses_usage_from_fixture() -> None:
     assert out.is_error is False
 
 
+def test_claude_picks_result_event_amid_stream() -> None:
+    # 本机环境会先吐 init/system 事件再吐 result —— 必须挑 result，而非首个对象
+    stdout = (
+        '{"type":"system","subtype":"init","session_id":"x","model":"opus"}\n'
+        '{"type":"result","is_error":false,"num_turns":3,"total_cost_usd":0.5,'
+        '"result":"the answer","usage":{"input_tokens":10,"output_tokens":2}}\n'
+    )
+    out = ClaudeAdapter().parse(stdout, "", 0)
+    assert out.usage.input_tokens == 10
+    assert out.usage.cost_usd == 0.5
+    assert out.num_turns == 3
+
+
+def test_claude_extract_final_text_from_result() -> None:
+    stdout = (
+        '{"type":"system","subtype":"init"}\n'
+        '{"type":"result","result":"{\\"score\\": 8}","usage":{}}\n'
+    )
+    assert ClaudeAdapter().extract_final_text(stdout) == '{"score": 8}'
+
+
+def test_codex_extract_final_text_last_message() -> None:
+    stdout = (
+        '{"type":"item.completed","item":{"type":"agent_message","text":"first"}}\n'
+        '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}\n'
+        '{"type":"item.completed","item":{"type":"agent_message","text":"{\\"score\\": 9}"}}\n'
+    )
+    assert CodexAdapter().extract_final_text(stdout) == '{"score": 9}'
+
+
 def test_claude_is_error_flag() -> None:
     stdout = '{"type":"result","is_error":true,"num_turns":1,"result":"boom","usage":{"input_tokens":5,"output_tokens":1}}'
     out = ClaudeAdapter().parse(stdout, "", 0)

@@ -135,14 +135,16 @@ def run_judge(
     env = adapter.build_env(judge_profile)
 
     stdout, stderr, code = run_fn(cmd, cwd, env)
-    obj = extract_json_object(stdout)
+    # 先从启动器包装中取出模型最终文本，再从中提取打分 JSON（KTD10c 回退）。
+    final_text = adapter.extract_final_text(stdout) if hasattr(adapter, "extract_final_text") else stdout
+    obj = extract_json_object(final_text)
     if obj is None or "score" not in obj:
         return JudgeResult(
             ran=True,
             model=judge_model_label,
             same_source=same_source,
             score=None,
-            reasoning=scrub_truncate(stdout or stderr, DETAIL_LIMIT),
+            reasoning=scrub_truncate(final_text or stderr, DETAIL_LIMIT),
         )
     return JudgeResult(
         ran=True,

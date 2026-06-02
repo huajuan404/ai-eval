@@ -16,7 +16,7 @@ from .case import list_cases
 from .config import ConfigError, RunConfig, load_config
 from .orchestrator import MatrixResult, run_matrix, run_subprocess
 from .registry import RegistryError, get_profile, load_registry
-from .scorecard import build_scorecard
+from .scorecard import build_scorecard, write_model_profile
 from .scoring import _default_script_runner, score_record
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -29,6 +29,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-j", "--judge", default=None, help="裁判档案标签，覆盖 config")
     p.add_argument("--repeat", type=int, default=None, help="每格运行次数，覆盖 config")
     p.add_argument("-l", "--list", action="store_true", help="列出可用用例与 runner 档案")
+    p.add_argument(
+        "--write-profiles",
+        action="store_true",
+        help="把本次各 runner 的表现写入 models/<label>.md",
+    )
     return p
 
 
@@ -60,6 +65,16 @@ def cmd_list(registry: dict, cases: list) -> str:
     return "\n".join(lines)
 
 
+def _profile_summary(label: str, records: list) -> str:
+    """为某 runner 生成一行档案摘要。"""
+    bits = []
+    for rec in records:
+        check = "pass" if rec.check.passed else ("fail" if rec.check.ran else "—")
+        jscore = rec.judge.score if rec.judge and rec.judge.score is not None else "—"
+        bits.append(f"{rec.case}: check={check}, judge={jscore}, {rec.duration_ms}ms")
+    return "；".join(bits)
+
+
 def run_benchmark(
     config: RunConfig,
     registry: dict,
@@ -67,6 +82,7 @@ def run_benchmark(
     *,
     judge_run_fn=run_subprocess,
     check_run_fn=_default_script_runner,
+    write_profiles: bool = False,
 ) -> Path:
     """执行矩阵 → 判分 → 计分卡，返回计分卡路径。"""
     cases = list_cases(root / "cases")
@@ -91,6 +107,14 @@ def run_benchmark(
     sc_dir.mkdir(exist_ok=True)
     path = sc_dir / f"{date.today().isoformat()}.md"
     path.write_text(md, encoding="utf-8")
+
+    if write_profiles:
+        by_runner: dict[str, list] = {}
+        for rec in scored:
+            by_runner.setdefault(rec.runner_label, []).append(rec)
+        for label, recs in by_runner.items():
+            write_model_profile(root / "models", label, _profile_summary(label, recs))
+
     return path
 
 
@@ -118,7 +142,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         for label in config.runners:
             get_profile(registry, label)  # 提前校验标签存在
-        path = run_benchmark(config, registry, ROOT)
+        path = run_benchmark(config, registry, ROOT, write_profiles=args.write_profiles)
     except (RegistryError, KeyError) as e:
         print(f"错误: {e}", file=sys.stderr)
         return 1

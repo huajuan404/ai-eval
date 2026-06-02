@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from ..record import Usage
 from ..registry import RunnerProfile
-from .base import Adapter, ParsedOutput, extract_json_object
+from .base import Adapter, ParsedOutput, extract_result_object
 
 
 class CAdapter(Adapter):
@@ -26,8 +26,8 @@ class CAdapter(Adapter):
         return cmd
 
     def parse(self, stdout: str, stderr: str, exit_code: int | None) -> ParsedOutput:
-        # 与 claude 相同的单 JSON，但 stdout 前有 banner，extract_json_object 已处理。
-        obj = extract_json_object(stdout)
+        # 与 claude 相同：跳过 banner 前缀与 init/system 事件，挑 result 事件。
+        obj = extract_result_object(stdout)
         if obj is None:
             return ParsedOutput(usage=None, num_turns=None, is_error=exit_code not in (0, None))
         usage_obj = obj.get("usage") or {}
@@ -38,3 +38,9 @@ class CAdapter(Adapter):
         )
         is_error = bool(obj.get("is_error")) or (exit_code not in (0, None))
         return ParsedOutput(usage=usage, num_turns=obj.get("num_turns"), is_error=is_error)
+
+    def extract_final_text(self, stdout: str) -> str:
+        obj = extract_result_object(stdout)
+        if obj and isinstance(obj.get("result"), str):
+            return obj["result"]
+        return stdout

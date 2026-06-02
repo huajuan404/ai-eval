@@ -9,8 +9,19 @@
 *.swp
 *~
 
-# 运行产物（按模型分目录的实际输出）
-cases/*/output/model-*/
+# 工具目录
+.serena/
+
+# 运行产物（按 runner 标签分目录的实际输出，含原始模型输出）
+cases/*/output/*/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 计分卡为生成产物（可复现）；按需 git add -f 单个分享，默认不入库
+scorecards/
 
 # 临时文件
 *.log

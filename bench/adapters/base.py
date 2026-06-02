@@ -75,36 +75,68 @@ def build_minimal_env(
     return env
 
 
+def _scan_json_object(text: str, start: int) -> tuple[dict | None, int]:
+    """从 start（应指向 '{'）扫描一个完整 JSON 对象，返回 (obj, end_index_exclusive)。"""
+    depth = 0
+    in_str = False
+    esc = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(text[start : i + 1]), i + 1
+                except json.JSONDecodeError:
+                    return None, i + 1
+    return None, len(text)
+
+
+def extract_json_objects(text: str) -> list[dict]:
+    """提取 stdout 中所有顶层 JSON 对象（流式输出会有多个）。"""
+    out: list[dict] = []
+    idx = text.find("{")
+    while idx != -1:
+        obj, end = _scan_json_object(text, idx)
+        if obj is not None:
+            out.append(obj)
+            idx = text.find("{", end)
+        else:
+            idx = text.find("{", idx + 1)
+    return out
+
+
 def extract_json_object(text: str) -> dict | None:
-    """从可能带前缀（如 c 的 banner）的 stdout 中提取首个完整 JSON 对象。"""
-    start = text.find("{")
-    while start != -1:
-        depth = 0
-        in_str = False
-        esc = False
-        for i in range(start, len(text)):
-            ch = text[i]
-            if in_str:
-                if esc:
-                    esc = False
-                elif ch == "\\":
-                    esc = True
-                elif ch == '"':
-                    in_str = False
-                continue
-            if ch == '"':
-                in_str = True
-            elif ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    try:
-                        return json.loads(text[start : i + 1])
-                    except json.JSONDecodeError:
-                        break
-        start = text.find("{", start + 1)
-    return None
+    """提取首个完整 JSON 对象（兼容旧用法）。"""
+    objs = extract_json_objects(text)
+    return objs[0] if objs else None
+
+
+def extract_result_object(text: str) -> dict | None:
+    """提取结果对象：优先 type=='result' 的事件，否则取最后一个 JSON 对象。
+
+    claude -p --output-format json 在本机环境会先吐 init/system 事件再吐 result，
+    必须挑 result 事件而非首个对象。
+    """
+    objs = extract_json_objects(text)
+    if not objs:
+        return None
+    for obj in reversed(objs):
+        if obj.get("type") == "result":
+            return obj
+    return objs[-1]
 
 
 def normalize_model_label(label: str) -> str:
@@ -141,3 +173,7 @@ class Adapter(ABC):
     @abstractmethod
     def parse(self, stdout: str, stderr: str, exit_code: int | None) -> ParsedOutput:
         """解析启动器输出。无法解析 usage 时返回 usage=None（优雅降级）。"""
+
+    def extract_final_text(self, stdout: str) -> str:
+        """从启动器原始输出中取出模型最终文本（裁判打分时用）。默认返回整段 stdout。"""
+        return stdout

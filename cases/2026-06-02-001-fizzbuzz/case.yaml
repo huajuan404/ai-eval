@@ -1,0 +1,18 @@
+name: 2026-06-02-001-fizzbuzz
+# 种子用例：小型可验证编码任务。agent 需补全 solution.py 使 test_solution.py 通过。
+# 与模型解耦：任意 runner（codex/claude/c N/...）都能跑。
+
+task:
+  type: prompt
+  prompt_file: prompts/task.md
+
+check:
+  type: script
+  script: check.sh   # 退出 0 = 通过
+
+judge:
+  enabled: true
+  rubric_file: prompts/rubric.md
+  dimensions: [correctness, code_quality]
+
+# requires_engine 省略 → 所有引擎均可参与对比

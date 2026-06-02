@@ -88,3 +88,23 @@ class CodexAdapter(Adapter):
             num_turns=num_turns or None,
             is_error=is_error,
         )
+
+    def extract_final_text(self, stdout: str) -> str:
+        """取最后一条 agent_message 文本（裁判打分时用）。"""
+        texts: list[str] = []
+        for line in stdout.splitlines():
+            line = line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                evt = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            item = evt.get("item")
+            if isinstance(item, dict) and item.get("type") == "agent_message":
+                text = item.get("text")
+                if isinstance(text, str):
+                    texts.append(text)
+            elif isinstance(evt.get("text"), str) and evt.get("type", "").endswith("message"):
+                texts.append(evt["text"])
+        return texts[-1] if texts else stdout
