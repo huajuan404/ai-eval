@@ -82,8 +82,8 @@ def gather_contestant_output(
         if not f.is_file():
             continue
         rel = f.relative_to(base)
-        if _should_ignore(rel.parts[:-1], f.name):
-            continue
+        if _should_ignore(rel.parts[:-1], f.name) or f.name == "PROMPT.txt":
+            continue  # PROMPT.txt 是任务输入，不是选手产物
         try:
             content = f.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):

@@ -113,6 +113,18 @@ def test_gather_output_large_not_inline(tmp_path: Path) -> None:
     assert text == ""
 
 
+def test_gather_skips_prompt_includes_output(tmp_path: Path) -> None:
+    art = tmp_path / "art"
+    art.mkdir()
+    (art / "PROMPT.txt").write_text("the task prompt", encoding="utf-8")
+    (art / "OUTPUT.txt").write_text("the model answer", encoding="utf-8")
+    (art / "sol.py").write_text("code", encoding="utf-8")
+    text, inline = gather_contestant_output(art, inline_limit=8000)
+    assert "the model answer" in text
+    assert "code" in text
+    assert "the task prompt" not in text  # PROMPT.txt 是输入，排除
+
+
 def test_run_judge_structured(tmp_path: Path) -> None:
     case = load_case(_make_case(tmp_path))
     art = tmp_path / "art"

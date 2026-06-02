@@ -149,6 +149,9 @@ def _execute_cell(
         out_dir.mkdir(parents=True, exist_ok=True)
         artifacts_dir = out_dir / f"artifacts-{repeat_index}"
         copy_artifacts(wd, artifacts_dir)
+        # 写出模型最终回答文本，供 judge 评分（纯分析任务的"产物"是回答而非文件）。
+        final_text = adapter.extract_final_text(stdout) if not failed else ""
+        (artifacts_dir / "OUTPUT.txt").write_text(scrub_text(final_text), encoding="utf-8")
         (out_dir / f"run.{repeat_index}.raw.txt").write_text(
             scrub_text(stdout) + ("\n--- stderr ---\n" + scrub_text(stderr) if stderr else ""),
             encoding="utf-8",

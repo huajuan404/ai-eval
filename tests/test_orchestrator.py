@@ -191,6 +191,24 @@ def test_requires_engine_incompatible_skipped(tmp_path: Path) -> None:
     assert res.skipped[0].case == "c1"
 
 
+def test_output_txt_written_for_judge(tmp_path: Path) -> None:
+    case = load_case(_make_case(tmp_path, "c1"))
+    reg = {"a": RunnerProfile("a", "claude")}
+
+    def run_fn(cmd, cwd, env):
+        return "MODEL FINAL ANSWER", "", 0
+
+    run_matrix(
+        RunConfig(runners=("a",)), reg, [case],
+        run_fn=run_fn,
+        adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
+        clock=_fixed_clock(),
+    )
+    out = case.output_dir("a") / "artifacts-0" / "OUTPUT.txt"
+    # FakeAdapter 用默认 extract_final_text → 返回整段 stdout
+    assert out.exists() and out.read_text() == "MODEL FINAL ANSWER"
+
+
 def test_run_record_persisted_to_disk(tmp_path: Path) -> None:
     case = load_case(_make_case(tmp_path, "c1"))
     reg = {"a": RunnerProfile("a", "claude")}
