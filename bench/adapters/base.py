@@ -49,27 +49,35 @@ class ParsedOutput:
     is_error: bool = False
 
 
-def build_minimal_env(
-    profile: RunnerProfile,
+def minimal_os_env(
     base_env: dict[str, str] | None = None,
     extra_keys: tuple[str, ...] = (),
     credential_allow: tuple[str, ...] = (),
 ) -> dict[str, str]:
-    """构造最小子进程环境（R20）。
+    """白名单通用变量（ESSENTIAL + extra_keys，剔除名字像凭证的）+ 显式放行的凭证（R20）。
 
-    - 白名单通用变量（ESSENTIAL + extra_keys），且剔除名字像凭证的；
-    - `credential_allow`：该 launcher 显式声明自己需要的凭证变量，原样放行
-      （让 claude/codex 能拿到自己的 auth，但不转发其它 provider 的 token）；
-    - 档案 `env` 声明：解析 ${ENV} 插值。
+    供子进程使用（runner 与 check 脚本共用），不含任何无关 provider 的 token。
     """
     src = base_env if base_env is not None else dict(os.environ)
     env: dict[str, str] = {}
     for key in ESSENTIAL_ENV_KEYS + extra_keys:
         if key in src and not _CREDENTIAL_KEY_RE.search(key):
             env[key] = src[key]
-    for key in credential_allow:  # 显式放行：该 launcher 自身的 auth
+    for key in credential_allow:  # 显式放行：调用方自身的 auth
         if key in src:
             env[key] = src[key]
+    return env
+
+
+def build_minimal_env(
+    profile: RunnerProfile,
+    base_env: dict[str, str] | None = None,
+    extra_keys: tuple[str, ...] = (),
+    credential_allow: tuple[str, ...] = (),
+) -> dict[str, str]:
+    """launcher 子进程最小环境：minimal_os_env + 档案 env 的 ${ENV} 插值。"""
+    src = base_env if base_env is not None else dict(os.environ)
+    env = minimal_os_env(src, extra_keys, credential_allow)
     for k, v in profile.env.items():
         env[k] = _ENV_INTERP_RE.sub(lambda m: src.get(m.group(1), ""), v)
     return env

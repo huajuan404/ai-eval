@@ -73,6 +73,11 @@ class Case:
     def input_dir(self) -> Path:
         return self.directory / "input"
 
+    @property
+    def verify_dir(self) -> Path:
+        """只读基准目录：check 前覆盖到产物目录，选手改不了（防篡改）。"""
+        return self.directory / "verify"
+
     def output_dir(self, runner_label: str) -> Path:
         return self.directory / "output" / runner_label
 
@@ -209,9 +214,14 @@ def count_changed(before: dict[str, tuple], after: dict[str, tuple]) -> int:
 
 
 def copy_artifacts(workdir: str | Path, dest: str | Path) -> None:
-    """把 workdir 内容（排除忽略项）复制到 output/<runner>/。"""
+    """把 workdir 内容（排除忽略项）复制到 output/<runner>/。
+
+    复制前清空 dest，避免上次运行的残留产物污染本次 check/judge（重跑误判）。
+    """
     src = Path(workdir)
     dst = Path(dest)
+    if dst.exists():
+        shutil.rmtree(dst, ignore_errors=True)
     dst.mkdir(parents=True, exist_ok=True)
     for f in src.rglob("*"):
         if not f.is_file():
@@ -219,6 +229,24 @@ def copy_artifacts(workdir: str | Path, dest: str | Path) -> None:
         rel = f.relative_to(src)
         if _should_ignore(rel.parts[:-1], f.name):
             continue
+        target = dst / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(f, target)
+
+
+def restore_verify_assets(case: Case, target_dir: str | Path) -> None:
+    """把 case verify/ 的只读基准文件覆盖到 target_dir（check 前调用，防选手篡改测试）。
+
+    verify/ 不进入选手 workdir（只 input/ 进），所以选手看不到也改不了基准测试；
+    check 时还原基准，确保确定性质量锚可信。
+    """
+    if not case.verify_dir.exists():
+        return
+    dst = Path(target_dir)
+    for f in case.verify_dir.rglob("*"):
+        if not f.is_file():
+            continue
+        rel = f.relative_to(case.verify_dir)
         target = dst / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(f, target)

@@ -5,4 +5,5 @@
 - n 能被 5 整除 → 返回 "Buzz"
 - 其它 → 返回 str(n)
 
-目标：让同目录的 `test_solution.py` 全部断言通过。只修改 `solution.py`。
+只修改当前目录的 `solution.py`，按上述规则实现 `fizzbuzz(n)`。
+（评测会用一份独立的只读测试校验，你看不到它——按规格实现即可。）

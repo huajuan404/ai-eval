@@ -50,10 +50,16 @@ class SubprocessResult(Protocol):
     returncode: int
 
 
+def _decode(value: object) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value or ""
+
+
 def run_subprocess(
     cmd: list[str], cwd: str, env: dict[str, str], timeout: int = DEFAULT_TIMEOUT_S
 ) -> tuple[str, str, int | None]:
-    """真实子进程执行。返回 (stdout, stderr, exit_code)。超时 → exit_code=None。"""
+    """真实子进程执行。返回 (stdout, stderr, exit_code)。超时 → 退出码 124（显式失败）。"""
     try:
         proc = subprocess.run(
             cmd,
@@ -65,7 +71,9 @@ def run_subprocess(
         )
         return proc.stdout, proc.stderr, proc.returncode
     except subprocess.TimeoutExpired as e:
-        return (e.stdout or "", (e.stderr or "") + "\n[timeout]", None)
+        # 解码（TimeoutExpired 的 stdout/stderr 可能是 bytes）并标记失败（124），
+        # 否则 exit_code=None 会被当作非错误，超时被记成正常运行。
+        return (_decode(e.stdout), _decode(e.stderr) + "\n[timeout]", 124)
 
 
 RunFn = Callable[[list[str], str, dict[str, str]], tuple[str, str, "int | None"]]
@@ -76,11 +84,21 @@ def _select_runners(config: RunConfig, registry: dict[str, RunnerProfile]) -> li
     return list(config.runners) if config.runners else sorted(registry)
 
 
+class OrchestratorError(ValueError):
+    """编排错误（如指定了不存在的用例）。"""
+
+
 def _select_cases(config: RunConfig, cases: list[Case]) -> list[Case]:
     if not config.cases:
         return cases
     by_name = {c.name: c for c in cases}
-    return [by_name[n] for n in config.cases if n in by_name]
+    unknown = [n for n in config.cases if n not in by_name]
+    if unknown:
+        available = ", ".join(sorted(by_name)) or "(无)"
+        raise OrchestratorError(
+            f"指定的用例不存在: {', '.join(unknown)}；可用用例: {available}。"
+        )
+    return [by_name[n] for n in config.cases]
 
 
 def _execute_cell(

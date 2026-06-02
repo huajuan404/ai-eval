@@ -12,9 +12,10 @@ import sys
 from datetime import date
 from pathlib import Path
 
+from .adapters import get_adapter
 from .case import list_cases
 from .config import ConfigError, RunConfig, load_config
-from .orchestrator import MatrixResult, run_matrix, run_subprocess
+from .orchestrator import MatrixResult, OrchestratorError, run_matrix, run_subprocess
 from .registry import RegistryError, get_profile, load_registry
 from .scorecard import build_scorecard, write_model_profile
 from .scoring import _default_script_runner, score_record
@@ -80,16 +81,22 @@ def run_benchmark(
     registry: dict,
     root: Path,
     *,
+    run_fn=run_subprocess,
+    adapter_factory=get_adapter,
     judge_run_fn=run_subprocess,
     check_run_fn=_default_script_runner,
     write_profiles: bool = False,
 ) -> Path:
     """执行矩阵 → 判分 → 计分卡，返回计分卡路径。"""
     cases = list_cases(root / "cases")
-    result = run_matrix(config, registry, cases)
+    result = run_matrix(
+        config, registry, cases, run_fn=run_fn, adapter_factory=adapter_factory
+    )  # 未知用例会 fail-fast
 
     case_by_name = {c.name: c for c in cases}
-    judge_profile = registry.get(config.judge)
+    # 若有 judge-enabled 用例参与，则 judge 标签必须存在，否则 typo 会静默移除质量信号。
+    needs_judge = any(case_by_name[r.case].judge.enabled for r in result.records)
+    judge_profile = get_profile(registry, config.judge) if needs_judge else registry.get(config.judge)
     scored = []
     for rec in result.records:
         case = case_by_name[rec.case]
@@ -143,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
         for label in config.runners:
             get_profile(registry, label)  # 提前校验标签存在
         path = run_benchmark(config, registry, ROOT, write_profiles=args.write_profiles)
-    except (RegistryError, KeyError) as e:
+    except (RegistryError, OrchestratorError, KeyError) as e:
         print(f"错误: {e}", file=sys.stderr)
         return 1
     print(f"计分卡已生成: {path}")

@@ -13,8 +13,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 from .adapters import get_adapter, normalize_model_label
-from .adapters.base import extract_json_object
-from .case import Case, _should_ignore
+from .adapters.base import extract_json_object, minimal_os_env
+from .case import Case, _should_ignore, restore_verify_assets
 from .record import CheckResult, JudgeResult, RunRecord
 from .registry import RunnerProfile
 from .scrub import scrub_truncate
@@ -26,28 +26,45 @@ _CHECK_TIMEOUT_S = 300
 RunFn = Callable[[list[str], str, dict[str, str]], "tuple[str, str, int | None]"]
 
 
+def _decode(value: object) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value or ""
+
+
 def _default_script_runner(
     cmd: list[str], cwd: str, env: dict[str, str]
 ) -> tuple[str, str, int | None]:
     try:
         proc = subprocess.run(
-            cmd, cwd=cwd, capture_output=True, text=True, timeout=_CHECK_TIMEOUT_S
+            cmd,
+            cwd=cwd,
+            env=env or None,  # 净化环境（R20）；空则继承（仅当调用方未传时）
+            capture_output=True,
+            text=True,
+            timeout=_CHECK_TIMEOUT_S,
         )
         return proc.stdout, proc.stderr, proc.returncode
     except subprocess.TimeoutExpired as e:
-        return (e.stdout or "", (e.stderr or "") + "\n[timeout]", None)
+        return (_decode(e.stdout), _decode(e.stderr) + "\n[timeout]", 124)
 
 
 def run_check(
     case: Case, work_dir: str | Path, *, run_fn: RunFn = _default_script_runner
 ) -> CheckResult:
-    """跑确定性 check 脚本（退出码 0=pass）。type=none → ran=False。"""
+    """跑确定性 check 脚本（退出码 0=pass）。type=none → ran=False。
+
+    防篡改：运行前用 case verify/ 的只读基准文件覆盖产物目录（选手改不了测试，KTD7）。
+    隔离：用净化最小环境运行 check 子进程，凭证不暴露给可能执行选手产物的脚本（R20）。
+    """
     if case.check.type != "script" or not case.check.script:
         return CheckResult(ran=False)
     script = case.directory / case.check.script
     if not script.exists():
         return CheckResult(ran=True, passed=False, detail=f"check 脚本不存在: {case.check.script}")
-    stdout, stderr, code = run_fn(["bash", str(script)], str(work_dir), {})
+    restore_verify_assets(case, work_dir)  # 还原只读基准，防选手改测试拿 pass
+    env = minimal_os_env()
+    stdout, stderr, code = run_fn(["bash", str(script)], str(work_dir), env)
     detail = scrub_truncate((stdout or "") + (("\n" + stderr) if stderr else ""), DETAIL_LIMIT)
     return CheckResult(ran=True, passed=(code == 0), detail=detail)
 
