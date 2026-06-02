@@ -1,7 +1,7 @@
 ---
 title: "feat: 可换模型的端到端 agent benchmark 编排器"
 type: feat
-status: active
+status: completed
 date: 2026-06-01
 deepened: 2026-06-01
 ---
