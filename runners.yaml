@@ -1,0 +1,42 @@
+# Runner 档案注册表（独立于 ~/tools/config.env，runner 与 judge 共用）。
+#
+# 每个档案 = 标签 → 启动方式。四类 launcher：
+#   claude   : claude -p --output-format json
+#   codex    : codex exec --json（默认 sandbox=workspace-write，否则写不了文件）
+#   c        : 复用 PATH 上的 c <config>（config 指向 config.env 的 CONFIG_<n>）
+#   command  : 通用命令模板（sf cli / 自定义斜杠命令 / 任意外部 agent）
+#
+# 安全：禁止明文密钥。凭证用 ${ENV_VAR} 插值，benchmark 不持有 token。
+
+runners:
+  # ── 默认 runner / judge ──────────────────────────────
+  codex:
+    launcher: codex
+    sandbox: workspace-write   # 必须，否则 agent 处于只读沙箱无法写文件
+  claude:
+    launcher: claude
+
+  # ── 经 c 切换器的模型（config 指向 config.env 索引）──
+  minimax-m3:
+    launcher: c
+    config: 0
+  deepseek-v4:
+    launcher: c
+    config: 1
+  glm-5.1:
+    launcher: c
+    config: 2
+  sonnet-4.6:
+    launcher: c
+    config: 6
+  opus-4.7:
+    launcher: c
+    config: 7
+
+  # ── 通用命令模板示例（sf cli / 自定义编排）──────────
+  # 占位符：{prompt} {prompt_file} {cwd} {model} {skill}
+  # metrics: none → 仅采集墙钟，token/成本降级为「不可用」
+  # sf-skill:
+  #   launcher: command
+  #   template: "sf run --skill {skill} --cwd {cwd} --prompt-file {prompt_file}"
+  #   metrics: none
