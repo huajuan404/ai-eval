@@ -14,7 +14,7 @@ from bench.case import list_cases
 from bench.config import RunConfig
 from bench.orchestrator import MatrixResult, run_matrix
 from bench.record import Usage
-from bench.registry import RunnerProfile, load_registry
+from bench.registry import RunnerProfile
 from bench.scorecard import build_scorecard
 from bench.scoring import score_record
 

@@ -28,7 +28,7 @@ def _make_case(tmp_path: Path, *, check: bool = True, judge: bool = True) -> Pat
     )
     (d / "case.yaml").write_text(
         textwrap.dedent(
-            f"""
+            """
             name: case
             task:
               type: prompt
