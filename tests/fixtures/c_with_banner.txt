@@ -1,0 +1,7 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚀 启动 Claude Code [配置 2]
+   API:   https://open.bigmodel.cn/api/anthropic
+   模型:  glm-5.1
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{"type":"result","is_error":false,"num_turns":2,"total_cost_usd":0.002,"result":"ok","usage":{"input_tokens":300,"output_tokens":100}}

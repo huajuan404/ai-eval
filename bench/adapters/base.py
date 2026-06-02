@@ -53,14 +53,23 @@ def build_minimal_env(
     profile: RunnerProfile,
     base_env: dict[str, str] | None = None,
     extra_keys: tuple[str, ...] = (),
+    credential_allow: tuple[str, ...] = (),
 ) -> dict[str, str]:
-    """构造最小子进程环境：白名单通用变量 + 档案声明的 ${ENV} 插值，剔除凭证。"""
+    """构造最小子进程环境（R20）。
+
+    - 白名单通用变量（ESSENTIAL + extra_keys），且剔除名字像凭证的；
+    - `credential_allow`：该 launcher 显式声明自己需要的凭证变量，原样放行
+      （让 claude/codex 能拿到自己的 auth，但不转发其它 provider 的 token）；
+    - 档案 `env` 声明：解析 ${ENV} 插值。
+    """
     src = base_env if base_env is not None else dict(os.environ)
     env: dict[str, str] = {}
     for key in ESSENTIAL_ENV_KEYS + extra_keys:
         if key in src and not _CREDENTIAL_KEY_RE.search(key):
             env[key] = src[key]
-    # 档案 env 声明：解析 ${ENV} 插值（值从父环境取，但不污染白名单逻辑）。
+    for key in credential_allow:  # 显式放行：该 launcher 自身的 auth
+        if key in src:
+            env[key] = src[key]
     for k, v in profile.env.items():
         env[k] = _ENV_INTERP_RE.sub(lambda m: src.get(m.group(1), ""), v)
     return env
@@ -108,6 +117,9 @@ class Adapter(ABC):
 
     launcher_type: str = ""
     supports_usage: bool = True
+    # 该 launcher 运行所需的额外通用变量与自身凭证变量（显式允许，剔除其它）。
+    extra_env_keys: tuple[str, ...] = ()
+    credential_env_allow: tuple[str, ...] = ()
 
     @abstractmethod
     def build_command(
@@ -118,8 +130,13 @@ class Adapter(ABC):
     def build_env(
         self, profile: RunnerProfile, base_env: dict[str, str] | None = None
     ) -> dict[str, str]:
-        """构造最小子进程环境（默认实现，子类可加 extra_keys）。"""
-        return build_minimal_env(profile, base_env)
+        """构造最小子进程环境（默认实现，子类经类属性声明需求）。"""
+        return build_minimal_env(
+            profile,
+            base_env,
+            extra_keys=self.extra_env_keys,
+            credential_allow=self.credential_env_allow,
+        )
 
     @abstractmethod
     def parse(self, stdout: str, stderr: str, exit_code: int | None) -> ParsedOutput:

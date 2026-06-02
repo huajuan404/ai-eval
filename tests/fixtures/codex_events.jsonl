@@ -1,0 +1,5 @@
+{"type":"session.created","session_id":"x"}
+{"type":"turn.completed","usage":{"input_tokens":1000,"cached_input_tokens":0,"output_tokens":200,"reasoning_output_tokens":50}}
+{"type":"item.completed","item":{"type":"agent_message","text":"working"}}
+{"type":"turn.completed","usage":{"input_tokens":1500,"cached_input_tokens":500,"output_tokens":300,"reasoning_output_tokens":80}}
+{"type":"turn.completed","usage":{"input_tokens":800,"cached_input_tokens":700,"output_tokens":120,"reasoning_output_tokens":10}}
