@@ -1,8 +1,11 @@
-"""一次运行配置（R15）。数据结构定义；文件加载与 CLI 合并在 __main__（U7）。"""
+"""一次运行配置（R15）。"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
+
+import yaml
 
 DEFAULT_DIMENSIONS = {
     "quality": True,
@@ -10,6 +13,10 @@ DEFAULT_DIMENSIONS = {
     "cost": True,
     "agentic": True,
 }
+
+
+class ConfigError(ValueError):
+    """配置加载错误。"""
 
 
 @dataclass(frozen=True)
@@ -21,3 +28,20 @@ class RunConfig:
     judge: str = "claude"
     repeat: int = 1
     dimensions: dict[str, bool] = field(default_factory=lambda: dict(DEFAULT_DIMENSIONS))
+
+
+def load_config(path: str | Path) -> RunConfig:
+    """从 config.yaml 加载一次运行配置。"""
+    p = Path(path)
+    if not p.exists():
+        raise ConfigError(f"配置文件不存在: {p}（参考仓库根的 config.yaml 模板）")
+    doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    dims = dict(DEFAULT_DIMENSIONS)
+    dims.update(doc.get("dimensions") or {})
+    return RunConfig(
+        runners=tuple(doc.get("runners") or ()),
+        cases=tuple(doc.get("cases") or ()),
+        judge=str(doc.get("judge") or "claude"),
+        repeat=int(doc.get("repeat") or 1),
+        dimensions=dims,
+    )

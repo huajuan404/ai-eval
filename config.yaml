@@ -1,15 +1,20 @@
-# 奔驰Mark 测试配置
-# 运行 ./run.sh 执行测试
+# 一次运行配置。CLI 参数覆盖此文件（-r/-c/-j/--repeat）。
 
-# 要运行的案例（留空则运行全部）
+# 参与对比的 runner 档案标签（见 runners.yaml）。留空 = 全部档案。
+runners: []
+
+# 要跑的用例名（见 cases/）。留空 = 全部用例。
 cases: []
 
-# 要使用的模型（对应 ~/tools/config.env 中的编号）
-# 留空则运行全部配置的模型
-models: []
+# 裁判档案标签（默认 claude）。
+judge: claude
 
-# 模型到案例的映射（可选，默认每个模型跑所有案例）
-# 格式: 模型编号 -> [案例列表]
-# model_cases:
-#   0: [case-1, case-2]
-#   7: [case-1]
+# 每格运行次数。>1 时计分卡报告中位数 + 离散度（支撑「可靠」结论）。
+repeat: 1
+
+# 采集维度开关。
+dimensions:
+  quality: true
+  latency: true
+  cost: true
+  agentic: true
