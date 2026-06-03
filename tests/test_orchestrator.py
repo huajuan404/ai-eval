@@ -212,6 +212,35 @@ def test_output_txt_written_for_judge(tmp_path: Path) -> None:
     assert out.exists() and out.read_text() == "MODEL FINAL ANSWER"
 
 
+def test_output_txt_not_scrubbed_preserves_commit_hash(tmp_path: Path) -> None:
+    """OUTPUT.txt 是 check.sh 读的结构化答案，不能被脱敏（避免误伤 40 字符 hex）。
+    raw.txt 才走 scrub（分享给人类看）。"""
+    case = load_case(_make_case(tmp_path, "c1"))
+    reg = {"a": RunnerProfile("a", "claude")}
+    long_hash = "374478a0b12640df4753c041770e824a2c4259f0"  # 40-char hex，scrub 模式会 redact
+    fake_stdout = (
+        f"ANSWER: {long_hash}\n"
+        f"REASON: in start_application_mode tcgetattr throws on PIPE\n"
+    )
+
+    def run_fn(cmd, cwd, env):
+        return fake_stdout, "", 0
+
+    run_matrix(
+        RunConfig(runners=("a",)), reg, [case],
+        run_fn=run_fn,
+        adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
+        clock=_fixed_clock(),
+    )
+    out_txt = case.output_dir("a") / "artifacts-0" / "OUTPUT.txt"
+    raw_txt = case.output_dir("a") / "run.0.raw.txt"
+    # OUTPUT.txt 保留完整 hash（check.sh 要读）
+    assert long_hash in out_txt.read_text(encoding="utf-8")
+    # raw.txt 反而被脱敏（分享用）
+    assert long_hash not in raw_txt.read_text(encoding="utf-8")
+    assert "***REDACTED***" in raw_txt.read_text(encoding="utf-8")
+
+
 def test_run_record_persisted_to_disk(tmp_path: Path) -> None:
     case = load_case(_make_case(tmp_path, "c1"))
     reg = {"a": RunnerProfile("a", "claude")}

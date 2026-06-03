@@ -156,8 +156,10 @@ def _execute_cell(
         artifacts_dir = out_dir / f"artifacts-{repeat_index}"
         copy_artifacts(wd, artifacts_dir)
         # 写出模型最终回答文本，供 judge 评分（纯分析任务的"产物"是回答而非文件）。
+        # OUTPUT.txt 是 check.sh / judge 读的结构化答案，**不脱敏**（避免 40 字符 hex 等
+        # 误伤 commit hash / 答案 hash）。raw.txt 仍是脱敏的（给人类看 / 分享用）。
         final_text = adapter.extract_final_text(stdout) if not failed else ""
-        (artifacts_dir / "OUTPUT.txt").write_text(scrub_text(final_text), encoding="utf-8")
+        (artifacts_dir / "OUTPUT.txt").write_text(final_text, encoding="utf-8")
         (out_dir / f"run.{repeat_index}.raw.txt").write_text(
             scrub_text(stdout) + ("\n--- stderr ---\n" + scrub_text(stderr) if stderr else ""),
             encoding="utf-8",
