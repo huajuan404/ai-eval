@@ -3,10 +3,15 @@
 每格：requires_engine 兼容性 → 隔离 workdir → 最小环境子进程 + 墙钟 →
 解析 usage → files_changed 快照 diff → 脱敏 → run record。
 单元失败不中断其它格。
+
+并发：runners × cases × repeat 的每一格是独立 workdir 子进程，天然线程安全。
+`config.workers > 1` 时用 ThreadPoolExecutor 并发；=1 保持串行（测试与调试）。
 """
 
 from __future__ import annotations
 
+import concurrent.futures
+import logging
 import subprocess
 import time
 from collections.abc import Callable
@@ -24,6 +29,7 @@ from .case import (
     snapshot_dir,
 )
 from .config import RunConfig
+from .log import get_logger
 from .record import Agentic, RunRecord, Usage
 from .registry import RunnerProfile, get_profile
 from .scrub import scrub_text
@@ -170,6 +176,36 @@ def _execute_cell(
     return record
 
 
+def _run_one(
+    case: Case,
+    profile: RunnerProfile,
+    adapter: Adapter,
+    repeat_index: int,
+    run_fn: RunFn,
+    clock: Callable[[], float],
+    now: Callable[[], str],
+    log: logging.Logger,
+) -> RunRecord:
+    """单格执行 + 节点日志（start / done）。"""
+    log.info(
+        f"[start] case={case.name} runner={profile.label} repeat={repeat_index}"
+    )
+    rec = _execute_cell(case, profile, adapter, repeat_index, run_fn, clock, now)
+    status = "err" if rec.is_error else "ok"
+    bits = [f"status={status}", f"dur={rec.duration_ms}ms"]
+    if rec.usage and rec.usage.total_tokens is not None:
+        bits.append(f"tokens={rec.usage.total_tokens}")
+        if rec.usage.cost_usd is not None:
+            bits.append(f"cost=${rec.usage.cost_usd:.4f}")
+    else:
+        bits.append("tokens=—")
+    log.info(
+        f"[done ] case={case.name} runner={profile.label} repeat={repeat_index} "
+        + " ".join(bits)
+    )
+    return rec
+
+
 def run_matrix(
     config: RunConfig,
     registry: dict[str, RunnerProfile],
@@ -180,28 +216,72 @@ def run_matrix(
     clock: Callable[[], float] = time.perf_counter,
     now: Callable[[], str] = lambda: datetime.now(timezone.utc).isoformat(),
 ) -> MatrixResult:
-    """执行 runners × cases × repeat 矩阵。"""
+    """执行 runners × cases × repeat 矩阵。
+
+    并发：每格独立 workdir + 独立子进程，天然线程安全。
+    workers>1 → ThreadPoolExecutor；workers≤1 → 串行（保测试确定性、便于 grep 顺序）。
+    """
+    log = get_logger()
     records: list[RunRecord] = []
     skipped: list[SkippedCell] = []
     selected_cases = _select_cases(config, cases)
+    selected_runners = _select_runners(config, registry)
 
-    for label in _select_runners(config, registry):
+    # 第一步：兼容性检查，先把所有要执行的 (case, profile, adapter, repeat_index) 摊平
+    pending: list[tuple[Case, RunnerProfile, Adapter, int]] = []
+    for label in selected_runners:
         profile = get_profile(registry, label)
         adapter = adapter_factory(profile)
         for case in selected_cases:
             if not case.supports_launcher(adapter.launcher_type):
-                skipped.append(
-                    SkippedCell(
-                        case=case.name,
-                        runner_label=label,
-                        reason=f"requires_engine={case.requires_engine}，{adapter.launcher_type} 不兼容",
-                    )
+                reason = (
+                    f"requires_engine={case.requires_engine}，"
+                    f"{adapter.launcher_type} 不兼容"
                 )
+                skipped.append(
+                    SkippedCell(case=case.name, runner_label=label, reason=reason)
+                )
+                log.info(f"[skip ] case={case.name} runner={label} reason={reason}")
                 continue
             repeat = case.repeat if case.repeat is not None else config.repeat
             for i in range(max(1, repeat)):
-                records.append(
-                    _execute_cell(case, profile, adapter, i, run_fn, clock, now)
-                )
+                pending.append((case, profile, adapter, i))
 
+    total_cells = len(pending) + len(skipped)
+    log.info(
+        f"[bench] 矩阵启动: {len(selected_runners)} runners × "
+        f"{len(selected_cases)} cases × repeat={config.repeat} = {total_cells} cells "
+        f"(workers={config.workers})"
+    )
+    if skipped:
+        log.info(f"[bench] 跳过 {len(skipped)} 格（requires_engine 不兼容）")
+
+    if not pending:
+        return MatrixResult(records=records, skipped=skipped)
+
+    # 第二步：执行（串行 or 并发）
+    if config.workers <= 1:
+        for case, profile, adapter, ri in pending:
+            records.append(_run_one(case, profile, adapter, ri, run_fn, clock, now, log))
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=config.workers) as ex:
+            futures = {
+                ex.submit(
+                    _run_one, case, profile, adapter, ri, run_fn, clock, now, log
+                ): (case.name, profile.label, ri)
+                for case, profile, adapter, ri in pending
+            }
+            done = 0
+            for fut in concurrent.futures.as_completed(futures):
+                records.append(fut.result())
+                done += 1
+                if done < len(pending):
+                    log.info(
+                        f"[progress] {done}/{len(pending)} done · "
+                        f"pending={len(pending) - done}"
+                    )
+
+    log.info(
+        f"[bench] 矩阵完成: {len(records)}/{total_cells} 完成，跳过 {len(skipped)}"
+    )
     return MatrixResult(records=records, skipped=skipped)

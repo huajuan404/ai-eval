@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import textwrap
+import threading
+import time
 from pathlib import Path
 
 from bench.adapters.base import Adapter, ParsedOutput
@@ -222,3 +225,146 @@ def test_run_record_persisted_to_disk(tmp_path: Path) -> None:
     assert (out / "run.0.json").exists()
     assert (out / "run.1.json").exists()
     assert (out / "run.0.raw.txt").exists()
+
+
+# ─── 并发与日志 ───────────────────────────────────────────
+
+
+def test_workers_1_runs_serially(tmp_path: Path, caplog) -> None:
+    """workers=1 时单线程执行（保测试确定性、便于 grep 输出顺序）。"""
+    case = load_case(_make_case(tmp_path, "c1"))
+    reg = {"a": RunnerProfile("a", "claude"), "b": RunnerProfile("b", "codex")}
+    seen: list[int] = []
+    lock = threading.Lock()
+
+    def run_fn(cmd, cwd, env):
+        tid = threading.get_ident()
+        with lock:
+            seen.append(tid)
+        time.sleep(0.01)  # 拉长窗口，让「同一线程」更明显
+        return "{}", "", 0
+
+    caplog.set_level(logging.INFO)
+    run_matrix(
+        RunConfig(runners=("a", "b"), workers=1), reg, [case],
+        run_fn=run_fn,
+        adapter_factory=lambda p: FakeAdapter(
+            "claude" if p.label == "a" else "codex", ParsedOutput()
+        ),
+        clock=_fixed_clock(),
+    )
+    assert len(set(seen)) == 1, f"workers=1 应只用一个线程，实际: {set(seen)}"
+
+
+def test_workers_2_uses_two_threads(tmp_path: Path) -> None:
+    """workers>1 时每格跑在不同线程，验证真的并发。"""
+    case = load_case(_make_case(tmp_path, "c1"))
+    reg = {"a": RunnerProfile("a", "claude"), "b": RunnerProfile("b", "codex")}
+    seen: list[int] = []
+    lock = threading.Lock()
+
+    def run_fn(cmd, cwd, env):
+        time.sleep(0.05)  # 留出交错窗口
+        with lock:
+            seen.append(threading.get_ident())
+        return "{}", "", 0
+
+    res = run_matrix(
+        RunConfig(runners=("a", "b"), workers=2), reg, [case],
+        run_fn=run_fn,
+        adapter_factory=lambda p: FakeAdapter(
+            "claude" if p.label == "a" else "codex", ParsedOutput()
+        ),
+        clock=_fixed_clock(),
+    )
+    assert len(res.records) == 2
+    assert len(set(seen)) >= 2, f"workers=2 应至少用 2 个线程，实际: {set(seen)}"
+
+
+def test_log_emits_start_done_summary(tmp_path: Path, caplog) -> None:
+    """每格 start / done，矩阵启动 / 完成汇总都打。"""
+    case = load_case(_make_case(tmp_path, "c1"))
+    reg = {"a": RunnerProfile("a", "claude")}
+
+    caplog.set_level(logging.INFO)
+    run_matrix(
+        RunConfig(runners=("a",), workers=1), reg, [case],
+        run_fn=_make_run_fn(),
+        adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
+        clock=_fixed_clock(),
+    )
+    msgs = [r.message for r in caplog.records]
+    assert any(m.startswith("[start]") and "runner=a" in m for m in msgs), msgs
+    assert any(m.startswith("[done ]") and "status=ok" in m for m in msgs), msgs
+    assert any(m.startswith("[bench] 矩阵启动") for m in msgs), msgs
+    assert any(m.startswith("[bench] 矩阵完成") for m in msgs), msgs
+
+
+def test_log_emits_progress_only_with_parallel(tmp_path: Path, caplog) -> None:
+    """串行不打 progress；并发打。"""
+    case = load_case(_make_case(tmp_path, "c1"))
+    reg = {"a": RunnerProfile("a", "claude"), "b": RunnerProfile("b", "codex")}
+
+    # 串行
+    caplog.set_level(logging.INFO)
+    run_matrix(
+        RunConfig(runners=("a", "b"), workers=1), reg, [case],
+        run_fn=_make_run_fn(),
+        adapter_factory=lambda p: FakeAdapter(
+            "claude" if p.label == "a" else "codex", ParsedOutput()
+        ),
+        clock=_fixed_clock(),
+    )
+    assert not any("[progress]" in r.message for r in caplog.records), caplog.records
+
+    # 并发 + pending>1 → 打 progress
+    caplog.clear()
+    caplog.set_level(logging.INFO)
+    case2 = load_case(_make_case(tmp_path, "c2"))
+    run_matrix(
+        RunConfig(runners=("a",), cases=("c1", "c2"), workers=4), reg, [case, case2],
+        run_fn=_make_run_fn(),
+        adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
+        clock=_fixed_clock(),
+    )
+    assert any("[progress]" in r.message for r in caplog.records), (
+        "workers>1 + pending>1 时应打 [progress] 节点"
+    )
+
+
+def test_log_skip_emitted_for_incompatible_cell(tmp_path: Path, caplog) -> None:
+    case = load_case(_make_case(tmp_path, "c1", requires_engine="claude"))
+    reg = {"x": RunnerProfile("x", "codex")}
+    caplog.set_level(logging.INFO)
+    res = run_matrix(
+        RunConfig(runners=("x",), workers=1), reg, [case],
+        run_fn=_make_run_fn(),
+        adapter_factory=lambda p: FakeAdapter("codex", ParsedOutput()),
+        clock=_fixed_clock(),
+    )
+    assert res.skipped and len(res.skipped) == 1
+    assert any("[skip ]" in r.message for r in caplog.records), caplog.records
+
+
+def test_repeat_default_is_one(tmp_path: Path) -> None:
+    """RunConfig.repeat 默认 1；只有显式传 N 才会跑 N 次。"""
+    case = load_case(_make_case(tmp_path, "c1"))
+    reg = {"a": RunnerProfile("a", "claude")}
+    # 不传 repeat
+    cfg = RunConfig(runners=("a",))
+    res = run_matrix(
+        cfg, reg, [case],
+        run_fn=_make_run_fn(),
+        adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
+        clock=_fixed_clock(),
+    )
+    assert len(res.records) == 1
+    # 显式 repeat=3
+    cfg3 = RunConfig(runners=("a",), repeat=3)
+    res3 = run_matrix(
+        cfg3, reg, [case],
+        run_fn=_make_run_fn(),
+        adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
+        clock=_fixed_clock(),
+    )
+    assert len(res3.records) == 3

@@ -27,6 +27,7 @@ class RunConfig:
     cases: tuple[str, ...] = ()
     judge: str = "claude"
     repeat: int = 1
+    workers: int = 1  # 测试默认 1（确定性）；CLI 默认 4（并发）
     dimensions: dict[str, bool] = field(default_factory=lambda: dict(DEFAULT_DIMENSIONS))
 
 

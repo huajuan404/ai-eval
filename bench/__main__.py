@@ -15,6 +15,7 @@ from pathlib import Path
 from .adapters import get_adapter
 from .case import list_cases
 from .config import ConfigError, RunConfig, load_config
+from .log import configure as configure_log
 from .orchestrator import MatrixResult, OrchestratorError, run_matrix, run_subprocess
 from .registry import RegistryError, get_profile, load_registry
 from .scorecard import build_scorecard, write_model_profile
@@ -28,7 +29,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-c", "--case", action="append", default=[], help="只跑指定用例（可多次）")
     p.add_argument("-r", "--runners", default=None, help="逗号分隔的 runner 标签，覆盖 config")
     p.add_argument("-j", "--judge", default=None, help="裁判档案标签，覆盖 config")
-    p.add_argument("--repeat", type=int, default=None, help="每格运行次数，覆盖 config")
+    p.add_argument("--repeat", type=int, default=None, help="每格运行次数（默认 1；显式传 N 才跑多次）")
+    p.add_argument(
+        "-w", "--workers", type=int, default=4,
+        help="并发工作线程数（默认 4；调试/测试用 1 串行）",
+    )
+    p.add_argument("-q", "--quiet", action="store_true", help="只输出警告与最终汇总（压低 start/done/progress）")
     p.add_argument("-l", "--list", action="store_true", help="列出可用用例与 runner 档案")
     p.add_argument(
         "--write-profiles",
@@ -45,6 +51,7 @@ def merge_config(base: RunConfig, args: argparse.Namespace) -> RunConfig:
         cases=tuple(args.case) if args.case else base.cases,
         judge=args.judge or base.judge,
         repeat=args.repeat if args.repeat is not None else base.repeat,
+        workers=args.workers,  # CLI 默认 4；传 --workers 1 强制串行
         dimensions=base.dimensions,
     )
 
@@ -127,6 +134,7 @@ def run_benchmark(
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    configure_log(quiet=args.quiet)
     try:
         registry = load_registry(ROOT / "runners.yaml")
     except RegistryError as e:

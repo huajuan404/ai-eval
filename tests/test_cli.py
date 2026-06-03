@@ -82,7 +82,9 @@ def test_load_config_missing(tmp_path: Path) -> None:
 
 
 def test_main_list_returns_zero(capsys) -> None:
+    from bench.log import reset as reset_log
     rc = main(["-l"])
+    reset_log()  # main() 调了 configure() 设了 propagate=False，会污染后续 caplog
     assert rc == 0
     captured = capsys.readouterr()
     assert "可用 runner 档案" in captured.out
