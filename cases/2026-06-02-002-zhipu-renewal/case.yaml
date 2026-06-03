@@ -1,4 +1,5 @@
 name: 2026-06-02-002-zhipu-renewal
+class: reasoning
 # 判官驱动的开放型数学/分析推理用例（与 fizzbuzz 的 check 驱动编码用例互补）。
 # 纯 prompt，无文件产出——模型回答写入 artifacts/OUTPUT.txt 供裁判评分。
 

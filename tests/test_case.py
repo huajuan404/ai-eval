@@ -112,9 +112,90 @@ def test_supports_launcher_default_all(tmp_path: Path) -> None:
         """,
         {"p.md": "x"},
     )
+
+
+# ── class / expected 字段 ─────────────────────────
+
+
+def test_class_field_validated(tmp_path: Path) -> None:
+    d = _make_case(
+        tmp_path,
+        """
+        name: ok
+        class: tool-using
+        task:
+          type: prompt
+          prompt_file: p.md
+        """,
+        {"p.md": "x"},
+    )
     case = load_case(d)
-    assert case.supports_launcher("codex") is True
-    assert case.supports_launcher("claude") is True
+    assert case.class_ == "tool-using"
+
+
+def test_class_field_invalid_errors(tmp_path: Path) -> None:
+    d = _make_case(
+        tmp_path,
+        """
+        name: bad
+        class: nonsense
+        task:
+          type: prompt
+          prompt_file: p.md
+        """,
+        {"p.md": "x"},
+    )
+    with pytest.raises(CaseError, match="class='nonsense'"):
+        load_case(d)
+
+
+def test_class_field_defaults_to_coding(tmp_path: Path) -> None:
+    d = _make_case(
+        tmp_path,
+        """
+        name: noclass
+        task:
+          type: prompt
+          prompt_file: p.md
+        """,
+        {"p.md": "x"},
+    )
+    assert load_case(d).class_ == "coding"
+
+
+def test_expected_field_loaded_as_dict(tmp_path: Path) -> None:
+    d = _make_case(
+        tmp_path,
+        """
+        name: exp
+        class: tool-using
+        task:
+          type: prompt
+          prompt_file: p.md
+        expected:
+          commit: abc1234
+          algo: MD5
+        """,
+        {"p.md": "x"},
+    )
+    case = load_case(d)
+    assert case.expected == {"commit": "abc1234", "algo": "MD5"}
+
+
+def test_expected_field_invalid_errors(tmp_path: Path) -> None:
+    d = _make_case(
+        tmp_path,
+        """
+        name: bad
+        task:
+          type: prompt
+          prompt_file: p.md
+        expected: "not a dict"
+        """,
+        {"p.md": "x"},
+    )
+    with pytest.raises(CaseError, match=r"expected"):
+        load_case(d)
 
 
 def test_isolated_workdir_copies_input_and_preserves_source(tmp_path: Path) -> None:

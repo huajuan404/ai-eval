@@ -17,6 +17,8 @@ from typing import Any
 import yaml
 
 VALID_TASK_TYPES = ("prompt", "skill", "slash", "custom")
+# Case 一级类目：4 轴覆盖全栈开发者用 LLM 的主要工作类型。
+VALID_CLASSES = ("reasoning", "coding", "tool-using", "writing")
 
 # files_changed 快照忽略列表：launcher 自建/工具产物，避免污染计数与跨 launcher 可比性。
 _IGNORE_DIRS = {
@@ -68,6 +70,8 @@ class Case:
     judge: JudgeSpec = field(default_factory=JudgeSpec)
     requires_engine: str | None = None
     repeat: int | None = None  # 覆盖全局 repeat
+    class_: str = "coding"  # reasoning / coding / tool-using / writing
+    expected: dict = field(default_factory=dict)  # ground-truth，check.sh / judge 用
 
     @property
     def input_dir(self) -> Path:
@@ -155,6 +159,14 @@ def load_case(case_dir: str | Path) -> Case:
     )
 
     repeat = data.get("repeat")
+    class_ = str(data.get("class") or "coding")
+    if class_ not in VALID_CLASSES:
+        raise CaseError(
+            f"用例 '{name}' 的 class='{class_}' 非法；必须是 {', '.join(VALID_CLASSES)}。"
+        )
+    expected = data.get("expected") or {}
+    if not isinstance(expected, dict):
+        raise CaseError(f"用例 '{name}' 的 expected 必须是映射。")
     return Case(
         name=name,
         directory=directory,
@@ -163,6 +175,8 @@ def load_case(case_dir: str | Path) -> Case:
         judge=judge,
         requires_engine=data.get("requires_engine"),
         repeat=int(repeat) if repeat is not None else None,
+        class_=class_,
+        expected=dict(expected),
     )
 
 
