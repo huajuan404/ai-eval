@@ -1,0 +1,21 @@
+name: 2026-06-03-003-planning
+class: reasoning
+# 纯推理 / 长文输出类用例：把一段产品需求转成带依赖顺序的实施计划。
+# 与 zhipu-renewal 同 class（reasoning）但不同能力：zhipu 测算+抠字眼，这个测结构化拆解。
+
+task:
+  type: prompt
+  prompt_file: prompts/task.md
+
+check:
+  type: none  # 纯 LLM 判；rubric 5 维评分
+
+judge:
+  enabled: true
+  rubric_file: prompts/rubric.md
+  dimensions: [顺序与依赖, 完成定义, 模糊点处理, 风险识别, 人机分工]
+
+# 期望最大分 25（5 维 × 5 分），check 字段用不上
+expected:
+  max_score: 25
+  passing_threshold: 15  # ≥15 视为良好级
