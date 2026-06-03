@@ -1,0 +1,27 @@
+name: 2026-06-03-001-git-bisect-bug-hunt
+class: tool-using
+# tool-using 类：模型必须用 git CLI（log / show / blame / diff）来调查。
+# 真实回归 bug（textual v0.48.0 stdin hang），PR #4064 / fix PR #4105。
+
+task:
+  type: prompt
+  prompt_file: prompts/task.md
+
+check:
+  type: script
+  script: check.sh  # 抽取模型 stdout 里的 ANSWER: <hash>，与 expected.commit 比对
+
+judge:
+  enabled: true
+  rubric_file: prompts/rubric.md
+  dimensions: [commit_accuracy, root_cause, investigation_process]
+
+expected:
+  commit: 374478a
+  commit_full: 374478a0b12640df4753c041770e824a2c4259f0
+  bug_introduced_in: v0.48.0
+  fixed_in: 8c2b5d2d779a21535db2ad35656baecee67247b4
+  issue: https://github.com/Textualize/textual/issues/4104
+  fix_pr: https://github.com/Textualize/textual/pull/4105
+
+# input/repo 包含 textual 仓库 @ 374478a（浅 clone，全 git 历史）

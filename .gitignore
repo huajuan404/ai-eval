@@ -28,3 +28,6 @@ scorecards/
 *.tmp
 .env
 .env.local
+
+# case 1: textual repo (clone via setup.sh, not committed)
+cases/2026-06-03-001-git-bisect-bug-hunt/input/repo/
