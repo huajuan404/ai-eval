@@ -31,8 +31,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-j", "--judge", default=None, help="裁判档案标签，覆盖 config")
     p.add_argument("--repeat", type=int, default=None, help="每格运行次数（默认 1；显式传 N 才跑多次）")
     p.add_argument(
-        "-w", "--workers", type=int, default=4,
-        help="并发工作线程数（默认 4；调试/测试用 1 串行）",
+        "-w", "--workers", type=int, default=0,
+        help="并发工作线程数（默认自动 = min(provider 数, 6)；-w 1 强制串行）",
     )
     p.add_argument("-q", "--quiet", action="store_true", help="只输出警告与最终汇总（压低 start/done/progress）")
     p.add_argument("-l", "--list", action="store_true", help="列出可用用例与 runner 档案")
@@ -46,12 +46,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def merge_config(base: RunConfig, args: argparse.Namespace) -> RunConfig:
     """CLI 覆盖 config：提供的字段覆盖，未提供则沿用 config。"""
+    # workers：--workers 显式值 > config.yaml 值 > 0（run_matrix 会解析为自动）
+    workers = args.workers if args.workers > 0 else base.workers
     return RunConfig(
         runners=tuple(s.strip() for s in args.runners.split(",")) if args.runners else base.runners,
         cases=tuple(args.case) if args.case else base.cases,
         judge=args.judge or base.judge,
         repeat=args.repeat if args.repeat is not None else base.repeat,
-        workers=args.workers,  # CLI 默认 4；传 --workers 1 强制串行
+        workers=workers,
         dimensions=base.dimensions,
     )
 

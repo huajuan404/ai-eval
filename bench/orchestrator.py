@@ -219,13 +219,20 @@ def run_matrix(
     """执行 runners × cases × repeat 矩阵。
 
     并发：每格独立 workdir + 独立子进程，天然线程安全。
-    workers>1 → ThreadPoolExecutor；workers≤1 → 串行（保测试确定性、便于 grep 顺序）。
+    workers=0（自动）→ min(选中 runner 数, 6)；>1 → ThreadPoolExecutor；
+    =1 → 串行（保测试确定性、便于 grep 顺序）。
     """
     log = get_logger()
     records: list[RunRecord] = []
     skipped: list[SkippedCell] = []
     selected_cases = _select_cases(config, cases)
     selected_runners = _select_runners(config, registry)
+
+    # 解析 workers：自动 = min(provider 数, 6)，显式 1=串行，显式 N=并发 N
+    if config.workers == 0:
+        workers = min(len(selected_runners), 6) if selected_runners else 1
+    else:
+        workers = config.workers
 
     # 第一步：兼容性检查，先把所有要执行的 (case, profile, adapter, repeat_index) 摊平
     pending: list[tuple[Case, RunnerProfile, Adapter, int]] = []
@@ -248,10 +255,11 @@ def run_matrix(
                 pending.append((case, profile, adapter, i))
 
     total_cells = len(pending) + len(skipped)
+    workers_tag = "auto" if config.workers == 0 else str(workers)
     log.info(
         f"[bench] 矩阵启动: {len(selected_runners)} runners × "
         f"{len(selected_cases)} cases × repeat={config.repeat} = {total_cells} cells "
-        f"(workers={config.workers})"
+        f"(workers={workers_tag} → {workers})"
     )
     if skipped:
         log.info(f"[bench] 跳过 {len(skipped)} 格（requires_engine 不兼容）")
@@ -260,11 +268,11 @@ def run_matrix(
         return MatrixResult(records=records, skipped=skipped)
 
     # 第二步：执行（串行 or 并发）
-    if config.workers <= 1:
+    if workers <= 1:
         for case, profile, adapter, ri in pending:
             records.append(_run_one(case, profile, adapter, ri, run_fn, clock, now, log))
     else:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=config.workers) as ex:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
             futures = {
                 ex.submit(
                     _run_one, case, profile, adapter, ri, run_fn, clock, now, log

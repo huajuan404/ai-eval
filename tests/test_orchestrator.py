@@ -368,3 +368,135 @@ def test_repeat_default_is_one(tmp_path: Path) -> None:
         clock=_fixed_clock(),
     )
     assert len(res3.records) == 3
+
+
+# ─── 自动 workers（0 → min(provider 数, 6)）────────────────
+
+
+def test_auto_workers_resolves_to_provider_count(tmp_path: Path, caplog) -> None:
+    """workers=0（默认）→ min(provider 数, 6)。3 provider 应真用 3 线程。"""
+    case = load_case(_make_case(tmp_path, "c1"))
+    reg = {
+        "a": RunnerProfile("a", "claude"),
+        "b": RunnerProfile("b", "codex"),
+        "c": RunnerProfile("c", "claude"),
+    }
+    seen: list[int] = []
+    lock = threading.Lock()
+
+    def run_fn(cmd, cwd, env):
+        time.sleep(0.05)  # 留交错窗口
+        with lock:
+            seen.append(threading.get_ident())
+        return "{}", "", 0
+
+    caplog.set_level(logging.INFO)
+    res = run_matrix(
+        RunConfig(runners=("a", "b", "c"), workers=0), reg, [case],  # workers=0 = 自动
+        run_fn=run_fn,
+        adapter_factory=lambda p: FakeAdapter(
+            {"a": "claude", "b": "codex", "c": "claude"}[p.label], ParsedOutput()
+        ),
+        clock=_fixed_clock(),
+    )
+    assert len(res.records) == 3
+    assert len(set(seen)) == 3, f"3 providers 应真用 3 线程，实际: {set(seen)}"
+    # 日志里 workers 显示为 auto → 3
+    msgs = [r.message for r in caplog.records]
+    assert any("workers=auto → 3" in m for m in msgs), msgs
+
+
+def test_auto_workers_capped_at_six(tmp_path: Path, caplog) -> None:
+    """8 个 provider，auto workers 上限 6。"""
+    case = load_case(_make_case(tmp_path, "c1"))
+    reg = {f"r{i}": RunnerProfile(f"r{i}", "claude") for i in range(8)}
+    seen: list[int] = []
+    lock = threading.Lock()
+
+    def run_fn(cmd, cwd, env):
+        time.sleep(0.05)
+        with lock:
+            seen.append(threading.get_ident())
+        return "{}", "", 0
+
+    caplog.set_level(logging.INFO)
+    res = run_matrix(
+        RunConfig(runners=tuple(reg), workers=0), reg, [case],
+        run_fn=run_fn,
+        adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
+        clock=_fixed_clock(),
+    )
+    assert len(res.records) == 8
+    assert len(set(seen)) == 6, f"8 providers 应被 cap 在 6 线程，实际: {set(seen)}"
+    msgs = [r.message for r in caplog.records]
+    assert any("workers=auto → 6" in m for m in msgs), msgs
+
+
+def test_auto_workers_single_provider_runs_serially(tmp_path: Path) -> None:
+    """1 个 provider → 1 线程（auto=1，无意义并发）。"""
+    case = load_case(_make_case(tmp_path, "c1"))
+    reg = {"a": RunnerProfile("a", "claude")}
+    seen: list[int] = []
+    lock = threading.Lock()
+
+    def run_fn(cmd, cwd, env):
+        with lock:
+            seen.append(threading.get_ident())
+        time.sleep(0.02)
+        return "{}", "", 0
+
+    res = run_matrix(
+        RunConfig(runners=("a",), workers=0), reg, [case],
+        run_fn=run_fn,
+        adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
+        clock=_fixed_clock(),
+    )
+    assert len(res.records) == 1
+    assert len(set(seen)) == 1
+
+
+def test_explicit_workers_overrides_auto(tmp_path: Path) -> None:
+    """-w 2 显式串行：2 线程数=2，与 auto 解耦。"""
+    case = load_case(_make_case(tmp_path, "c1"))
+    reg = {f"r{i}": RunnerProfile(f"r{i}", "claude") for i in range(5)}
+    seen: list[int] = []
+    lock = threading.Lock()
+
+    def run_fn(cmd, cwd, env):
+        time.sleep(0.03)
+        with lock:
+            seen.append(threading.get_ident())
+        return "{}", "", 0
+
+    res = run_matrix(
+        RunConfig(runners=tuple(reg), workers=2), reg, [case],
+        run_fn=run_fn,
+        adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
+        clock=_fixed_clock(),
+    )
+    assert len(res.records) == 5
+    # 池子最多 2 线程 → 不可能同时出现 3 个
+    assert len(set(seen)) == 2, f"-w 2 应只用 2 线程，实际: {set(seen)}"
+
+
+def test_explicit_workers_serial(tmp_path: Path) -> None:
+    """-w 1 强制串行（不论 provider 数）。"""
+    case = load_case(_make_case(tmp_path, "c1"))
+    reg = {f"r{i}": RunnerProfile(f"r{i}", "claude") for i in range(3)}
+    seen: list[int] = []
+    lock = threading.Lock()
+
+    def run_fn(cmd, cwd, env):
+        with lock:
+            seen.append(threading.get_ident())
+        time.sleep(0.02)
+        return "{}", "", 0
+
+    res = run_matrix(
+        RunConfig(runners=tuple(reg), workers=1), reg, [case],
+        run_fn=run_fn,
+        adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
+        clock=_fixed_clock(),
+    )
+    assert len(res.records) == 3
+    assert len(set(seen)) == 1, f"-w 1 应只 1 线程，实际: {set(seen)}"

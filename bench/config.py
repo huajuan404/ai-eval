@@ -27,7 +27,7 @@ class RunConfig:
     cases: tuple[str, ...] = ()
     judge: str = "claude"
     repeat: int = 1
-    workers: int = 1  # 测试默认 1（确定性）；CLI 默认 4（并发）
+    workers: int = 0  # 0 = 自动 = min(选中 runners, 6)；显式传 N 走 N（测试用 1 串行）
     dimensions: dict[str, bool] = field(default_factory=lambda: dict(DEFAULT_DIMENSIONS))
 
 
@@ -44,5 +44,6 @@ def load_config(path: str | Path) -> RunConfig:
         cases=tuple(doc.get("cases") or ()),
         judge=str(doc.get("judge") or "claude"),
         repeat=int(doc.get("repeat") or 1),
+        workers=int(doc.get("workers") or 0),
         dimensions=dims,
     )
