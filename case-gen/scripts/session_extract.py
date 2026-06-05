@@ -1,0 +1,462 @@
+"""session-to-eval U2/U3/U4：双 CLI session 定位 + 解析 → token 受限 digest。
+
+兼容两端真实布局（本机实测）：
+- Claude Code：`~/.claude/projects/<编码cwd>/<sid>.jsonl`，扁平 `user`/`assistant` 记录，
+  工具调用是 `message.content[]` 内嵌 `tool_use`/`tool_result` 块；文件内容在独立 file-history 存储，
+  transcript 的 `file-history-snapshot` 只存引用。
+- Codex：递归 `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`，`{type,payload}` 流，
+  `response_item.payload.type` ∈ message/function_call/custom_tool_call/reasoning/...。
+
+U2 提供：配置解析、host 检测、session 定位、容错解析、双适配器、触发轮 cutoff、digest 组装。
+U3/U4 在本文件追加分类器与资产重建函数（计划简单优先：不另起脚本）。
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import tomllib
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field, replace
+from pathlib import Path
+from typing import Any
+
+# ── 错误类型 ────────────────────────────────────────
+class ConfigError(ValueError):
+    """配置缺失或非法。"""
+
+
+class SessionNotFound(FileNotFoundError):
+    """定位不到 session log。"""
+
+
+# ── 配置解析（U2/U6 共用）────────────────────────────
+def load_config(skill_dir: str | Path | None = None) -> dict[str, Any]:
+    """解析 skill 配置。优先级：env SESSION_TO_EVAL_CONFIG > <skill_dir>/config.toml。"""
+    env = os.environ.get("SESSION_TO_EVAL_CONFIG")
+    if env:
+        cfg_path = Path(env)
+    else:
+        base = Path(skill_dir) if skill_dir else Path(__file__).resolve().parent.parent
+        cfg_path = base / "config.toml"
+    if not cfg_path.exists():
+        raise ConfigError(
+            f"未找到配置 {cfg_path}；请 `cp config.example.toml config.toml` 并填入 ai_eval_path。"
+        )
+    data = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
+    if not data.get("ai_eval_path"):
+        raise ConfigError(f"{cfg_path} 缺少 ai_eval_path。")
+    return data
+
+
+# ── 数据模型（不可变）────────────────────────────────
+@dataclass(frozen=True)
+class ToolCall:
+    name: str
+    args_summary: str = ""
+    result_summary: str = ""
+
+
+@dataclass(frozen=True)
+class Turn:
+    role: str  # user | assistant
+    text: str
+    tools: tuple[ToolCall, ...] = ()
+
+
+@dataclass(frozen=True)
+class FileEvent:
+    path: str
+    op: str  # read | write | edit | snapshot | delete
+    content_ref: str | None = None  # 指向 content_store（U4 取全文）
+
+
+@dataclass(frozen=True)
+class Digest:
+    host: str
+    session_path: str
+    turns: tuple[Turn, ...]
+    file_events: tuple[FileEvent, ...]
+    usage_hints: dict = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "host": self.host,
+            "session_path": self.session_path,
+            "turns": [
+                {
+                    "role": t.role,
+                    "text": t.text,
+                    "tools": [
+                        {"name": c.name, "args": c.args_summary, "result": c.result_summary}
+                        for c in t.tools
+                    ],
+                }
+                for t in self.turns
+            ],
+            "file_events": [
+                {"path": f.path, "op": f.op, "content_ref": f.content_ref}
+                for f in self.file_events
+            ],
+            "usage_hints": self.usage_hints,
+        }
+
+
+@dataclass(frozen=True)
+class Extraction:
+    digest: Digest
+    content_store: Mapping[str, str]  # content_ref -> 全文（U4 资产重建用）
+
+
+# ── host 检测 + session 定位 ─────────────────────────
+def encode_cwd(cwd: str) -> str:
+    """把 cwd 编码成 Claude Code 的 project 目录名（`/` → `-`）。"""
+    return cwd.replace("/", "-")
+
+
+def detect_host(
+    *, cwd: str | None = None, projects_base: str | Path | None = None, sessions_base: str | Path | None = None
+) -> str:
+    """判定当前 host：claude | codex。先看环境标记，再退化到目录启发式。"""
+    if os.environ.get("CLAUDECODE") or os.environ.get("CLAUDE_CODE"):
+        return "claude"
+    if os.environ.get("CODEX_SANDBOX") or os.environ.get("CODEX_HOME"):
+        return "codex"
+    cb = Path(projects_base or Path.home() / ".claude" / "projects") / encode_cwd(cwd or os.getcwd())
+    if cb.exists() and any(cb.glob("*.jsonl")):
+        return "claude"
+    sb = Path(sessions_base or Path.home() / ".codex" / "sessions")
+    if sb.exists() and any(sb.glob("**/rollout-*.jsonl")):
+        return "codex"
+    raise ConfigError("无法判定 host（Claude Code / Codex）；请用 --session 显式指定 session 路径。")
+
+
+def locate_claude_session(
+    cwd: str, projects_base: str | Path | None = None, override: str | Path | None = None
+) -> Path:
+    """定位 Claude Code 当前 session：编码 cwd 目录下最新 mtime 的 .jsonl。"""
+    if override:
+        return Path(override)
+    base = Path(projects_base or Path.home() / ".claude" / "projects")
+    d = base / encode_cwd(cwd)
+    cands = sorted(d.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True) if d.exists() else []
+    if not cands:
+        raise SessionNotFound(f"Claude Code session 未找到：{d}")
+    return cands[0]
+
+
+def locate_codex_session(sessions_base: str | Path | None = None, override: str | Path | None = None) -> Path:
+    """定位 Codex 当前 session：递归 YYYY/MM/DD 下最新 mtime 的 rollout-*.jsonl。"""
+    if override:
+        return Path(override)
+    base = Path(sessions_base or Path.home() / ".codex" / "sessions")
+    cands = (
+        sorted(base.glob("**/rollout-*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if base.exists()
+        else []
+    )
+    if not cands:
+        raise SessionNotFound(f"Codex session 未找到：{base}/**/rollout-*.jsonl")
+    return cands[0]
+
+
+def read_jsonl_tolerant(path: str | Path) -> list[dict]:
+    """容错逐行解析 JSONL：跳过空行与半写/损坏行（应对读时仍在追加的活 transcript）。"""
+    out: list[dict] = []
+    text = Path(path).read_text(encoding="utf-8", errors="replace")
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict):
+            out.append(obj)
+    return out
+
+
+# ── 文本工具 ────────────────────────────────────────
+_MARKERS = ("ANSWER:", "diff --git", "Traceback", "FAIL", "PASS", "Error:", "error:")
+
+
+def _as_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts = []
+        for b in value:
+            if isinstance(b, dict) and "text" in b:
+                parts.append(str(b["text"]))
+            else:
+                parts.append(json.dumps(b, ensure_ascii=False))
+        return "\n".join(parts)
+    return json.dumps(value, ensure_ascii=False)
+
+
+def truncate(text: str, limit: int = 2000) -> str:
+    """超限截断，但保留含关键标记（ANSWER:/diff 头/错误栈等）的中段行。"""
+    if len(text) <= limit:
+        return text
+    head_len = limit * 2 // 3
+    tail_len = limit - head_len
+    head = text[:head_len]
+    tail = text[len(text) - tail_len :]
+    middle = text[head_len : len(text) - tail_len]
+    kept = [ln for ln in middle.splitlines() if any(m in ln for m in _MARKERS)]
+    if kept:
+        mid = "\n[…截断；保留标记…]\n" + "\n".join(kept[:20]) + "\n"
+    else:
+        mid = "\n[…截断…]\n"
+    return head + mid + tail
+
+
+# ── Claude 适配器 ───────────────────────────────────
+def _content_blocks(record: dict) -> list:
+    c = (record.get("message") or {}).get("content")
+    return c if isinstance(c, list) else []
+
+
+def _file_event_from_claude_tool(
+    name: str, inp: dict, tid: str | None, res_text: str, store: dict[str, str]
+) -> FileEvent | None:
+    fp = inp.get("file_path") or inp.get("path")
+    if not fp:
+        return None
+    if name == "Read":
+        ref = f"claude-read:{tid}"
+        store[ref] = res_text
+        return FileEvent(fp, "read", ref)
+    if name == "Write":
+        ref = f"claude-write:{tid}"
+        store[ref] = str(inp.get("content", ""))
+        return FileEvent(fp, "write", ref)
+    if name in ("Edit", "NotebookEdit"):
+        ref = f"claude-edit:{tid}"
+        store[ref] = json.dumps(
+            {"old": inp.get("old_string", ""), "new": inp.get("new_string", "")}, ensure_ascii=False
+        )
+        return FileEvent(fp, "edit", ref)
+    return None
+
+
+def parse_claude(records: Sequence[dict]) -> tuple[list[Turn], list[FileEvent], dict[str, str]]:
+    """解析 Claude Code transcript → (turns, file_events, content_store)。"""
+    results: dict[str, str] = {}
+    for r in records:
+        for b in _content_blocks(r):
+            if isinstance(b, dict) and b.get("type") == "tool_result":
+                results[b.get("tool_use_id")] = _as_text(b.get("content"))
+
+    turns: list[Turn] = []
+    file_events: list[FileEvent] = []
+    store: dict[str, str] = {}
+    for r in records:
+        if r.get("type") not in ("user", "assistant"):
+            continue
+        role = (r.get("message") or {}).get("role", r.get("type"))
+        text_parts: list[str] = []
+        tools: list[ToolCall] = []
+        blocks = _content_blocks(r)
+        for b in blocks:
+            if not isinstance(b, dict):
+                continue
+            bt = b.get("type")
+            if bt == "text":
+                text_parts.append(str(b.get("text", "")))
+            elif bt == "tool_use":
+                name = str(b.get("name", ""))
+                inp = b.get("input") or {}
+                tid = b.get("id")
+                res_text = results.get(tid, "")
+                tools.append(
+                    ToolCall(
+                        name=name,
+                        args_summary=_as_text(inp)[:600],
+                        result_summary=res_text[:600],
+                    )
+                )
+                fe = _file_event_from_claude_tool(name, inp, tid, res_text, store)
+                if fe:
+                    file_events.append(fe)
+        c = (r.get("message") or {}).get("content")
+        if isinstance(c, str) and c:
+            text_parts.append(c)
+        text = "\n".join(p for p in text_parts if p)
+        if text or tools:
+            turns.append(Turn(role=role, text=text, tools=tuple(tools)))
+
+    # file-history-snapshot：内容在独立存储，这里只记引用，U4 按 ref 去磁盘取
+    for r in records:
+        if r.get("type") == "file-history-snapshot":
+            snap = r.get("snapshot") or {}
+            tfb = snap.get("trackedFileBackups") or {}
+            for path in tfb:
+                file_events.append(FileEvent(path=path, op="snapshot", content_ref=f"claude-fh:{path}"))
+    return turns, file_events, store
+
+
+# ── Codex 适配器 ────────────────────────────────────
+def _codex_patch_files(patch: str) -> list[tuple[str, str]]:
+    """从 apply_patch 文本抽 (op, path)。op ∈ add/update/delete。"""
+    out: list[tuple[str, str]] = []
+    for line in patch.splitlines():
+        line = line.strip()
+        for marker, op in (("*** Add File:", "add"), ("*** Update File:", "update"), ("*** Delete File:", "delete")):
+            if line.startswith(marker):
+                out.append((op, line[len(marker):].strip()))
+    return out
+
+
+def parse_codex(records: Sequence[dict]) -> tuple[list[Turn], list[FileEvent], dict[str, str]]:
+    """解析 Codex rollout → (turns, file_events, content_store)。"""
+    outputs: dict[str, str] = {}
+    for r in records:
+        if r.get("type") != "response_item":
+            continue
+        p = r.get("payload") or {}
+        if p.get("type") in ("function_call_output", "custom_tool_call_output"):
+            outputs[p.get("call_id")] = _as_text(p.get("output"))
+
+    turns: list[Turn] = []
+    file_events: list[FileEvent] = []
+    store: dict[str, str] = {}
+    for r in records:
+        if r.get("type") != "response_item":
+            continue
+        p = r.get("payload") or {}
+        pt = p.get("type")
+        if pt == "message":
+            role = p.get("role", "")
+            if role not in ("user", "assistant"):
+                continue  # developer/system 提示不算任务对话
+            text = _as_text(p.get("content"))
+            if text:
+                turns.append(Turn(role=role, text=text))
+        elif pt in ("function_call", "custom_tool_call"):
+            name = str(p.get("name", ""))
+            cid = p.get("call_id")
+            args = p.get("arguments") if pt == "function_call" else p.get("input")
+            args_text = _as_text(args)
+            res = outputs.get(cid, "")
+            turns.append(
+                Turn(
+                    role="assistant",
+                    text="",
+                    tools=(ToolCall(name=name, args_summary=args_text[:600], result_summary=res[:600]),),
+                )
+            )
+            if name == "apply_patch" and isinstance(args_text, str):
+                for op, path in _codex_patch_files(args_text):
+                    ref = f"codex-patch:{cid}:{path}"
+                    store[ref] = args_text
+                    norm = {"add": "write", "update": "edit", "delete": "delete"}[op]
+                    file_events.append(FileEvent(path=path, op=norm, content_ref=ref))
+    return turns, file_events, store
+
+
+# ── 触发轮 cutoff ───────────────────────────────────
+_TRIGGERS = (
+    "抽成",
+    "eval case",
+    "turn this into an eval",
+    "benchmark case",
+    "make a benchmark",
+)
+
+
+def is_trigger(text: str) -> bool:
+    t = text.lower()
+    return any(m.lower() in t for m in _TRIGGERS)
+
+
+def apply_trigger_cutoff(turns: Sequence[Turn]) -> tuple[Turn, ...]:
+    """丢弃最后一个触发轮及其之后的所有轮（蒸馏的是触发之前的真实任务）。"""
+    idx: int | None = None
+    for i, t in enumerate(turns):
+        if t.role == "user" and is_trigger(t.text):
+            idx = i
+    return tuple(turns[:idx]) if idx is not None else tuple(turns)
+
+
+# ── digest 组装 ─────────────────────────────────────
+def build_digest(
+    host: str,
+    session_path: str,
+    turns: Sequence[Turn],
+    file_events: Sequence[FileEvent],
+    *,
+    turn_limit: int = 2000,
+    tool_limit: int = 400,
+) -> Digest:
+    dturns = tuple(
+        replace(
+            t,
+            text=truncate(t.text, turn_limit),
+            tools=tuple(
+                replace(
+                    c,
+                    args_summary=truncate(c.args_summary, tool_limit),
+                    result_summary=truncate(c.result_summary, tool_limit),
+                )
+                for c in t.tools
+            ),
+        )
+        for t in turns
+    )
+    hints = {
+        "turn_count": len(turns),
+        "tool_calls": sum(len(t.tools) for t in turns),
+        "files_touched": len({f.path for f in file_events}),
+    }
+    return Digest(host=host, session_path=session_path, turns=dturns, file_events=tuple(file_events), usage_hints=hints)
+
+
+def extract_session(
+    *,
+    host: str | None = None,
+    cwd: str | None = None,
+    session_override: str | Path | None = None,
+    projects_base: str | Path | None = None,
+    sessions_base: str | Path | None = None,
+) -> Extraction:
+    """顶层入口：定位 + 解析 + 剥触发轮 + 组装 digest。"""
+    if host is None and session_override is None:
+        host = detect_host(cwd=cwd, projects_base=projects_base, sessions_base=sessions_base)
+    if host is None and session_override is not None:
+        name = Path(session_override).name
+        host = "codex" if name.startswith("rollout-") else "claude"
+
+    if host == "claude":
+        path = locate_claude_session(cwd or os.getcwd(), projects_base, session_override)
+        records = read_jsonl_tolerant(path)
+        turns, fes, store = parse_claude(records)
+    elif host == "codex":
+        path = locate_codex_session(sessions_base, session_override)
+        records = read_jsonl_tolerant(path)
+        turns, fes, store = parse_codex(records)
+    else:
+        raise ConfigError(f"未知 host：{host!r}")
+
+    turns = apply_trigger_cutoff(turns)
+    digest = build_digest(host, str(path), turns, fes)
+    return Extraction(digest=digest, content_store=store)
+
+
+def _main(argv: Sequence[str] | None = None) -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(description="提取当前 session digest（JSON 输出）。")
+    ap.add_argument("--host", choices=["claude", "codex"], default=None)
+    ap.add_argument("--session", default=None, help="显式 session 文件路径（覆盖自动定位）")
+    args = ap.parse_args(argv)
+    ext = extract_session(host=args.host, session_override=args.session)
+    print(json.dumps(ext.digest.to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())
