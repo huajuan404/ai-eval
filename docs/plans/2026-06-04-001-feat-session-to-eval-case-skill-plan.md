@@ -1,7 +1,7 @@
 ---
 title: "feat: session-to-eval — 把 session 任务蒸馏成 ai-eval 可执行 case 的可移植 skill"
 type: feat
-status: active
+status: completed
 date: 2026-06-04
 deepened: 2026-06-04
 ---
