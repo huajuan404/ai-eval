@@ -107,6 +107,23 @@ judge:
 **只读校验资产**（如基准测试）放 `verify/`——它**不进入选手 workdir**，check 前还原到产物目录，
 确保选手无法通过改测试来骗取 check pass。
 
+## 从 session 自动蒸馏用例（case-gen skill）
+
+手写用例慢。`case-gen/` 提供一个**可移植 skill**：在任何项目 / session 里说一句
+"把刚才的任务抽成 eval case"，它读取当前 session log（兼容 Claude Code 与 Codex），
+语义识别其中的 1..N 个任务，蒸馏成对齐上面契约的**草稿 case** 写进 `cases/`。
+
+```bash
+# 一次性安装（软链进 ~/.claude/skills/）
+cp case-gen/config.example.toml case-gen/config.toml   # 填入本仓库绝对路径
+bash case-gen/install.sh
+```
+
+诚实边界：transcript 里没有外部验证过的 ground-truth、大型工作集无法完整复原，
+所以产物默认是**草稿级**——能精确复原的精确复原，不能的产出 `setup.sh` 桩 + `ground-truth TODO`
++ 人工确认点，区分度由人在落地前签字。落盘前 `validate_case.py` 做静态结构校验
+（只证明能被 bench 加载，**不**证明能跑出有意义的分）。详见 `case-gen/SKILL.md`。
+
 ## 安全
 
 - 子进程用最小环境，剔除无关凭证（每个 launcher 只放行自己的 auth）。
