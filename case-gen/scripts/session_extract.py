@@ -665,6 +665,27 @@ def reconstruct(
     return ReconstructionResult(tuple(assets), setup_stub=False, ground_truth_external=True, notes=tuple(notes))
 
 
+# ── U5：case 命名 / 序号（确定性，供生成器调用）──────
+def next_sequence_number(cases_dir: str | Path, date_str: str) -> int:
+    """扫 cases_dir 下当日已有目录，返回下一个序号（从 1 起）。"""
+    base = Path(cases_dir)
+    prefix = f"{date_str}-"
+    maxn = 0
+    if base.exists():
+        for d in base.iterdir():
+            if not (d.is_dir() and d.name.startswith(prefix)):
+                continue
+            num = d.name[len(prefix):].split("-", 1)[0]
+            if num.isdigit():
+                maxn = max(maxn, int(num))
+    return maxn + 1
+
+
+def case_dirname(date_str: str, seq: int, name: str) -> str:
+    """组装 case 目录名：YYYY-MM-DD-NNN-name（NNN 3 位零填充）。"""
+    return f"{date_str}-{seq:03d}-{name}"
+
+
 def synthesized_asset(rel_path: str, content: str) -> ReconstructedAsset:
     """把 LLM 合成的输入落成资产（脱敏 + 标 synthesized），供 input/ 兜底。"""
     scrubbed, hits = scrub_secrets(content)

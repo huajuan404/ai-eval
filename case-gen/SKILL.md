@@ -156,3 +156,73 @@ expected:                    # 可选；YAML **dict 字段**（不是目录！�
 
 把识别到的任务列成清单，每条含：**编号 + 一句话目标 + 拟定 class + 拟定判分策略 + 是否低置信复核过**。
 多任务时让用户挑选要落地的（默认全选），每个挑中的任务各生成一个 case。
+
+---
+
+## 产物生成（按契约写 case 目录）
+
+对每个挑中的任务，按其 class 走对应生成路径。先定目录：
+
+```python
+from session_extract import next_sequence_number, case_dirname
+seq = next_sequence_number(f"{ai_eval_path}/cases", date_str)   # 扫当日已有目录取下一个
+name = case_dirname(date_str, seq, "<kebab-短名>")              # 2026-06-05-001-foo
+case_dir = f"{ai_eval_path}/cases/{name}"
+```
+
+### 通用规则（所有 class）
+
+- **task.md 模型无关**：剥掉指向具体模型/启动器（claude/codex/opus 等）、本机绝对路径的措辞。
+- **task.md 自包含（正向校验，不只看 token 缺失）**：task 引用的每个资产都必须在 `input/` 内；
+  不得依赖宿主专属动词/工具或本机工作区布局。做不到 → 见"可移植性分诊"。
+- **资产**：调 `reconstruct(...)` 拿 `ReconstructionResult`；`setup_stub` 为真则写 `setup.sh` 桩
+  + 在 README 标"工作集需外部获取"；`needs_review` 资产先经 U7 人工确认再落盘。
+  合成资产用 `synthesized_asset(...)`，并在 `case.yaml` 置 `expected.synthesized: true` + README 标注。
+- **README.md**（单 case，允许的 md）：任务说明 + 判分方式 + 待补 TODO（ground-truth / setup.sh / 合成资产）
+  + "input/ 为 session 派生，未审计敏感数据，分享前请人工 review"。
+
+### coding
+
+```yaml
+# case.yaml
+name: <name>
+class: coding
+task: {type: prompt, prompt_file: prompts/task.md}
+check: {type: script, script: check.sh}
+judge: {enabled: true, rubric_file: prompts/rubric.md, dimensions: [correctness, code_quality]}
+expected: {synthesized: <bool>}
+```
+- `input/` 放起始脚手架（reconstruct 的 read 前态）。
+- `verify/` 放只读测试——**通常不在 session 里**（oracle 多为外部）→ 写测试桩 + README "ground-truth TODO：补全 verify/ 测试"。
+- `check.sh` 跑 `verify/` 的测试（退 0=pass）；从 cwd 运行。
+
+### tool-using
+
+```yaml
+class: tool-using
+check: {type: script, script: check.sh}
+judge: {enabled: true, rubric_file: prompts/rubric.md, dimensions: [accuracy, investigation_process]}
+expected: {answer: "<TODO 外部真值>", synthesized: <bool>}
+```
+- task.md 约定模型把结论写成 `ANSWER: <值>` 一行。
+- `check.sh` 从 `OUTPUT.txt` 抽 `ANSWER:` 比对 `expected` 字段。
+- 工作集多为外部大仓库 → `setup.sh` 桩；真值外部 → README "ground-truth TODO：填 expected 真值"。
+
+### reasoning / writing
+
+```yaml
+class: reasoning   # 或 writing
+check: {type: none}
+judge: {enabled: true, rubric_file: prompts/rubric.md, dimensions: [<维度...>]}
+expected: {max_score: <N>, passing_threshold: <M>}
+```
+- 无确定性 check；rubric N 维，必含 JSON 输出约定。
+- `expected.max_score`/`passing_threshold` 是人工设的评分锚点（reasoning/writing 的"真值"是 rubric 阈值）。
+- 模型回答落 `OUTPUT.txt`，judge 据 rubric 评分。
+
+### 可移植性分诊（宿主耦合任务）
+
+若任务依赖某 skill/slash 调用、宿主专属工具、或本机工作区布局，无法做到自包含：
+- 能解耦成通用 prompt → 解耦。
+- 不能 → 在 `case.yaml` 置 `requires_engine: <claude|codex>`，README 标注"可移植性受限"。
+- 既不能解耦又无法置 requires_engine 跑通 → 明确告知用户该任务不适合自动蒸馏，跳过。
