@@ -515,6 +515,168 @@ def classify_task(s: TaskSignals) -> Classification:
     return Classification("reasoning", conf, "无代码无单值答案 → 推理；长文需 LLM 区分是否 writing")
 
 
+# ── U4：脱敏（transcript 专属，扩展 bench/scrub 基线）─
+import re  # noqa: E402  （集中在 U4 段，便于阅读）
+
+_SECRET_PATTERNS: tuple[tuple[re.Pattern, str], ...] = (
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.S), "PRIVATE_KEY"),
+    (re.compile(r"sk-[A-Za-z0-9_\-]{16,}"), "OPENAI_KEY"),
+    (re.compile(r"\b(?:gh[pousr])_[A-Za-z0-9]{20,}\b"), "GITHUB_TOKEN"),
+    (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "AWS_ACCESS_KEY"),
+    (re.compile(r"\beyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\b"), "JWT"),
+    (re.compile(r"[A-Za-z][A-Za-z0-9+.\-]*://[^\s/@]+:[^\s/@]+@\S+"), "URL_CRED"),
+    (re.compile(r"[Bb]earer\s+[A-Za-z0-9._\-]{16,}"), "BEARER"),
+    (
+        re.compile(
+            r"(?i)(?:aws_secret_access_key|api[_-]?key|auth[_-]?token|secret|password|passwd|pwd|access[_-]?token|"
+            r"private[_-]?key|client[_-]?secret|db[_-]?pass\w*)\s*[=:]\s*\S+"
+        ),
+        "KV_SECRET",
+    ),
+    (re.compile(r"\b[A-Fa-f0-9]{40,}\b"), "LONG_HEX"),
+)
+
+_HIGH_ENTROPY = re.compile(r"[A-Za-z0-9+/=_\-]{32,}")
+
+
+def scrub_secrets(text: str) -> tuple[str, list[str]]:
+    """脱敏并返回命中类别。覆盖面远超 bench/scrub 的 5 类（评审 P0）。"""
+    hits: list[str] = []
+    out = text
+    for pat, label in _SECRET_PATTERNS:
+        if pat.search(out):
+            hits.append(label)
+            out = pat.sub(f"[REDACTED:{label}]", out)
+    return out, hits
+
+
+def residual_secret_risk(scrubbed: str) -> bool:
+    """脱敏后仍有长的字母+数字混合 token（base64-ish / 非标键名）→ 建议人工确认。"""
+    for m in _HIGH_ENTROPY.finditer(scrubbed):
+        tok = m.group()
+        if "REDACTED" in tok:
+            continue
+        if any(c.isdigit() for c in tok) and any(c.isalpha() for c in tok):
+            return True
+    return False
+
+
+# ── U4：cat -n 剥离 + 资产重建 + ground-truth 分诊 ───
+_CATN = re.compile(r"^\s*\d+\t")
+
+
+def strip_cat_n(text: str) -> str:
+    """剥除 Read tool_result 的 `cat -n` 行号前缀（多数行匹配时才剥，避免误伤含 tab 内容）。"""
+    lines = text.split("\n")
+    if not lines:
+        return text
+    matches = sum(1 for ln in lines if _CATN.match(ln))
+    if matches < max(1, int(len(lines) * 0.6)):
+        return text
+    return "\n".join(_CATN.sub("", ln) for ln in lines)
+
+
+def needs_setup_stub(turns: Sequence[Turn], file_events: Sequence[FileEvent]) -> bool:
+    """工作集疑似外部大仓库（出现 git 操作 / clone）→ input 不完整，产 setup.sh 桩。"""
+    for t in turns:
+        for c in t.tools:
+            a = (c.args_summary or "").lower()
+            if "git " in a or "git\n" in a or "clone" in a or "checkout" in a:
+                return True
+    return False
+
+
+@dataclass(frozen=True)
+class ReconstructedAsset:
+    path: str          # case 相对路径，如 input/solution.py
+    content: str
+    bucket: str        # input | verify
+    synthesized: bool = False
+    needs_review: bool = False
+
+
+@dataclass(frozen=True)
+class ReconstructionResult:
+    assets: tuple[ReconstructedAsset, ...]
+    setup_stub: bool            # 工作集外部 → 产 setup.sh 桩
+    ground_truth_external: bool  # 真值需外部 → README TODO + expected/verify 桩
+    notes: tuple[str, ...]
+
+
+def _case_relpath(abspath: str, project_cwd: str = "") -> str:
+    p = Path(abspath)
+    if project_cwd:
+        try:
+            return str(p.relative_to(project_cwd))
+        except ValueError:
+            pass
+    return p.name
+
+
+def reconstruct(
+    turns: Sequence[Turn],
+    file_events: Sequence[FileEvent],
+    content_store: Mapping[str, str],
+    *,
+    project_cwd: str = "",
+) -> ReconstructionResult:
+    """诚实分级的资产重建（session 优先 → 覆盖门 → 合成由上层补）。
+
+    - 工作集外部（git/大仓库）→ setup_stub，不落碎片 input/。
+    - 否则取每个文件首个 Read 的前态（剥 cat -n + 脱敏）→ input/。
+    - ground-truth 默认需外部权威（评审实测三范本皆外部）→ TODO，不把 agent 输出当 oracle。
+    """
+    if needs_setup_stub(turns, file_events):
+        return ReconstructionResult(
+            (),
+            setup_stub=True,
+            ground_truth_external=True,
+            notes=(
+                "工作集疑似外部大仓库 / 含 git 操作：input 不完整，已标记产 setup.sh 桩；"
+                "请人工补全工作集获取方式与 ground-truth。",
+            ),
+        )
+
+    assets: list[ReconstructedAsset] = []
+    seen: set[str] = set()
+    for fe in file_events:
+        if fe.op != "read" or fe.path in seen:
+            continue
+        raw = content_store.get(fe.content_ref or "", "")
+        if not raw:
+            continue
+        content = strip_cat_n(raw)
+        scrubbed, hits = scrub_secrets(content)
+        rel = _case_relpath(fe.path, project_cwd)
+        assets.append(
+            ReconstructedAsset(
+                path=f"input/{rel}",
+                content=scrubbed,
+                bucket="input",
+                needs_review=bool(hits) or residual_secret_risk(scrubbed),
+            )
+        )
+        seen.add(fe.path)
+
+    notes: list[str] = []
+    if not assets:
+        notes.append("session 内无可复原的输入前态：小输入可由 LLM 合成（标 synthesized），否则留 input/ 占位说明。")
+    notes.append("ground-truth 默认需外部权威：在 case.yaml 的 expected 与 verify/ 填真值（README 已标 TODO），不要把 agent 自己的输出当 oracle。")
+    return ReconstructionResult(tuple(assets), setup_stub=False, ground_truth_external=True, notes=tuple(notes))
+
+
+def synthesized_asset(rel_path: str, content: str) -> ReconstructedAsset:
+    """把 LLM 合成的输入落成资产（脱敏 + 标 synthesized），供 input/ 兜底。"""
+    scrubbed, hits = scrub_secrets(content)
+    return ReconstructedAsset(
+        path=f"input/{rel_path}",
+        content=scrubbed,
+        bucket="input",
+        synthesized=True,
+        needs_review=bool(hits) or residual_secret_risk(scrubbed),
+    )
+
+
 def _main(argv: Sequence[str] | None = None) -> int:
     import argparse
 
