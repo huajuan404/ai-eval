@@ -1,0 +1,7 @@
+# session-to-eval 配置示例。
+# 复制为 config.toml 并填入你的 ai-eval 仓库绝对路径。
+#   cp config.example.toml config.toml
+#
+# skill 在任意项目 / session 运行，但生成的 case 必须写进 ai-eval 的 cases/。
+# 这里指定 ai-eval 仓库根（含 bench/ 与 cases/ 的目录）的绝对路径。
+ai_eval_path = "/abs/path/to/ai-eval"
