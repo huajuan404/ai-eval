@@ -38,13 +38,26 @@
 
 `runners.yaml` 用 `c` 类档案引用这些编号（如 `glm-5.1 → config: 2`）。
 
+## case-gen/（从 session 蒸馏 case 的可移植 skill）
+
+独立子系统：在任意项目/session 说"把刚才的任务抽成 eval case"，读 session log（Claude Code + Codex 双端）
+语义识别 1..N 个任务，蒸馏成对齐 case 契约的**草稿 case** 写进 `cases/`。
+
+- `scripts/session_extract.py` — 双 CLI 定位+解析→token 受限 digest；含触发轮 cutoff、`cat -n` 剥离、
+  扩展密钥脱敏（6 类，超 `bench/scrub.py`）、确定性首过分类器 `classify_task`、资产重建覆盖门、`next_sequence_number`。
+- `scripts/validate_case.py` — 路径信任校验 + `bench.case.load_case` 静态加载 + 廉价断言；区分 `valid`（能加载）与 `complete`（真值已补）。
+- `SKILL.md` — 触发描述 + 内联 case 契约 + 四类生成模板 + 完整编排。
+- `config.toml`（gitignore，从 `config.example.toml` 复制）记 `ai_eval_path`；`bash install.sh` 双端软链进
+  `~/.claude/skills` 与 `~/.codex/skills`，源码原地生效。
+- 诚实边界：ground-truth 与大工作集多需外部 → 默认产 setup.sh/expected 桩 + TODO；校验门只证明能加载，**不**证明能跑出有意义的分。
+
 ## 开发约定
 
 - Python 3.11+；不可变优先（dataclass frozen + replace）；多个小文件 > 大文件。
 - 新增功能写测试（pytest，`tests/` 下）；`./run.sh` 是薄入口委托给 `python3 -m bench`。
-- 运行测试：`python3 -m pytest`；lint：`python3 -m ruff check bench/ tests/`。
-- `cases/*/output/`、`scorecards/` 为生成产物，已 gitignore。
-- 文档只写在 `README.md` 和本文件，不新增散落 md（用例自己的 README 除外）。
+- 运行测试：`python3 -m pytest`；lint：`python3 -m ruff check bench/ case-gen/ tests/`。
+- `cases/*/output/`、`scorecards/`、`case-gen/config.toml` 为生成产物 / 本机配置，已 gitignore。
+- 文档只写在 `README.md` 和本文件，不新增散落 md（用例自己的 README、`case-gen/SKILL.md` 除外）。
 
 ## 运行
 
