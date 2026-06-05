@@ -38,7 +38,7 @@ description: 把当前 session 里执行过的任务蒸馏成 ai-eval 可执行�
 6. `scripts/validate_case.py` 做静态结构校验 + 廉价断言。
 7. 区分度人工签字 → 报告落点、待补 TODO、如何跑。
 
-> 注：本章节是骨架占位，详细的"任务分段与归类""产物生成""编排"步骤分别在下文对应章节展开。
+详细步骤见下文"任务分段与归类""产物生成""编排（完整工作流）"三节。
 
 ---
 
@@ -226,3 +226,71 @@ expected: {max_score: <N>, passing_threshold: <M>}
 - 能解耦成通用 prompt → 解耦。
 - 不能 → 在 `case.yaml` 置 `requires_engine: <claude|codex>`，README 标注"可移植性受限"。
 - 既不能解耦又无法置 requires_engine 跑通 → 明确告知用户该任务不适合自动蒸馏，跳过。
+
+---
+
+## 编排（完整工作流）
+
+触发后按序执行。脚本在 `scripts/` 下，用 `python3` 调用。
+
+### 0. 读配置
+
+`load_config()` 拿 `ai_eval_path`。缺 `config.toml` → 提示
+`cp config.example.toml config.toml` 并填 `ai_eval_path`，然后**安全停止**。
+
+### 1. 提取 session
+
+```bash
+python3 scripts/session_extract.py        # 自动定位当前 session
+# 或显式： python3 scripts/session_extract.py --session <path> --host claude|codex
+```
+**回显所读 session 路径**供用户确认（启发式选了最新 mtime，可能并发误选）。
+digest 已剥除触发轮（"抽成 case"那句及其后）。
+
+### 2. 分段 + 归类
+
+见"任务分段与归类"。对每个任务 `derive_signals` + `classify_task`，低置信复核。
+
+### 3. 展示任务清单 → 用户挑选（R7）
+
+列出编号 + 目标 + class + 判分策略 + 是否复核过；多任务让用户挑（默认全选）。
+
+### 4. 逐任务：资产重建 + ground-truth 分诊
+
+- 调 `reconstruct(turns, file_events, content_store, project_cwd=...)`。
+- `setup_stub` → 写 `setup.sh` 桩 + README 标"工作集需外部获取"。
+- 资产 `needs_review` 为真 → **先向用户人工确认脱敏结果再落盘**（regex 脱敏不可能穷尽）。
+- 缺前态的小输入 → 你（LLM）合成等价内容，用 `synthesized_asset(rel, content)` 落盘，
+  并在 `case.yaml` 置 `expected.synthesized: true`。
+- ground-truth 默认需外部 → 按"产物生成"留 expected/verify 桩 + README TODO。
+
+### 5. 生成 case
+
+见"产物生成"。用 `next_sequence_number` + `case_dirname` 定目录，按 class 模板写文件到
+`<ai_eval_path>/cases/<name>/`。
+
+### 6. 校验门
+
+```bash
+python3 scripts/validate_case.py <case_dir>
+```
+返回 `valid`（能加载 + 无结构错误）与 `complete`（无草稿 TODO）。
+- `valid=False` → 按 errors **回修产物后重校验**（循环直到 valid）。
+- `valid=True, complete=False` → 保留 todos，进下一步（草稿 case，待人工补真值）。
+
+### 7. 区分度人工签字（产品门）
+
+把 rubric / expected 摆给用户，问一句：**"这个 case 真能区分模型吗？"**
+- 用户确认有区分度 → 标记为可信 case。
+- 未确认 / 真值待补 → 标记为**草稿**，不计入可信语料（README 注明）。
+
+### 8. 报告
+
+逐 case 报告：
+- 落点路径、class、判分方式（check / judge / 二者）。
+- `valid` / `complete` 状态。
+- **待补 TODO**：ground-truth / setup.sh / 合成资产 / 未审计提示。
+- **如何跑**：`./run.sh -c <case名> -r <runners> --repeat 2`。
+
+> 诚实原则：能精确复刻的精确复刻，不能的产出桩 + TODO + 人工确认点。
+> `valid` 只意味结构合法能加载，**不**意味能跑出有意义的分——那要靠人工签字 + 后续 dry-run。
