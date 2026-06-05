@@ -446,6 +446,75 @@ def extract_session(
     return Extraction(digest=digest, content_store=store)
 
 
+# ── U3：确定性首过分类器 + 信号派生 ─────────────────
+_CODE_EXT = {
+    ".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".rb",
+    ".c", ".cc", ".cpp", ".h", ".hpp", ".sh", ".sql", ".swift", ".kt", ".php",
+}
+_INVESTIGATION_TOOLS = {"Read", "Grep", "Glob", "Bash", "exec_command", "tool_search_call", "WebFetch", "WebSearch"}
+
+
+@dataclass(frozen=True)
+class TaskSignals:
+    code_file_writes: int = 0      # 对代码文件的 write/edit 次数
+    tool_calls: int = 0            # 工具调用总数
+    investigation_tools: int = 0   # 调查型工具调用数（read/grep/git/exec/search）
+    has_answer_marker: bool = False  # 输出含 ANSWER: 单值答案
+    output_chars: int = 0          # 末条 assistant 文本长度
+    writing_intent: bool = False   # 长文/方案/文案意图（语义判定，由 LLM 置）
+
+
+@dataclass(frozen=True)
+class Classification:
+    cls: str           # reasoning | coding | tool-using | writing
+    confidence: str    # high | low（low → 交 LLM 复核）
+    reason: str
+
+
+def derive_signals(
+    turns: Sequence[Turn], file_events: Sequence[FileEvent], *, writing_intent: bool = False
+) -> TaskSignals:
+    """从一个任务切片的 turns + file_events 派生确定性信号。"""
+    code_writes = sum(
+        1 for f in file_events if f.op in ("write", "edit") and Path(f.path).suffix in _CODE_EXT
+    )
+    tool_calls = sum(len(t.tools) for t in turns)
+    investigation = sum(1 for t in turns for c in t.tools if c.name in _INVESTIGATION_TOOLS)
+    answer = any("ANSWER:" in t.text for t in turns if t.role == "assistant")
+    asst = [t.text for t in turns if t.role == "assistant" and t.text]
+    out_chars = len(asst[-1]) if asst else 0
+    return TaskSignals(
+        code_file_writes=code_writes,
+        tool_calls=tool_calls,
+        investigation_tools=investigation,
+        has_answer_marker=answer,
+        output_chars=out_chars,
+        writing_intent=writing_intent,
+    )
+
+
+def classify_task(s: TaskSignals) -> Classification:
+    """确定性首过分类（四类）。歧义置 low confidence → SKILL.md 让 LLM 复核改判。
+
+    优先级：
+    1. 代码改动 + 调查 + 单值答案 三者并存 → 边界冲突，候选 coding，低置信。
+    2. 单值答案 + 工具调用、无代码产物 → tool-using。
+    3. 有代码文件产物 → coding。
+    4. 显式 writing 意图 → writing。
+    5. 其余 → reasoning（长文但无 writing 意图者低置信，待 LLM 区分 reasoning/writing）。
+    """
+    if s.code_file_writes >= 1 and s.investigation_tools >= 3 and s.has_answer_marker:
+        return Classification("coding", "low", "代码改动 + 工具调查 + 单值答案并存，边界冲突，交 LLM 复核")
+    if s.has_answer_marker and s.tool_calls >= 1 and s.code_file_writes == 0:
+        return Classification("tool-using", "high", "单值答案 + 工具调查、无代码产物")
+    if s.code_file_writes >= 1:
+        return Classification("coding", "high", "有可配测试的代码产物")
+    if s.writing_intent:
+        return Classification("writing", "high", "长文 / 方案 / 文案意图")
+    conf = "low" if s.output_chars >= 1500 else "high"
+    return Classification("reasoning", conf, "无代码无单值答案 → 推理；长文需 LLM 区分是否 writing")
+
+
 def _main(argv: Sequence[str] | None = None) -> int:
     import argparse
 
