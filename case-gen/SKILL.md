@@ -41,7 +41,7 @@ description: 把 session 里执行过的真实任务蒸馏成 ai-eval 可执行�
 2. 语义分段识别 1..N 个任务；确定性首过分类器 + 复核给出每个任务的 class 与判分策略。
 3. 多任务时展示清单，用户挑选要落地的任务。
 4. 逐任务：资产重建（session 优先 / 覆盖门桩 / 合成兜底）+ ground-truth 分诊 + 脱敏。
-5. 按"类别→判分策略矩阵"生成 case 目录写入 `<ai_eval_path>/cases/`。
+5. 按"类别→判分策略矩阵"生成 case 目录写入**落点根**（默认私有 `private_cases_path`，除非用户要公开；见"产物生成 / 落点"）。
 6. `scripts/validate_case.py` 做静态结构校验 + 廉价断言。
 7. 区分度人工签字 → 报告落点、待补 TODO、如何跑。
 
@@ -168,13 +168,26 @@ expected:                    # 可选；YAML **dict 字段**（不是目录！�
 
 ## 产物生成（按契约写 case 目录）
 
-对每个挑中的任务，按其 class 走对应生成路径。先定目录：
+对每个挑中的任务，按其 class 走对应生成路径。先定**落点根目录**（公开 vs 私有）：
+
+### 🔒 落点：默认私有，除非用户显式要求公开
+
+蒸馏自真实 session 的 case **天然可能含敏感数据**（公司工单、内部代码、业务规则）。所以：
+
+- **`config.toml` 配了 `private_cases_path` → 默认写私有路径**（公开仓之外，不进 git）。
+- 用户**显式**说"放公开 / 放 cases / public / 开源 / 这个能开源"时，才写 `ai_eval_path/cases/`。
+- `private_cases_path` 没配且用户没说公开 → 提示用户"未配私有路径，这个 case 要放公开仓 `cases/` 吗？"，确认后再落（避免把敏感 case 默认塞进公开仓）。
 
 ```python
+import tomllib
+cfg = tomllib.load(open(f"{skill_dir}/config.toml", "rb"))   # load_config() 亦可
+# 默认私有；用户显式要公开则用 ai_eval_path/cases
+cases_root = cfg.get("private_cases_path") or f"{cfg['ai_eval_path']}/cases"  # 见上：未配私有要先问
+
 from session_extract import next_sequence_number, case_dirname
-seq = next_sequence_number(f"{ai_eval_path}/cases", date_str)   # 扫当日已有目录取下一个
-name = case_dirname(date_str, seq, "<kebab-短名>")              # 2026-06-05-001-foo
-case_dir = f"{ai_eval_path}/cases/{name}"
+seq = next_sequence_number(cases_root, date_str)              # 扫当日已有目录取下一个
+name = case_dirname(date_str, seq, "<kebab-短名>")             # 2026-06-09-001-foo
+case_dir = f"{cases_root}/{name}"
 ```
 
 ### 通用规则（所有 class）
@@ -335,8 +348,9 @@ python3 scripts/session_index.py --cwd "$PWD" --query "<描述>" --cross
 
 ### 0. 读配置
 
-`load_config()` 拿 `ai_eval_path`。缺 `config.toml` → 提示
-`cp config.example.toml config.toml` 并填 `ai_eval_path`，然后**安全停止**。
+`load_config()` 拿 `ai_eval_path`（必填）与 `private_cases_path`（可选，私有 case 默认落点）。
+缺 `config.toml` → 提示 `cp config.example.toml config.toml` 并填 `ai_eval_path`，然后**安全停止**。
+落点优先级见"产物生成 / 落点"：**默认私有，用户显式要公开才进 `cases/`**。
 
 ### 1. 提取 session
 
@@ -366,8 +380,8 @@ digest 已剥除触发轮（"抽成 case"那句及其后）。
 
 ### 5. 生成 case
 
-见"产物生成"。用 `next_sequence_number` + `case_dirname` 定目录，按 class 模板写文件到
-`<ai_eval_path>/cases/<name>/`。
+见"产物生成 / 落点"：先按"默认私有，除非用户要公开"定 `cases_root`，再用
+`next_sequence_number(cases_root, ...)` + `case_dirname` 定目录，按 class 模板写文件到 `<cases_root>/<name>/`。
 
 ### 6. 校验门
 

@@ -35,5 +35,9 @@ cases/2026-06-03-001-git-bisect-bug-hunt/input/repo/
 # session-to-eval skill 本机配置（含绝对路径，不入库；用 config.example.toml 作模板）
 case-gen/config.toml
 
-# 内部 case，不进公开仓（数据敏感）
-cases/2026-06-08-001-online-issue-severity-classify/
+# 私有 case 路径配置（本机绝对路径，不入库；用 private.env.example 作模板）。
+# 私有 case 本体放在公开仓**之外**（见 private.env 的 AI_EVAL_PRIVATE_CASES），故无需在此忽略 case 目录。
+private.env
+
+# 安全网：万一有内部 case 误放进公开 cases/，用 _private 前缀兜底忽略
+cases/_private/

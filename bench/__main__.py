@@ -13,7 +13,7 @@ from datetime import date
 from pathlib import Path
 
 from .adapters import get_adapter
-from .case import list_cases
+from .case import discover_cases, is_private_case
 from .config import ConfigError, RunConfig, load_config
 from .log import configure as configure_log
 from .orchestrator import MatrixResult, OrchestratorError, run_matrix, run_subprocess
@@ -69,7 +69,8 @@ def cmd_list(registry: dict, cases: list) -> str:
     if cases:
         for c in cases:
             tag = f" [requires_engine={c.requires_engine}]" if c.requires_engine else ""
-            lines.append(f"  {c.name}  ({c.task.type}){tag}")
+            priv = " 🔒私有" if is_private_case(c, ROOT) else ""
+            lines.append(f"  {c.name}  ({c.task.type}){tag}{priv}")
     else:
         lines.append("  (无；在 cases/ 下创建带 case.yaml 的用例)")
     return "\n".join(lines)
@@ -97,7 +98,7 @@ def run_benchmark(
     write_profiles: bool = False,
 ) -> Path:
     """执行矩阵 → 判分 → 计分卡，返回计分卡路径。"""
-    cases = list_cases(root / "cases")
+    cases = discover_cases(root)
     result = run_matrix(
         config, registry, cases, run_fn=run_fn, adapter_factory=adapter_factory
     )  # 未知用例会 fail-fast
@@ -143,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"错误: {e}", file=sys.stderr)
         return 1
 
-    cases = list_cases(ROOT / "cases")
+    cases = discover_cases(ROOT)
 
     if args.list:
         print(cmd_list(registry, cases))

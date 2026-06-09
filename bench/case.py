@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import shutil
 import tempfile
 from collections.abc import Iterator
@@ -181,7 +182,7 @@ def load_case(case_dir: str | Path) -> Case:
 
 
 def list_cases(cases_root: str | Path) -> list[Case]:
-    """加载 cases/ 下所有含 case.yaml 的用例。"""
+    """加载单个 cases 根下所有含 case.yaml 的用例。"""
     root = Path(cases_root)
     out: list[Case] = []
     if not root.exists():
@@ -190,6 +191,45 @@ def list_cases(cases_root: str | Path) -> list[Case]:
         if child.is_dir() and (child / "case.yaml").exists():
             out.append(load_case(child))
     return out
+
+
+def resolve_case_roots(repo_root: str | Path) -> list[Path]:
+    """公开 `cases/` + 环境变量 `AI_EVAL_PRIVATE_CASES` 指定的私有根（os.pathsep 分隔）。
+
+    私有根**放仓库外**（物理隔离，杜绝误提交进公开仓）；不存在的路径安静跳过。
+    顺序：公开在前 → 私有按声明顺序在后（用于同名冲突时公开优先）。
+    """
+    roots: list[Path] = [Path(repo_root) / "cases"]
+    for raw in os.environ.get("AI_EVAL_PRIVATE_CASES", "").split(os.pathsep):
+        raw = raw.strip()
+        if raw:
+            p = Path(raw).expanduser()
+            if p not in roots:
+                roots.append(p)
+    return roots
+
+
+def discover_cases(repo_root: str | Path) -> list[Case]:
+    """扫描公开 + 私有所有 case 根，合并；同名冲突保留先出现者（公开优先）。"""
+    seen: set[str] = set()
+    out: list[Case] = []
+    for root in resolve_case_roots(repo_root):
+        for case in list_cases(root):
+            if case.name in seen:
+                continue
+            seen.add(case.name)
+            out.append(case)
+    return out
+
+
+def is_private_case(case: Case, repo_root: str | Path) -> bool:
+    """用例是否来自仓库外的私有根（不在公开 `cases/` 下）。"""
+    public = (Path(repo_root) / "cases").resolve()
+    try:
+        case.directory.resolve().relative_to(public)
+        return False
+    except ValueError:
+        return True
 
 
 # ── 隔离工作目录 ─────────────────────────────────────

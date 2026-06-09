@@ -17,7 +17,8 @@
 
 - `registry.py` — runner 档案加载 + 明文密钥校验
 - `adapters/` — claude / codex / c / command 四类启动器适配器（统一 run record 契约，各自命令构造）
-- `case.py` — 用例加载 + 隔离 workdir + 快照 diff（含忽略列表）
+- `case.py` — 用例加载 + 隔离 workdir + 快照 diff（含忽略列表）；`discover_cases` 多根扫描（公开 `cases/` +
+  环境变量 `AI_EVAL_PRIVATE_CASES` 指向的仓库外私有根，同名冲突公开优先，`is_private_case` 标记）
 - `orchestrator.py` — 矩阵 × repeat 执行 + 墙钟 + 指标 + 最小环境
 - `scoring.py` — check 脚本 + LLM 裁判（抗注入 / advisory / 同源标注）
 - `completion.py` — 任务完成度（check / judge 折成「完成了没」一维：单 cell 通过率 + 跨 case 等权汇总）
@@ -65,7 +66,10 @@
 - Python 3.11+；不可变优先（dataclass frozen + replace）；多个小文件 > 大文件。
 - 新增功能写测试（pytest，`tests/` 下）；`./run.sh` 是薄入口委托给 `python3 -m bench`。
 - 运行测试：`python3 -m pytest`；lint：`python3 -m ruff check bench/ case-gen/ tests/`。
-- `cases/*/output/`、`scorecards/`、`case-gen/config.toml` 为生成产物 / 本机配置，已 gitignore。
+- `cases/*/output/`、`scorecards/`、`case-gen/config.toml`、`private.env` 为生成产物 / 本机配置，已 gitignore。
+- **私有 case**（公司内部 / 不可开源）放**仓库外**：`private.env`（gitignore，由 `run.sh` 自动 source）
+  设 `AI_EVAL_PRIVATE_CASES` 指向仓库外的私有 cases 根；case-gen skill **默认写私有路径**（`config.toml` 的
+  `private_cases_path`），除非用户显式要求公开。公开仓 `cases/_private/` 前缀已 gitignore 作误放兜底。
 - 文档只写在 `README.md` 和本文件，不新增散落 md（用例自己的 README、`case-gen/SKILL.md` 除外）。
 
 ## 运行

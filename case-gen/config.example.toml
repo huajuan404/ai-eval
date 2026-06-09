@@ -2,6 +2,12 @@
 # 复制为 config.toml 并填入你的 ai-eval 仓库绝对路径。
 #   cp config.example.toml config.toml
 #
-# skill 在任意项目 / session 运行，但生成的 case 必须写进 ai-eval 的 cases/。
+# skill 在任意项目 / session 运行，但生成的 case 必须写进 ai-eval。
 # 这里指定 ai-eval 仓库根（含 bench/ 与 cases/ 的目录）的绝对路径。
 ai_eval_path = "/abs/path/to/ai-eval"
+
+# 私有 case 默认落点（可选，**公开仓之外**的绝对路径）。
+# 配了它，蒸馏出的 case **默认写这里**（不进公开仓），除非你在触发时显式要求"放公开"。
+# 蒸馏自真实 session 的 case 天然可能含敏感数据，默认私有更安全。
+# 与公开仓 private.env 的 AI_EVAL_PRIVATE_CASES 指向同一目录，即可被 run.sh 一并执行。
+# private_cases_path = "/abs/path/to/your/private/cases"

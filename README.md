@@ -114,6 +114,24 @@ judge:
 **只读校验资产**（如基准测试）放 `verify/`——它**不进入选手 workdir**，check 前还原到产物目录，
 确保选手无法通过改测试来骗取 check pass。
 
+## 私有用例（公司内部 / 不可开源）
+
+公开仓只放可开源的 case；内部 case（真实工单、内部代码、业务规则）放在**仓库之外**，物理隔离杜绝误提交。
+
+```bash
+cp private.env.example private.env        # 改成你的私有 cases 根（仓库外的绝对路径）
+# private.env 里：export AI_EVAL_PRIVATE_CASES="/abs/path/to/private/cases"
+./run.sh -l                                # 公开 + 私有 case 一起列出（私有标 🔒）
+./run.sh -c <私有case名> -r ...            # 公开/私有 case 同样跑
+```
+
+- `run.sh` 自动 source gitignored 的 `private.env`，框架经 `AI_EVAL_PRIVATE_CASES`（`:` 分隔可多个根）
+  发现公开 + 私有 case；私有 case 的 `output/` 也落在私有路径，产物不外泄。
+- 建议把私有 cases 目录单独做成一个**私有 git 仓**（内部可共享、有版本）。
+- **case-gen skill 默认把蒸馏出的 case 写到私有路径**（`config.toml` 的 `private_cases_path`），
+  除非你显式要求"放公开"——蒸馏自真实 session 的 case 天然可能含敏感数据。
+- 安全网：公开仓的 `cases/_private/` 前缀已 gitignore，万一内部 case 误放进公开 `cases/` 也提交不上去。
+
 ## 从 session 自动蒸馏用例（case-gen skill）
 
 手写用例慢。`case-gen/` 提供一个**可移植 skill**，两种入口：
