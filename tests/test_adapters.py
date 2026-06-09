@@ -22,10 +22,21 @@ def test_claude_parses_usage_from_fixture() -> None:
     out = ClaudeAdapter().parse(stdout, "", 0)
     assert out.usage.input_tokens == 42000
     assert out.usage.output_tokens == 850
-    assert out.usage.total_tokens == 42850
+    assert out.usage.cache_read_tokens == 40000  # fixture 含缓存读，旧代码丢了它
+    assert out.usage.effective_input == 82000     # 真实总输入 = 42000 + 40000 缓存读
+    assert out.usage.total_tokens == 82850        # 含缓存（旧值 42850 是漏算缓存的 bug）
     assert out.usage.cost_usd == 0.0123
     assert out.num_turns == 4
     assert out.is_error is False
+
+
+def test_c_adapter_drops_cost_keeps_cache_tokens() -> None:
+    # 任务 A：c 路由第三方/本地端点，claude 自报 cost 是 Claude 定价影子 → 丢弃；token（含缓存）保留
+    stdout = (FIXTURES / "claude_result.json").read_text(encoding="utf-8")
+    out = CAdapter().parse(stdout, "", 0)
+    assert out.usage.cost_usd is None              # cost 不采
+    assert out.usage.effective_input == 82000      # token 含缓存，准确保留
+    assert out.usage.total_tokens == 82850
 
 
 def test_claude_picks_result_event_amid_stream() -> None:

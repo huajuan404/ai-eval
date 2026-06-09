@@ -93,6 +93,45 @@ def test_encode_cwd():
     assert se.encode_cwd("/Users/d/ai-eval") == "-Users-d-ai-eval"
 
 
+def test_encode_cwd_non_alnum_to_dash():
+    # 下划线、点都编码成 `-`（与 Claude Code 实测一致），修复历史定位 bug
+    assert (
+        se.encode_cwd("/Users/d/quality-operations/defect_pipeline_service")
+        == "-Users-d-quality-operations-defect-pipeline-service"
+    )
+    assert se.encode_cwd("/a/b.c_d") == "-a-b-c-d"
+
+
+def test_resolve_project_dir_encoded(tmp_path):
+    proj = tmp_path / "projects"
+    enc = proj / se.encode_cwd("/work/my_proj")
+    enc.mkdir(parents=True)
+    (enc / "s.jsonl").write_text("{}", encoding="utf-8")
+    assert se.resolve_claude_project_dir("/work/my_proj", projects_base=proj) == enc
+
+
+def test_resolve_project_dir_fallback_by_real_cwd(tmp_path):
+    # 目录名故意与编码不符，靠读首条记录的真 cwd 兜底命中
+    proj = tmp_path / "projects"
+    weird = proj / "totally-unrelated-name"
+    weird.mkdir(parents=True)
+    rec = {"type": "user", "cwd": "/work/odd_proj", "message": {"role": "user", "content": "hi"}}
+    (weird / "s.jsonl").write_text(json.dumps(rec), encoding="utf-8")
+    assert se.resolve_claude_project_dir("/work/odd_proj", projects_base=proj) == weird
+
+
+def test_resolve_project_dir_none_when_absent(tmp_path):
+    assert se.resolve_claude_project_dir("/nope", projects_base=tmp_path / "projects") is None
+
+
+def test_locate_claude_with_underscore_cwd(tmp_path):
+    proj = tmp_path / "projects"
+    enc = proj / se.encode_cwd("/work/svc_a")  # -work-svc-a
+    enc.mkdir(parents=True)
+    (enc / "only.jsonl").write_text("{}", encoding="utf-8")
+    assert se.locate_claude_session("/work/svc_a", projects_base=proj) == enc / "only.jsonl"
+
+
 def test_locate_claude_newest_mtime(tmp_path):
     proj = tmp_path / "projects"
     enc = proj / se.encode_cwd("/work/proj")

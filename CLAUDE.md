@@ -20,7 +20,8 @@
 - `case.py` — 用例加载 + 隔离 workdir + 快照 diff（含忽略列表）
 - `orchestrator.py` — 矩阵 × repeat 执行 + 墙钟 + 指标 + 最小环境
 - `scoring.py` — check 脚本 + LLM 裁判（抗注入 / advisory / 同源标注）
-- `scorecard.py` — 每维赢家 + 权衡摘要（不自动聚合）+ 模型档案写入
+- `completion.py` — 任务完成度（check / judge 折成「完成了没」一维：单 cell 通过率 + 跨 case 等权汇总）
+- `scorecard.py` — 任务完成度列 + 跨用例完成率汇总 + 每维赢家 + 权衡摘要（不自动聚合）+ 模型档案写入
 - `scrub.py` — 密钥脱敏（record 与计分卡共用）
 
 ## 启动器编号（config.env，由 `c` 切换器使用）
@@ -35,18 +36,26 @@
 | 5 | glm-5 |
 | 6 | claude-sonnet-4-6 |
 | 7 | claude-opus-4-7 |
+| 8 | qwen2.5:0.5b（本地弱模型基线，做评测「地板」） |
 
-`runners.yaml` 用 `c` 类档案引用这些编号（如 `glm-5.1 → config: 2`）。
+`runners.yaml` 用 `c` 类档案引用这些编号（如 `glm-5.1 → config: 2`）。各编号对应的端点 / 凭证 / 本机搭建
+都在 `c` 切换器的 config.env 里，属本机环境，不在本仓库记录（编号 8 还需本机额外服务，跨机不可移植）。
 
 ## case-gen/（从 session 蒸馏 case 的可移植 skill）
 
-独立子系统：在任意项目/session 说"把刚才的任务抽成 eval case"，读 session log（Claude Code + Codex 双端）
-语义识别 1..N 个任务，蒸馏成对齐 case 契约的**草稿 case** 写进 `cases/`。
+独立子系统，两种入口：**倒出模式**（"把刚才的任务抽成 eval case"，蒸馏当前 session）与**检索模式**
+（给一句意图描述，自动在当前 session + 本项目历史 session 双端检索命中任务，缺输入/真值时挖项目 CLAUDE.md/README/代码补全，
+本项目不足时主动问是否跨项目）。读 session log（Claude Code + Codex 双端）语义识别 1..N 个任务，
+蒸馏成对齐 case 契约的**草稿 case** 写进 `cases/`。
 
 - `scripts/session_extract.py` — 双 CLI 定位+解析→token 受限 digest；含触发轮 cutoff、`cat -n` 剥离、
   扩展密钥脱敏（6 类，超 `bench/scrub.py`）、确定性首过分类器 `classify_task`、资产重建覆盖门、`next_sequence_number`。
+  cwd 编码按 `[^a-zA-Z0-9]→-`（与 Claude 实测一致，含 `_`/`.`）+ `resolve_claude_project_dir` 读真 cwd 兜底。
+- `scripts/session_index.py` — 检索模式确定性脊梁：双端按项目枚举全历史（Claude 编码目录；Codex 读首行
+  `session_meta.cwd` 匹配 + 90 天/上限时间盒）、`SessionCard` 轻量名片、中文 bigram 切词 + 关键词 `prefilter`、
+  `scan_all_projects_for_terms` 跨项目候选发现（D1 线索）。语义精排与缺口挖掘由 SKILL.md 交 LLM 做。
 - `scripts/validate_case.py` — 路径信任校验 + `bench.case.load_case` 静态加载 + 廉价断言；区分 `valid`（能加载）与 `complete`（真值已补）。
-- `SKILL.md` — 触发描述 + 内联 case 契约 + 四类生成模板 + 完整编排。
+- `SKILL.md` — 触发描述（倒出 + 检索双入口）+ 内联 case 契约 + 四类生成模板 + 完整编排 + 检索模式 R1–R7。
 - `config.toml`（gitignore，从 `config.example.toml` 复制）记 `ai_eval_path`；`bash install.sh` 双端软链进
   `~/.claude/skills` 与 `~/.codex/skills`，源码原地生效。
 - 诚实边界：ground-truth 与大工作集多需外部 → 默认产 setup.sh/expected 桩 + TODO；校验门只证明能加载，**不**证明能跑出有意义的分。

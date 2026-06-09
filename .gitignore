@@ -34,3 +34,6 @@ cases/2026-06-03-001-git-bisect-bug-hunt/input/repo/
 
 # session-to-eval skill 本机配置（含绝对路径，不入库；用 config.example.toml 作模板）
 case-gen/config.toml
+
+# 内部 case，不进公开仓（数据敏感）
+cases/2026-06-08-001-online-issue-severity-classify/

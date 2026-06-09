@@ -14,25 +14,55 @@ from typing import Any
 
 @dataclass(frozen=True)
 class Usage:
-    """token / 成本用量。cost_usd 可为 None（codex 无成本字段）。"""
+    """token / 成本用量。
+
+    `input_tokens` 是**未缓存的新增输入**；缓存命中的输入在 `cache_read_tokens`、新建缓存在
+    `cache_creation_tokens`（Anthropic 兼容端点都分开报）。丢掉它们会严重低估真实处理量
+    （实测 sonnet 一次 input 显示 6，实际含缓存 13 万）。
+
+    **真实总输入 = input + cache_creation + cache_read**（`effective_input`）；`total_tokens` 含全部四项。
+    未来计价要分字段（cache_read 通常折扣、cache_creation 溢价），故各自留存。
+    `cost_usd` 仅对真实 Anthropic 计费的 claude 启动器可信（c 路由的第三方/本地端点不采，codex 无）。
+    """
 
     input_tokens: int | None = None
     output_tokens: int | None = None
+    cache_creation_tokens: int | None = None
+    cache_read_tokens: int | None = None
     total_tokens: int | None = None
     cost_usd: float | None = None
+
+    @property
+    def effective_input(self) -> int | None:
+        """真实处理的总输入（含缓存读写）。三项全 None 时返回 None。"""
+        parts = (self.input_tokens, self.cache_creation_tokens, self.cache_read_tokens)
+        if all(p is None for p in parts):
+            return None
+        return (self.input_tokens or 0) + (self.cache_creation_tokens or 0) + (self.cache_read_tokens or 0)
 
     @staticmethod
     def from_tokens(
         input_tokens: int | None,
         output_tokens: int | None,
         cost_usd: float | None = None,
+        *,
+        cache_creation_tokens: int | None = None,
+        cache_read_tokens: int | None = None,
     ) -> "Usage":
+        parts = (input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens)
         total = None
-        if input_tokens is not None or output_tokens is not None:
-            total = (input_tokens or 0) + (output_tokens or 0)
+        if any(p is not None for p in parts):
+            total = (
+                (input_tokens or 0)
+                + (output_tokens or 0)
+                + (cache_creation_tokens or 0)
+                + (cache_read_tokens or 0)
+            )
         return Usage(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            cache_creation_tokens=cache_creation_tokens,
+            cache_read_tokens=cache_read_tokens,
             total_tokens=total,
             cost_usd=cost_usd,
         )

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -110,8 +111,59 @@ class Extraction:
 
 # ── host 检测 + session 定位 ─────────────────────────
 def encode_cwd(cwd: str) -> str:
-    """把 cwd 编码成 Claude Code 的 project 目录名（`/` → `-`）。"""
-    return cwd.replace("/", "-")
+    """把 cwd 编码成 Claude Code 的 project 目录名（非字母数字 → `-`，与 Claude 实测一致）。
+
+    实测：`/Users/d/quality-operations/defect_pipeline_service` →
+    `-Users-d-quality-operations-defect-pipeline-service`（`_`/`.` 也变 `-`）。
+    此编码**有损不可逆**（`a_b` 与 `a-b` 都编码成 `a-b`），正向定位用它即可；
+    反向（目录名→cwd）不可靠，故 resolve_claude_project_dir 备有读真 cwd 的兜底。
+    """
+    return re.sub(r"[^a-zA-Z0-9]", "-", cwd)
+
+
+def _read_session_cwd(jsonl_path: str | Path, *, scan_lines: int = 40) -> str | None:
+    """读 session 文件前若干行，返回首个出现的 `cwd`（容错半写行；Claude transcript 记录带此字段）。"""
+    try:
+        with open(jsonl_path, encoding="utf-8", errors="replace") as fh:
+            for _ in range(scan_lines):
+                line = fh.readline()
+                if not line:
+                    break
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(obj, dict) and obj.get("cwd"):
+                    return str(obj["cwd"])
+    except OSError:
+        return None
+    return None
+
+
+def resolve_claude_project_dir(
+    cwd: str, projects_base: str | Path | None = None
+) -> Path | None:
+    """解析 cwd 对应的 Claude project 目录，定位失败返回 None。
+
+    先试编码目录（修正后的 `[^a-zA-Z0-9]→-` 规则）；编码有损可能错配，故编码目录不存在时，
+    扫 projects_base 下各目录、读其最新 session 首条记录的真 `cwd` 精确匹配（万无一失的兜底）。
+    """
+    base = Path(projects_base or Path.home() / ".claude" / "projects")
+    enc = base / encode_cwd(cwd)
+    if enc.exists():
+        return enc
+    if not base.exists():
+        return None
+    for d in base.iterdir():
+        if not d.is_dir():
+            continue
+        cands = sorted(d.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if cands and _read_session_cwd(cands[0]) == cwd:
+            return d
+    return None
 
 
 def detect_host(
@@ -122,8 +174,8 @@ def detect_host(
         return "claude"
     if os.environ.get("CODEX_SANDBOX") or os.environ.get("CODEX_HOME"):
         return "codex"
-    cb = Path(projects_base or Path.home() / ".claude" / "projects") / encode_cwd(cwd or os.getcwd())
-    if cb.exists() and any(cb.glob("*.jsonl")):
+    cdir = resolve_claude_project_dir(cwd or os.getcwd(), projects_base)
+    if cdir and any(cdir.glob("*.jsonl")):
         return "claude"
     sb = Path(sessions_base or Path.home() / ".codex" / "sessions")
     if sb.exists() and any(sb.glob("**/rollout-*.jsonl")):
@@ -134,14 +186,13 @@ def detect_host(
 def locate_claude_session(
     cwd: str, projects_base: str | Path | None = None, override: str | Path | None = None
 ) -> Path:
-    """定位 Claude Code 当前 session：编码 cwd 目录下最新 mtime 的 .jsonl。"""
+    """定位 Claude Code 当前 session：项目目录（含真 cwd 兜底）下最新 mtime 的 .jsonl。"""
     if override:
         return Path(override)
-    base = Path(projects_base or Path.home() / ".claude" / "projects")
-    d = base / encode_cwd(cwd)
-    cands = sorted(d.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True) if d.exists() else []
+    d = resolve_claude_project_dir(cwd, projects_base)
+    cands = sorted(d.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True) if d else []
     if not cands:
-        raise SessionNotFound(f"Claude Code session 未找到：{d}")
+        raise SessionNotFound(f"Claude Code session 未找到：cwd={cwd}")
     return cands[0]
 
 
@@ -516,8 +567,6 @@ def classify_task(s: TaskSignals) -> Classification:
 
 
 # ── U4：脱敏（transcript 专属，扩展 bench/scrub 基线）─
-import re  # noqa: E402  （集中在 U4 段，便于阅读）
-
 _SECRET_PATTERNS: tuple[tuple[re.Pattern, str], ...] = (
     (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.S), "PRIVATE_KEY"),
     (re.compile(r"sk-[A-Za-z0-9_\-]{16,}"), "OPENAI_KEY"),

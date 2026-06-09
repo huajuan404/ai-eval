@@ -118,7 +118,7 @@ def run_benchmark(
         scored.append(srec)
 
     final = MatrixResult(records=scored, skipped=result.skipped)
-    md = build_scorecard(final, judge_label=config.judge)
+    md = build_scorecard(final, judge_label=config.judge, cases=case_by_name)
     sc_dir = root / "scorecards"
     sc_dir.mkdir(exist_ok=True)
     path = sc_dir / f"{date.today().isoformat()}.md"

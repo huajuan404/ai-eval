@@ -41,7 +41,9 @@ class ClaudeAdapter(Adapter):
         usage = Usage.from_tokens(
             usage_obj.get("input_tokens"),
             usage_obj.get("output_tokens"),
-            cost_usd=obj.get("total_cost_usd"),
+            cache_creation_tokens=usage_obj.get("cache_creation_input_tokens"),
+            cache_read_tokens=usage_obj.get("cache_read_input_tokens"),
+            cost_usd=obj.get("total_cost_usd"),  # 真 Anthropic 计费，可信
         )
         is_error = bool(obj.get("is_error")) or (exit_code not in (0, None))
         return ParsedOutput(

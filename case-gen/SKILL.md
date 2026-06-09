@@ -1,6 +1,6 @@
 ---
 name: session-to-eval
-description: 把当前 session 里执行过的任务蒸馏成 ai-eval 可执行的 eval case。当用户说"把刚才的任务抽成 eval case""把刚才你执行的任务抽成 case""抽成 eval case""turn this into an eval case"时使用。读取 Claude Code 或 Codex 的 session log，语义识别 1..N 个任务，生成对齐 ai-eval 契约的草稿 case（含 case.yaml / prompts / check 或 rubric / input / README），落盘前做静态结构校验。
+description: 把 session 里执行过的真实任务蒸馏成 ai-eval 可执行的 eval case。两种入口——①倒出模式：用户说"把刚才的任务抽成 eval case""抽成 case""turn this into an eval case"，蒸馏当前 session；②检索模式：用户给一句意图描述（如"把判断工单是否线上问题并分级的推理抽成 case"），自动在当前 session 与本项目历史 session（Claude Code + Codex 双端）中检索命中任务，缺输入/真值时主动挖项目 CLAUDE.md/README/代码补全，本项目信息不足时主动询问是否跨项目。语义识别 1..N 个任务，生成对齐 ai-eval 契约的草稿 case（case.yaml / prompts / check 或 rubric / input / README），落盘前做静态结构校验。
 ---
 
 # session-to-eval
@@ -17,10 +17,17 @@ description: 把当前 session 里执行过的任务蒸馏成 ai-eval 可执行�
 
 ## 何时触发
 
-用户表达"把刚才的任务沉淀成评测用例"的意图，典型措辞：
+**倒出模式**——用户要把"刚发生的任务"沉淀成评测用例：
 - "把刚才你执行的任务抽成一个 eval case"
 - "把刚才那个任务抽成 case" / "抽成 eval case"
 - "turn this into an eval case" / "make a benchmark case from what we just did"
+
+**检索模式**——用户给一句**意图描述**指明想抽什么（目标不一定在当前 session）：
+- "把判断工单是否线上问题并分级的推理过程抽成 case"
+- "/session-to-eval <对某段任务的描述>"
+- 任何"我想把 <某能力 / 某段推理 / 某次任务> 做成 eval case"且目标可能在历史里。
+
+判定：触发参数 / 描述为空 → 倒出模式；带实质描述 → 检索模式（见"检索模式（描述驱动）"章节）。
 
 不触发：用户在讨论 ai-eval 的代码本身、或要手写一个全新 case 而非从 session 蒸馏。
 
@@ -175,6 +182,9 @@ case_dir = f"{ai_eval_path}/cases/{name}"
 - **task.md 模型无关**：剥掉指向具体模型/启动器（claude/codex/opus 等）、本机绝对路径的措辞。
 - **task.md 自包含（正向校验，不只看 token 缺失）**：task 引用的每个资产都必须在 `input/` 内；
   不得依赖宿主专属动词/工具或本机工作区布局。做不到 → 见"可移植性分诊"。
+- **🚨 无答案泄漏（最高优先级，所有 class 必过）**：`input/` 与 `task.md` 里**只放原始信号**
+  （现象、对话记录、配置、原始字段），**禁止放任何派生结论**——见下方"泄漏闸"。
+  真值只活在 `expected`（对选手不可见）。选手要做的判断，绝不能已经写在它读得到的地方。
 - **资产**：调 `reconstruct(...)` 拿 `ReconstructionResult`；`setup_stub` 为真则写 `setup.sh` 桩
   + 在 README 标"工作集需外部获取"；`needs_review` 资产先经 U7 人工确认再落盘。
   合成资产用 `synthesized_asset(...)`，并在 `case.yaml` 置 `expected.synthesized: true` + README 标注。
@@ -229,9 +239,99 @@ expected: {max_score: <N>, passing_threshold: <M>}
 
 ---
 
+## 检索模式（描述驱动）
+
+用户给了意图描述、目标任务**不一定在当前 session** 时走这里。脚本 `scripts/session_index.py`
+提供确定性检索脊梁（双端枚举 + 名片 + 关键词预筛 + 跨项目候选）；语义精排与缺口挖掘由你（LLM）做。
+**实时把当前阶段打给用户**（"[检索] 扫本项目历史…""[挖掘] 轻扫 CLAUDE.md…"），让过程可见。
+
+### R1. 先看当前 session
+
+先按"编排 / 1. 提取 session"取当前 session digest，用描述里的关键词判断是否已命中。
+命中 → 直接进重建，不必翻历史。
+
+### R2. 枚举本项目历史 + 预筛（默认仅当前项目）
+
+```bash
+python3 scripts/session_index.py --cwd "$PWD" --query "<用户的意图描述>" --top-k 8
+```
+双端枚举本项目历史 session（Claude 编码目录含真 cwd 兜底；Codex 读首行 `session_meta.cwd` 匹配，
+默认近 90 天 + 条数上限），关键词预筛返回 Top-K 名片（host / path / 首个用户目标 / 文件 / 工具）。
+
+### R3. 语义精排锁定
+
+读 Top-K 名片，按用户描述**语义**判定哪个 session、其中哪段切片真正命中
+（名片是近似信号，别只信关键词分）。选定后：
+
+```bash
+python3 scripts/session_extract.py --session <命中的 path> --host <claude|codex>
+```
+取完整 digest，再按"任务分段与归类"切出目标任务切片。
+
+### R4. 命中回显确认（铁律）
+
+重建前**必须**回显并等用户确认：
+> "我认为你指的是 `<path>`（<日期>）里那段：<一句话目标>，对吗？"
+
+检索可能错——未确认不许重建。
+
+### R5. 本项目信息不足 → 跨项目主动询问（D1）
+
+若当前项目（当前 session + 历史）找不到、或信息不足以拼出 case，**不要**让用户自己去想跨项目：
+
+```bash
+python3 scripts/session_index.py --cwd "$PWD" --query "<描述>" --cross
+```
+扫所有项目名片，返回**可能含该信息的他项目** `(cwd, score)`。有命中 → 用 AskUserQuestion 主动问：
+> "本项目里信息不足。我发现 `<他项目>` 可能有相关内容，要我跨项目去搜集吗？"
+
+用户同意才对那个 cwd 重跑 R2–R4。无跨项目命中 → 进 R6 挖掘，或如实告知信息不足。
+
+### R6. 缺口挖掘（D3，输入 / 真值不全时）
+
+命中任务的 digest 缺"输入"或"真值"时别直接放弃。**仅涉及当前项目的挖掘不设确认门、直接挖**，只把阶段打给用户：
+
+1. **轻挖**：读本项目 `CLAUDE.md` / `README.md` + 顶层结构，找"输入从哪来、真值在哪记"
+   （例：工单原文在哪张表；`is_online_issue` / `severity` 对应哪些标注字段）。
+2. **挖不到 → 深挖**：grep 进代码找表名 / 字段 / prompt 定义（本项目内直接做，log 显示"[挖掘] 深挖…"）。
+3. 挖到 → 产**取数配方**：
+   - `setup.sh`：把取数落成可执行 / 可 dry-run 的脚本（SQL 模板等）。**碰真实库的动作需人工确认后才跑**（守危险操作红线）。
+   - `expected`：历史里有样本真值就填；没有就留 **TODO + 精确配方**（不是空 TODO）。
+   - 真值本就是确定性标注（如 DB 的 `is_online`/`severity` 列）→ 这类任务升级为 **check + rubric 并用**，不止 rubric。
+4. **挖不动 → AskUserQuestion 兜底**，且问得具体（带已挖到的表名 / 列名）：
+   > "我在代码里看到工单来自 `t_xxx`、标注列是 `is_online_issue`/`severity`；要我采样 N 行做 input，还是你有现成 fixture？"
+
+### R6.5 泄漏闸（落盘前必过，所有 class）
+
+蒸馏真实任务最大的暗坑：**源数据里常带"派生结论字段"**（生产管线/人工已经写好的分析、根因、定级），
+一旦把它搬进 `input/` 或 `task.md`，任务就退化成"把结论换个格式"——**再弱的模型都过，区分度归零**。
+
+落盘前对**每个 `input/` 资产 + `task.md`** 扫一遍，按两层处理：
+
+1. **结构硬拦（确定性）**：凡字段名/小节命中**结论类 denylist** —— `problem_analysis` / `analysis` /
+   `root_cause` / `根因` / `结论` / `conclusion` / `定级` / `severity` / `label` / `judgment` / `verdict` /
+   `is_*`（与判定同名的布尔）等 —— **一律不进 `input`/`task`**，移入 `expected`（oracle）。
+2. **语义软查（advisory）**：把 `expected` 的判定值与理由，与 `input`/`task` 文本比对；若某句**语义等同于
+   模型该自己推出的结论**（哪怕换了措辞），标红并向用户确认"这句疑似含答案，剥离吗？"。
+3. **可用工具**：`python3 scripts/leak_check.py <case_dir>` 做确定性自查（expected 值是否字面/近义出现在
+   input/task）。它有 `expected` 故能精确判污染——这是**唯一**能测"答案∈输入"的地方（runner 看不到 expected）。
+
+只保留**原始信号**：现象描述、对话/日志原文、配置、产品路径。判断本身永远只在 `expected`。
+
+### R7. 汇入通用后半程
+
+锁定 + 确认 + 补全后，复用下面"产物生成""校验门""区分度签字""报告"——但**先过 R6.5 泄漏闸**，
+且"区分度签字"按下方纠偏后的判据执行（**单次通过证明不了区分度**）。
+
+---
+
 ## 编排（完整工作流）
 
 触发后按序执行。脚本在 `scripts/` 下，用 `python3` 调用。
+
+> **入口分派**：触发参数 / 描述为空 → 倒出模式，按本节 0→8 顺序走。
+> 带实质意图描述 → 检索模式，先走"检索模式（描述驱动）"R1–R6 锁定并补全目标任务，
+> 再从本节"5. 生成 case"接入后半程（2/3 的分段挑选已由检索锁定，不再全量倒出）。
 
 ### 0. 读配置
 
@@ -280,9 +380,32 @@ python3 scripts/validate_case.py <case_dir>
 
 ### 7. 区分度人工签字（产品门）
 
-把 rubric / expected 摆给用户，问一句：**"这个 case 真能区分模型吗？"**
-- 用户确认有区分度 → 标记为可信 case。
-- 未确认 / 真值待补 → 标记为**草稿**，不计入可信语料（README 注明）。
+先过 **R6.5 泄漏闸**（`python3 scripts/leak_check.py <case_dir>`），再谈区分度。
+
+**🚫 反向判据警告（务必牢记）**：**"模型答对了" ≠ "case 有区分度"。** 这两者在以下情况是**相反**的：
+
+- **输入含派生结论时**，模型答对是**污染的铁证**，不是区分度——绝不能用"实测一把全对"宣布 case 成立。
+- **答案恰是多数类/默认值时**（如本域大量工单都判 `false`），一个"永远输出默认类"的退化基线也能过——
+  这是**平凡性**，不是区分度。
+
+**🎲 概率性任务 → 多输入，不要单输入（最先判这条）**：
+若被蒸馏的任务本质是"对**某一类实例**做判断 / 分类 / 预测"（答案随实例而变、单个实例可能被运气
+或某个固定猜测命中），则 case 应捕获**多个代表性输入实例**（覆盖不同结果 / 类别），而非单一实例——
+单实例分不清"真会做"和"蒙对一次"。判据：一个无推理的固定策略能不能在你的输入上靠运气得分？
+能 → 继续加输入实例，直到固定策略不可能靠猜赢。
+反之，答案**唯一确定、靠猜不可能命中**的任务（某个确切 commit hash、某处确切 bug 定位），单输入即可。
+此时 `input/` 放多份实例、`expected` 记每份真值、check/judge 按多份聚合。
+
+reasoning / tool-using 类的区分度，靠下面**正向证据**确认，缺一不可签可信：
+1. **去泄漏**：`leak_check.py` 干净（input/task 里没有答案）。
+2. **赢地板**：挂一个**故意很笨的小模型**当基线，跑同一组输入；真模型要在**多个实例上明显跑赢它**
+   （跑赢 base rate）才算有本事。⚠️ 不要用"hardcode 固定答案"的假基线——那等于自己挑真值：挑对了它过、
+   挑错了它挂，结论全凭你拍，毫无意义。用真的弱模型，让它自己去蒙。
+3. **见分化**：≥3 个不同档位模型跑出**对错分布或分数梯度**；一条平的 100% / 0% 都不算区分器。
+
+把 rubric / expected / 上面三项证据摆给用户：
+- 三项齐 + 用户确认 → 标记**可信 case**。
+- 任一缺失 / 真值待补 → 标记**草稿**，不计入可信语料（README 注明缺哪项）。
 
 ### 8. 报告
 

@@ -34,7 +34,11 @@ class CAdapter(Adapter):
         usage = Usage.from_tokens(
             usage_obj.get("input_tokens"),
             usage_obj.get("output_tokens"),
-            cost_usd=obj.get("total_cost_usd"),
+            cache_creation_tokens=usage_obj.get("cache_creation_input_tokens"),
+            cache_read_tokens=usage_obj.get("cache_read_input_tokens"),
+            # 任务 A：c 路由的是第三方/本地端点，claude 自报的 total_cost_usd 是「按 Claude 定价的影子」，
+            # 非真实成本（本地 qwen 免费却报 $0.027 即铁证）→ 不采，计分卡显示「—」。token 才是真实可比基础。
+            cost_usd=None,
         )
         is_error = bool(obj.get("is_error")) or (exit_code not in (0, None))
         return ParsedOutput(usage=usage, num_turns=obj.get("num_turns"), is_error=is_error)

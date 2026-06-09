@@ -13,6 +13,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from leak_check import check_leak
 from session_extract import ConfigError
 
 # 真值桩约定含 "TODO"（见 SKILL.md 生成模板）。不含 "<"：真实 rubric 常含 `<n>` JSON 模板，
@@ -95,6 +96,23 @@ def validate_case(case_dir: str | Path, ai_eval_path: str | Path) -> ValidationR
         todos.append("coding ground-truth 待补：verify/ 缺只读测试基准")
     if case.class_ == "tool-using" and not _has_real_ground_truth(case):
         todos.append("tool-using ground-truth 待补：expected 真值仍是桩，请人工填权威值（勿用 agent 自身输出）")
+
+    # advisory：答案泄漏（污染）检查——不阻断 valid，但强烈提示区分度无效
+    leak = check_leak(cd)
+    for f in leak.findings:
+        warnings.append(f"疑似答案泄漏[{f.kind}]：{f.detail}")
+
+    # advisory：judge-only 用例缺完成判据 → 任务完成度算不出来
+    expected = case.expected or {}
+    has_completion_criterion = (
+        expected.get("passing_threshold") is not None
+        or (expected.get("completion") or {}).get("core_dimensions")
+    )
+    if case.judge.enabled and case.check.type != "script" and not has_completion_criterion:
+        warnings.append(
+            "judge-only 用例缺 expected.passing_threshold（或 completion.core_dimensions）："
+            "任务完成度无判据，计分卡该格将显示「未评」"
+        )
 
     valid = not errors
     complete = valid and not todos

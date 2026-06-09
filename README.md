@@ -44,7 +44,10 @@ benchmark 只替换模型/启动器，重跑同一任务，采集四维指标并
 
 - **质量/正确性**：用例 `check` 脚本（确定性 pass/fail）+ LLM 裁判（advisory）。
 - **速度/耗时**：编排器墙钟，永远可得。
-- **token/成本**：从启动器输出解析（claude 有 cost；codex 无 cost，按轮累加 token；自定义引擎降级为「—」）。
+- **token**：跨家可比的真实基础——`in` 含缓存读写（`cache_read`/`cache_creation`），不再漏算
+  （旧实现把缓存丢了，sonnet 一次显示 6、实际 13 万）。各字段分存，供未来精确计价。
+- **成本**：仅真 Anthropic 计费的 `claude` 启动器可信；`c` 路由的第三方/本地模型显示「—」
+  （claude 自报 cost 是按 Claude 定价的影子，非真实成本，本地免费模型也会报出钱）；codex 无 cost。
 - **agentic 行为**：轮数、`files_changed`（无方向诊断量，与 check/judge 并读）。
 
 ## 判分（三层）
@@ -56,8 +59,12 @@ benchmark 只替换模型/启动器，重跑同一任务，采集四维指标并
 
 ## 计分卡
 
+- **任务完成度**（最直观的结果信号）：把 check / judge 折成「任务干成了没」一维——
+  `check 通过` 或 `judge ≥ expected.passing_threshold`（或 `expected.completion.core_dimensions` 核心维达标）= 完成。
+  单用例显示 `✅完成 / ❌未完成`（repeat>1 显示通过率 `2/3`）；多用例顶部出「任务完成率」汇总（各用例等权，如 `8/10 (80%)`）。
+  judge 没跑成 / 无判据 → 标「未评」，**不冤判为未完成**。
 - 多模型并排：runner（启动器+模型）标签 × 四维 + **每维赢家** + **权衡摘要**。
-- **不自动聚合**单一分——四维不可通约，结论由你判定。
+- **不自动聚合**四维单一分——四维不可通约，结论由你判定（完成度是单独的结果维，不是四维加权）。
 - `repeat>1` → 中位数 + 离散度，check 报 pass 率。
 - 进入可分享 markdown 前对裁判理由/原始输出**脱敏**。
 
@@ -109,9 +116,14 @@ judge:
 
 ## 从 session 自动蒸馏用例（case-gen skill）
 
-手写用例慢。`case-gen/` 提供一个**可移植 skill**：在任何项目 / session 里说一句
-"把刚才的任务抽成 eval case"，它读取当前 session log（兼容 Claude Code 与 Codex），
-语义识别其中的 1..N 个任务，蒸馏成对齐上面契约的**草稿 case** 写进 `cases/`。
+手写用例慢。`case-gen/` 提供一个**可移植 skill**，两种入口：
+
+- **倒出模式**：说"把刚才的任务抽成 eval case"，蒸馏**当前 session**里的 1..N 个任务。
+- **检索模式**：给一句意图描述（如"把判断工单是否线上问题并分级的推理抽成 case"），skill 自动在
+  当前 session 与**本项目历史 session**（Claude Code + Codex 双端）里检索命中任务；缺输入/真值时主动挖
+  项目 CLAUDE.md/README/代码补全；本项目信息不足、线索指向他项目时**主动问你**是否跨项目搜集。
+
+两种入口都兼容 Claude Code 与 Codex，蒸馏成对齐上面契约的**草稿 case** 写进 `cases/`。
 
 ```bash
 # 一次性安装（软链进 ~/.claude/skills/）

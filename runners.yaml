@@ -14,7 +14,13 @@ runners:
     launcher: codex
     sandbox: workspace-write   # 必须，否则 agent 处于只读沙箱无法写文件
   claude:
+    launcher: claude   # 当前默认是opus 4.8
+  sonnet-4.6:
+    launcher: claude          # 启动器类型，只能是 claude/codex/c/command
+    model: claude-sonnet-4-6  # 模型走独立的 model 字段（适配器会拼成 --model）
+  opus-4.6:
     launcher: claude
+    model: claude-opus-4-6
 
   # ── 经 c 切换器的模型（config 指向 config.env 索引）──
   minimax-m3:
@@ -26,12 +32,6 @@ runners:
   glm-5.1:
     launcher: c
     config: 2
-  sonnet-4.6:
-    launcher: c
-    config: 6
-  opus-4.7:
-    launcher: c
-    config: 7
 
   # ── 通用命令模板示例（sf cli / 自定义编排）──────────
   # 占位符：{prompt} {prompt_file} {cwd} {model} {skill}
@@ -40,3 +40,14 @@ runners:
   #   launcher: command
   #   template: "sf run --skill {skill} --cwd {cwd} --prompt-file {prompt_file}"
   #   metrics: none
+
+  # ── 弱模型基线（floor，故意很笨的小模型当反例）──────────────
+  # 本地 ollama qwen2.5:0.5b，经 litellm Anthropic 代理（127.0.0.1:4141）由 config.env 的 CONFIG_8 接入，
+  # 走 c 切换器（c 8）。用途：跑多实例 case 时做「地板」——真模型要明显跑赢它（跑赢 base rate）才算有区分度。
+  # 不用 hardcode 固定答案（自己挑真值=作弊）；用真小模型，让它自己去蒙。
+  # 依赖本机两个常驻服务（ollama + 一个 Anthropic↔ollama 翻译代理）；属本机环境，跨机不可移植。
+  qwen-0.5b-weak:
+    launcher: c
+    config: 8
+    env:
+      MAX_THINKING_TOKENS: "0"   # 小模型不支持 extended thinking，关掉，否则 litellm→ollama 报错

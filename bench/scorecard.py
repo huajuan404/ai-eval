@@ -16,6 +16,8 @@ from datetime import date
 from pathlib import Path
 
 from .orchestrator import MatrixResult
+from .case import Case
+from .completion import CellCompletion, cell_completion, runner_completion
 from .record import RunRecord
 from .scrub import scrub_truncate
 
@@ -79,7 +81,7 @@ def _aggregate(records: list[RunRecord]) -> CellAgg:
         runner_model=records[0].runner_model,
         samples=len(records),
         durations=[float(r.duration_ms) for r in records],
-        in_tokens=[r.usage.input_tokens if r.usage else None for r in records],
+        in_tokens=[r.usage.effective_input if r.usage else None for r in records],  # 含缓存的真实输入
         out_tokens=[r.usage.output_tokens if r.usage else None for r in records],
         costs=[r.usage.cost_usd if r.usage else None for r in records],
         files_changed=[float(r.agentic.files_changed) for r in records],
@@ -121,11 +123,31 @@ def _bundle_label(cell: CellAgg) -> str:
     return f"{cell.runner_label}" + (f" ({cell.runner_model})" if cell.runner_model else "")
 
 
-def build_scorecard(result: MatrixResult, *, judge_label: str = "claude") -> str:
-    """从矩阵结果生成可分享 markdown 计分卡。"""
+def build_scorecard(
+    result: MatrixResult, *, judge_label: str = "claude", cases: dict[str, Case] | None = None
+) -> str:
+    """从矩阵结果生成可分享 markdown 计分卡。
+
+    传入 `cases`（name→Case）即可算「任务完成度」列（核心结果信号）；省略则退化为旧版四维表。
+    """
+    cases = cases or {}
     by_case: dict[str, dict[str, list[RunRecord]]] = defaultdict(lambda: defaultdict(list))
     for rec in result.records:
         by_case[rec.case][rec.runner_label].append(rec)
+
+    # 预算各 case×runner 完成度（需 case 对象）；comp_accum 供跨 case 汇总表
+    comp_by_case: dict[str, dict[str, CellCompletion]] = {}
+    comp_accum: dict[str, list[CellCompletion]] = defaultdict(list)
+    for case_name, case_records in by_case.items():
+        case_obj = cases.get(case_name)
+        if case_obj is None:
+            continue
+        m: dict[str, CellCompletion] = {}
+        for label, recs in case_records.items():
+            cc = cell_completion(recs, case_obj)
+            m[label] = cc
+            comp_accum[label].append(cc)
+        comp_by_case[case_name] = m
 
     skipped_by_case: dict[str, list] = defaultdict(list)
     for sk in result.skipped:
@@ -151,18 +173,38 @@ def build_scorecard(result: MatrixResult, *, judge_label: str = "claude") -> str
     )
     lines.append("")
 
+    # 跨用例「任务完成率」汇总（多用例时最直观的横排结果信号；单用例时见下方表内列即可）
+    if len(all_cases) > 1 and comp_accum:
+        summary = [runner_completion(label, cs) for label, cs in comp_accum.items()]
+        summary.sort(key=lambda rc: (rc.rate if rc.rate is not None else -1.0), reverse=True)
+        lines.append("## 任务完成率（跨用例汇总）")
+        lines.append("")
+        lines.append(
+            "> 完成 = 对用例权威判据（check 通过 / judge ≥ 阈值 / 核心判据）的通过；各用例等权，"
+            "无判据的用例不计入分母。"
+        )
+        lines.append("")
+        lines.append("| Runner (启动器+模型) | 完成/适用 (率) |")
+        lines.append("|---|---|")
+        for rc in summary:
+            lines.append(f"| {rc.runner_label} | {rc.display} |")
+        lines.append("")
+
     for case_name in all_cases:
         lines.append(f"## 用例: {case_name}")
         lines.append("")
-        cells = [_aggregate(recs) for recs in by_case.get(case_name, {}).values()]
+        case_records = by_case.get(case_name, {})
+        cells = [_aggregate(recs) for recs in case_records.values()]
         cells.sort(key=lambda c: c.runner_label)
+        comp_by_runner = comp_by_case.get(case_name, {})
 
         lines.append(
-            "| Runner (启动器+模型) | 样本 | check pass | judge 分 | 耗时(ms) | "
-            "tokens(in/out) | cost($) | files_changed◇ |"
+            "| Runner (启动器+模型) | 样本 | 任务完成 | check pass | judge 分 | 耗时(ms) | "
+            "tokens(in✦/out) | cost($) | files_changed◇ |"
         )
-        lines.append("|---|---|---|---|---|---|---|---|")
+        lines.append("|---|---|---|---|---|---|---|---|---|")
         for c in cells:
+            comp_str = comp_by_runner[c.runner_label].display if c.runner_label in comp_by_runner else _DASH
             pass_str = (
                 f"{int(round(c.check_pass_rate * c.samples))}/{c.samples}"
                 if c.check_pass_rate is not None
@@ -176,13 +218,17 @@ def build_scorecard(result: MatrixResult, *, judge_label: str = "claude") -> str
                 else _DASH
             )
             lines.append(
-                f"| {_bundle_label(c)} | {c.samples} | {pass_str} | {judge_str} | "
+                f"| {_bundle_label(c)} | {c.samples} | {comp_str} | {pass_str} | {judge_str} | "
                 f"{_fmt(c.durations, as_int=True)} | {tok_str} | "
                 f"{_fmt(c.costs)} | {_fmt(c.files_changed, as_int=True)} |"
             )
         for sk in skipped_by_case.get(case_name, []):
-            lines.append(f"| {sk.runner_label} | — | N/A | N/A | N/A | N/A | N/A | N/A |")
+            lines.append(f"| {sk.runner_label} | — | N/A | N/A | N/A | N/A | N/A | N/A | N/A |")
         lines.append("")
+        lines.append(
+            "✦ in 为真实总输入（含缓存读写 cache_read/creation）；cost 仅对真 Anthropic 计费的 claude 启动器显示，"
+            "c 路由的第三方/本地模型显示「—」（claude 自报 cost 是按 Claude 定价的影子，非真实成本）。"
+        )
         lines.append("◇ files_changed 为无方向诊断量（含创建/修改/删除），仅与 check/judge 并读，不单独评优劣。")
         lines.append("")
 
