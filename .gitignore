@@ -31,3 +31,8 @@ scorecards/
 
 # case 1: textual repo (clone via setup.sh, not committed)
 cases/2026-06-03-001-git-bisect-bug-hunt/input/repo/
+
+# 本机临时 / 一次性文件
+_schema/
+rescore.py
+save.txt
