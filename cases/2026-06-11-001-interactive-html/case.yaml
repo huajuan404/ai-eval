@@ -1,0 +1,27 @@
+name: 2026-06-11-001-interactive-html
+class: coding
+# HTML/CSS/JS 全栈工程能力 + 审美设计力评测。
+# 与 2026-06-10-001-md2html-skill 互补：
+#   md2html 测「严格遵循 skill 规程」，天花板被模板锁死；
+#   本 case 无模板约束，给出分层需求清单（Must / Should / Bonus），
+#   让模型自由发挥，天花板由动效、图表、交互、审美撑开。
+# 源文档为真实 Claude Code 博客文章，自带 Before/After 对比表、
+# 3 个关键指标、6 个清晰章节——天然适合交互化。
+
+task:
+  type: prompt
+  prompt_file: prompts/task.md
+
+check:
+  type: script
+  script: check.sh
+
+judge:
+  enabled: true
+  rubric_file: prompts/rubric.md
+  dimensions: [第一印象, 信息可视化, 阅读体验, 交互与动效品质, 工程实现]
+
+expected:
+  passing_threshold: 15
+  max_score: 25
+  output_file: docs/article.html
