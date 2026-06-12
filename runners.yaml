@@ -21,6 +21,9 @@ runners:
   opus-4.6:
     launcher: claude
     model: claude-opus-4-6
+  claude-fable-5:
+    launcher: claude
+    model: claude-fable-5     # 最新模型；走 claude 启动器直连（如实际 model id 不同请改此值）
 
   # ── 经 c 切换器的模型（config 指向 config.env 索引）──
   minimax-m3:
@@ -29,9 +32,15 @@ runners:
   deepseek-v4:
     launcher: c
     config: 1
+  deepseek-v4-flash:
+    launcher: c
+    config: 9   # 与 deepseek-v4(pro/config 1) 同 endpoint+token，仅 MODEL 不同（flash）
   glm-5.1:
     launcher: c
     config: 2
+  agnes-2.0-flash:
+    launcher: c
+    config: 4   # config.env 的 CONFIG_4：apihub.agnes-ai.com/v1，PROTOCOL=openai（本机 c 脚本做 openai→claude 转换）
 
   # ── 通用命令模板示例（sf cli / 自定义编排）──────────
   # 占位符：{prompt} {prompt_file} {cwd} {model} {skill}

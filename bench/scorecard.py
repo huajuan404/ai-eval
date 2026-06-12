@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import re
 import statistics
 from collections import defaultdict
 from dataclasses import dataclass
@@ -22,6 +23,49 @@ from .record import RunRecord
 from .scrub import scrub_truncate
 
 _DASH = "—"
+
+# 用例名前缀 `YYYY-MM-DD-NNN-`（日期+序号）对文件名是噪音，留尾巴即可。
+_CASE_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-\d+-")
+
+
+def _case_slug(name: str) -> str:
+    return _CASE_PREFIX_RE.sub("", name)
+
+
+def scorecard_filename(today: str, case_names: list[str], runner_labels: list[str]) -> str:
+    """`{date}-{cases}-{runners}.md`——同日不同组合不再互相覆盖。
+
+    适度简写防爆名：用例多于 1 个 → `{首个}+{余数}`；runner 多于 3 个 → `{N}runners`。
+    """
+    cases = sorted(set(case_names))
+    runners = sorted(set(runner_labels))
+    if not cases:
+        cpart = "nocase"
+    elif len(cases) == 1:
+        cpart = _case_slug(cases[0])
+    else:
+        cpart = f"{_case_slug(cases[0])}+{len(cases) - 1}"
+    if not runners:
+        rpart = "norunner"
+    elif len(runners) <= 3:
+        rpart = "+".join(runners)
+    else:
+        rpart = f"{len(runners)}runners"
+    return f"{today}-{cpart}-{rpart}.md"
+
+
+def unique_scorecard_path(sc_dir: Path, filename: str) -> Path:
+    """文件名占用时追加 `-2`/`-3`……，identical 组合重跑也不覆盖旧卡。"""
+    path = sc_dir / filename
+    if not path.exists():
+        return path
+    stem = path.stem
+    n = 2
+    while True:
+        candidate = sc_dir / f"{stem}-{n}{path.suffix}"
+        if not candidate.exists():
+            return candidate
+        n += 1
 
 
 def _median(values: list[float]) -> float | None:
@@ -113,7 +157,10 @@ def _winners(cells: list[CellAgg]) -> dict[str, str]:
         out["latency"] = min(lat, key=lambda c: c.duration_med).runner_label
 
     cost = [c for c in cells if c.cost_med is not None]
-    if cost:
+    # 只有 ≥2 个 runner 报了成本数据，选「最省」才有意义；
+    # 否则（例如只有 claude 启动器的 2 个模型有成本，c 路由的全部显示「—」）
+    # 会产生"opus 最省"这种从残缺数据得出的误导结论。
+    if len(cost) >= 2:
         out["cost"] = min(cost, key=lambda c: c.cost_med).runner_label
 
     return out
@@ -121,6 +168,95 @@ def _winners(cells: list[CellAgg]) -> dict[str, str]:
 
 def _bundle_label(cell: CellAgg) -> str:
     return f"{cell.runner_label}" + (f" ({cell.runner_model})" if cell.runner_model else "")
+
+
+def _truncate(text: str, limit: int) -> str:
+    text = text.strip().replace("\n", " ")
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def _task_brief(case: Case) -> tuple[str, str]:
+    """从 task.md 抽 (标题, 一句话简介)：首个 # 标题 + 其后第一段正文行。"""
+    title, brief = "", ""
+    for line in case.task.prompt.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if not title and s.startswith("#"):
+            title = s.lstrip("# ").strip()
+            continue
+        if title and not s.startswith(("#", ">", "|", "```")):
+            brief = s
+            break
+    return (title or case.name), brief
+
+
+def _input_summary(case: Case) -> str:
+    d = case.input_dir
+    files = sorted(p.name for p in d.iterdir() if p.is_file()) if d.is_dir() else []
+    if not files:
+        return "无（纯 prompt 任务）"
+    shown = "、".join(f"`{f}`" for f in files[:6])
+    tail = f" 等 {len(files)} 项" if len(files) > 6 else ""
+    return f"input/ {len(files)} 份：{shown}{tail}"
+
+
+def _expected_output_summary(case: Case) -> str:
+    exp = case.expected or {}
+    if exp.get("answer") not in (None, ""):
+        return "结构化答案（与 expected 对照）"
+    return {
+        "reasoning": "结构化判定 / 自由文本，由 judge 按 rubric 评分",
+        "writing": "成稿文本，由 judge 按 rubric 评分",
+        "coding": "代码改动，由 check 脚本验证",
+        "tool-using": "工具调查结论，judge + check 评",
+    }.get(case.class_, "见 rubric / judge 维度")
+
+
+def _judging_summary(case: Case) -> str:
+    parts = []
+    if case.check.type == "script":
+        parts.append(f"确定性 check（`{case.check.script}`）")
+    else:
+        parts.append("无确定性 check")
+    if case.judge.enabled:
+        dims = "、".join(case.judge.dimensions) or "—"
+        parts.append(f"judge {len(case.judge.dimensions)} 维（{dims}）")
+    exp = case.expected or {}
+    comp = (exp.get("completion") or {}).get("core_dimensions") or {}
+    if comp:
+        crit = "、".join(f"{k}≥{v}" for k, v in comp.items())
+        parts.append(f"完成度=核心维 {crit}")
+    elif case.check.type == "script":
+        parts.append("完成度=check 通过")
+    elif exp.get("passing_threshold") is not None:
+        mx = exp.get("max_score")
+        parts.append(f"完成度=judge ≥ {exp['passing_threshold']}" + (f"/{mx}" if mx else ""))
+    return "；".join(parts)
+
+
+def _task_card(case: Case) -> list[str]:
+    """单用例的「任务说明卡」：简介 + 输入/期望产出/判分 + 完整输出指引。"""
+    title, brief = _task_brief(case)
+    out_root = case.directory / "output"
+    head = f"**{title}**" + (f" — {brief}" if brief else "")
+    return [
+        "### 📋 任务说明",
+        "",
+        head,
+        "",
+        "| 项 | 内容 |",
+        "|---|---|",
+        f"| 类型 | {case.class_} |",
+        f"| 输入 | {_input_summary(case)} |",
+        f"| 期望产出 | {_expected_output_summary(case)} |",
+        f"| 判分 | {_judging_summary(case)} |",
+        "",
+        f"📂 **完整输出**（各 runner 原始产物，在 `{out_root}/<runner>/` 下）："
+        "`artifacts-0/OUTPUT.txt`（模型最终答案）、`artifacts-0/PROMPT.txt`（投喂的 prompt）、"
+        "`run.0.json`（结构化记录 + 裁判理由）、`run.0.raw.txt`（启动器原始流）。",
+        "",
+    ]
 
 
 def build_scorecard(
@@ -173,6 +309,19 @@ def build_scorecard(
     )
     lines.append("")
 
+    # 多用例：顶部任务总览表（一句话 + 指向下方各用例详情）
+    overview = [cn for cn in all_cases if cn in cases]
+    if len(overview) > 1:
+        lines.append("## 任务总览")
+        lines.append("")
+        lines.append("| 用例 | 简介 |")
+        lines.append("|---|---|")
+        for cn in overview:
+            title, brief = _task_brief(cases[cn])
+            one = title + (f" — {brief}" if brief else "")
+            lines.append(f"| `{cn}` | {_truncate(one, 80)} |")
+        lines.append("")
+
     # 跨用例「任务完成率」汇总（多用例时最直观的横排结果信号；单用例时见下方表内列即可）
     if len(all_cases) > 1 and comp_accum:
         summary = [runner_completion(label, cs) for label, cs in comp_accum.items()]
@@ -193,6 +342,9 @@ def build_scorecard(
     for case_name in all_cases:
         lines.append(f"## 用例: {case_name}")
         lines.append("")
+        case_obj = cases.get(case_name)
+        if case_obj is not None:
+            lines.extend(_task_card(case_obj))  # 任务简介 + 输入/输出/判分 + 完整输出指引
         case_records = by_case.get(case_name, {})
         cells = [_aggregate(recs) for recs in case_records.values()]
         cells.sort(key=lambda c: c.runner_label)
@@ -240,7 +392,9 @@ def build_scorecard(
             if "latency" in winners:
                 parts.append(f"速度={winners['latency']}")
             if "cost" in winners:
-                parts.append(f"成本={winners['cost']}")
+                cost_cells = [c for c in cells if c.cost_med is not None]
+                ratio = f"{len(cost_cells)}/{len(cells)}"
+                parts.append(f"成本={winners['cost']}（仅 {ratio} 有数据）")
             lines.append(f"**每维赢家**：{'，'.join(parts)}")
             lines.append("")
             lines.append(f"**权衡**：{_tradeoff_sentence(winners)} 结论由你判定。")

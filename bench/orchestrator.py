@@ -34,7 +34,9 @@ from .record import Agentic, RunRecord, Usage
 from .registry import RunnerProfile, get_profile
 from .scrub import scrub_text
 
-DEFAULT_TIMEOUT_S = 900
+# 单格墙钟上限：2 小时。长任务能跑多久本身就是模型能力的一部分，
+# 上限放宽到 2h 让「持续作业型」任务跑完，而不是 15min 一刀切误判为失败。
+DEFAULT_TIMEOUT_S = 7200
 
 
 @dataclass(frozen=True)
@@ -285,11 +287,15 @@ def run_matrix(
             for fut in concurrent.futures.as_completed(futures):
                 records.append(fut.result())
                 done += 1
-                if done < len(pending):
+                _, just_finished, _ = futures[fut]
+                remaining = len(pending) - done
+                if remaining:
                     log.info(
                         f"[progress] {done}/{len(pending)} done · "
-                        f"pending={len(pending) - done}"
+                        f"just finished: {just_finished} · pending={remaining}"
                     )
+                else:
+                    log.info(f"[progress] {done}/{len(pending)} all done")
 
     log.info(
         f"[bench] 矩阵完成: {len(records)}/{total_cells} 完成，跳过 {len(skipped)}"

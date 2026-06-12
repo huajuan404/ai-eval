@@ -198,6 +198,18 @@ case_dir = f"{cases_root}/{name}"
 - **🚨 无答案泄漏（最高优先级，所有 class 必过）**：`input/` 与 `task.md` 里**只放原始信号**
   （现象、对话记录、配置、原始字段），**禁止放任何派生结论**——见下方"泄漏闸"。
   真值只活在 `expected`（对选手不可见）。选手要做的判断，绝不能已经写在它读得到的地方。
+- **🧱 框架/case 泾渭分明（task.md 只装"最原始的任务"）**：`task.md` 是用户原本面对的那个任务，
+  **不得**把评测框架的验证机制、判分口径、产物落点契约塞进给模型的 prompt。具体禁项：
+  - ❌ **为方便机器判分而加的输出格式契约**——如"把结果/路径写到 OUTPUT.txt 第一行，格式 `KEY: <值>`"。
+    框架已自动把模型最终回复捕获为 `OUTPUT.txt`，无需指示模型；判分要定位产物，由 **check.sh / judge 侧**
+    自己解决（确定性路径推导 / 读 cwd / rubric 让 judge 读），**不靠模型回显**。
+    （例外：该输出格式本就是原始任务的一部分——如任务本身要求"输出 JSON"——才保留。）
+  - ❌ **评分维度预告 / "评测器会怎么判你"**——把 rubric 维度、及格线、check 项写进 task.md = 教模型应试，
+    污染原始任务、抬高所有选手的下限、压扁区分度。判分标准只活在 `prompts/rubric.md` 与 `check.sh`。
+  - ❌ **"评测器会自动跑 X"之类元话术**——模型不该知道自己在被评测。
+  判据：把 task.md 给一个不知道 ai-eval 存在的人看，他读到的应该正好是"用户当初要做的事"，多一句框架味的引导都算污染。
+  若框架确实需要定位/隔离产物而模型没回显，那是**框架/case 配置侧**的事（确定性路径、env 透传、产物快照），
+  不是往 prompt 里加指令。做不到 per-runner 确定性 check 时，宁可让 judge 按 runner 隔离判完成度，也不污染任务。
 - **资产**：调 `reconstruct(...)` 拿 `ReconstructionResult`；`setup_stub` 为真则写 `setup.sh` 桩
   + 在 README 标"工作集需外部获取"；`needs_review` 资产先经 U7 人工确认再落盘。
   合成资产用 `synthesized_asset(...)`，并在 `case.yaml` 置 `expected.synthesized: true` + README 标注。
@@ -227,7 +239,9 @@ check: {type: script, script: check.sh}
 judge: {enabled: true, rubric_file: prompts/rubric.md, dimensions: [accuracy, investigation_process]}
 expected: {answer: "<TODO 外部真值>", synthesized: <bool>}
 ```
-- task.md 约定模型把结论写成 `ANSWER: <值>` 一行。
+- task.md 约定模型把结论写成 `ANSWER: <值>` 一行。这**不违反**"框架/case 泾渭分明"——
+  此处 `<值>` 就是任务本身要交付的答案,只是规范了它的格式(命中上文的例外);
+  区别于"把产物路径回显给框架定位"那种纯插管子的契约,后者禁止。
 - `check.sh` 从 `OUTPUT.txt` 抽 `ANSWER:` 比对 `expected` 字段。
 - 工作集多为外部大仓库 → `setup.sh` 桩；真值外部 → README "ground-truth TODO：填 expected 真值"。
 

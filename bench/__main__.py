@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import sys
 from datetime import date
 from pathlib import Path
@@ -16,9 +17,16 @@ from .adapters import get_adapter
 from .case import discover_cases, is_private_case
 from .config import ConfigError, RunConfig, load_config
 from .log import configure as configure_log
+from .log import get_logger
 from .orchestrator import MatrixResult, OrchestratorError, run_matrix, run_subprocess
+from .record import RunRecord
 from .registry import RegistryError, get_profile, load_registry
-from .scorecard import build_scorecard, write_model_profile
+from .scorecard import (
+    build_scorecard,
+    scorecard_filename,
+    unique_scorecard_path,
+    write_model_profile,
+)
 from .scoring import _default_script_runner, score_record
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -103,12 +111,19 @@ def run_benchmark(
         config, registry, cases, run_fn=run_fn, adapter_factory=adapter_factory
     )  # 未知用例会 fail-fast
 
+    log = get_logger()
     case_by_name = {c.name: c for c in cases}
     # 若有 judge-enabled 用例参与，则 judge 标签必须存在，否则 typo 会静默移除质量信号。
     needs_judge = any(case_by_name[r.case].judge.enabled for r in result.records)
     judge_profile = get_profile(registry, config.judge) if needs_judge else registry.get(config.judge)
-    scored = []
-    for rec in result.records:
+    total = len(result.records)
+
+    # 评分并发：check + judge 都是独立子进程，天然线程安全；
+    # judge 是 LLM 调用（~2-6 min/cell），并发可把 N cell 的评分从 N×T 压到 ~T。
+    score_workers = min(total, 6) if total > 1 else 1
+    log.info(f"[score] 判分阶段: {total} cells（check + judge，workers={score_workers}）")
+
+    def _score_one(rec: RunRecord) -> RunRecord:
         case = case_by_name[rec.case]
         jp = judge_profile if case.judge.enabled else None
         srec = score_record(
@@ -116,13 +131,53 @@ def run_benchmark(
         )
         out = case.output_dir(rec.runner_label) / f"run.{rec.repeat_index}.json"
         out.write_text(srec.to_json(), encoding="utf-8")
-        scored.append(srec)
+        return srec
 
+    scored: list[RunRecord] = []
+    if score_workers <= 1:
+        for i, rec in enumerate(result.records, 1):
+            srec = _score_one(rec)
+            scored.append(srec)
+            ck = "pass" if srec.check.passed else ("fail" if srec.check.ran else "—")
+            js = srec.judge.score if srec.judge and srec.judge.score is not None else "—"
+            log.info(
+                f"[score] {i}/{total} done · case={rec.case} runner={rec.runner_label} "
+                f"check={ck} judge={js}"
+            )
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=score_workers) as ex:
+            futures = {
+                ex.submit(_score_one, rec): rec
+                for rec in result.records
+            }
+            done = 0
+            for fut in concurrent.futures.as_completed(futures):
+                srec = fut.result()
+                scored.append(srec)
+                done += 1
+                orig = futures[fut]
+                ck = "pass" if srec.check.passed else ("fail" if srec.check.ran else "—")
+                js = srec.judge.score if srec.judge and srec.judge.score is not None else "—"
+                remaining = total - done
+                if remaining:
+                    log.info(
+                        f"[score] {done}/{total} done · "
+                        f"just finished: {orig.runner_label} check={ck} judge={js} · pending={remaining}"
+                    )
+                else:
+                    log.info(f"[score] {done}/{total} all done")
+
+    log.info("[score] 生成计分卡…")
     final = MatrixResult(records=scored, skipped=result.skipped)
     md = build_scorecard(final, judge_label=config.judge, cases=case_by_name)
     sc_dir = root / "scorecards"
     sc_dir.mkdir(exist_ok=True)
-    path = sc_dir / f"{date.today().isoformat()}.md"
+    filename = scorecard_filename(
+        date.today().isoformat(),
+        [r.case for r in scored],
+        [r.runner_label for r in scored],
+    )
+    path = unique_scorecard_path(sc_dir, filename)
     path.write_text(md, encoding="utf-8")
 
     if write_profiles:

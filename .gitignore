@@ -41,3 +41,8 @@ private.env
 
 # 安全网：万一有内部 case 误放进公开 cases/，用 _private 前缀兜底忽略
 cases/_private/
+
+# 本机临时 / 一次性文件
+_schema/
+rescore.py
+save.txt

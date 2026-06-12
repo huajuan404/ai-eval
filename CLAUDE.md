@@ -33,11 +33,12 @@
 | 1 | deepseek-v4-pro |
 | 2 | glm-5.1 |
 | 3 | mimo-v2.5-pro |
-| 4 | claude-opus-4-6 |
+| 4 | agnes-2.0-flash（apihub.agnes-ai.com，PROTOCOL=openai，本机 c 脚本做 openai→claude 转换） |
 | 5 | glm-5 |
 | 6 | claude-sonnet-4-6 |
 | 7 | claude-opus-4-7 |
 | 8 | qwen2.5:0.5b（本地弱模型基线，做评测「地板」） |
+| 9 | deepseek-v4-flash（同编号 1 endpoint+token，仅 MODEL 不同） |
 
 `runners.yaml` 用 `c` 类档案引用这些编号（如 `glm-5.1 → config: 2`）。各编号对应的端点 / 凭证 / 本机搭建
 都在 `c` 切换器的 config.env 里，属本机环境，不在本仓库记录（编号 8 还需本机额外服务，跨机不可移植）。
