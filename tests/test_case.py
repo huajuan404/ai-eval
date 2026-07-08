@@ -102,7 +102,7 @@ def test_invalid_task_type_errors(tmp_path: Path) -> None:
 
 
 def test_supports_launcher_default_all(tmp_path: Path) -> None:
-    d = _make_case(
+    _make_case(
         tmp_path,
         """
         name: anyengine

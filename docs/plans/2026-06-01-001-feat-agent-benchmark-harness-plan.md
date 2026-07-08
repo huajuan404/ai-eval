@@ -18,7 +18,7 @@ deepened: 2026-06-01
 
 面对一个真实工作任务，应该用 codex、GLM 5.1、MiniMax-M3 还是 Opus？官方 benchmark（SWE-bench 之类）回答不了「我自己的活该交给谁」。出了新模型，除了官网指标，没有一手、可复现、贴合自己工作流的判据来决定它能否替换口粮模型。
 
-现状：`run.sh` 是空壳（配置解析 `TODO`，只 `cat` README），`config.yaml` 为空，`cases/ models/ prompts/` 全是 `.gitkeep`，没有任何真实用例。已有的资产只有模型切换器 `c`（`/Users/duying/Desktop/Works/code/tools/c`，已在 PATH，交互式 `exec claude`）和它同目录的 `config.env`（CONFIG_0..7 模型映射）。「一键对比」能力几乎完全未建。
+现状：`run.sh` 是空壳（配置解析 `TODO`，只 `cat` README），`config.yaml` 为空，`cases/ models/ prompts/` 全是 `.gitkeep`，没有任何真实用例。已有的资产只有模型切换器 `c`（PATH 上可用，交互式 `exec claude`）和它同目录的 `config.env`（CONFIG_0..7 模型映射）。「一键对比」能力几乎完全未建。
 
 关键认知：本 benchmark 不是 prompt 进 / 答案出的纯问答评测，而是**换 LLM 来做同一个端到端 agent 任务**的对比——任务可能是跑一个 skill、一个 plugin、多个 skill、一个自定义斜杠命令。因此系统的核心抽象不是「调 API」，而是「可插拔的启动器（launcher）」。
 
@@ -405,7 +405,7 @@ ai-eval/
 - **跨引擎任务不可移植**（skill/slash 仅 Claude Code 有）→ R19 `requires_engine` + N/A 跳过。
 - **`claude --json-schema` 稳定性** → KTD10：先验证，否则回退宽松 JSON 提取，锁定单一路径。
 - **本机 c/claude 加载大量 skills/plugins 抬高 token/耗时基线**（实测 input_tokens 约 4 万）→ 速度/成本维度跨 launcher 不完全可比，计分卡须标注此口径风险（残留风险，非阻塞；可后续提供精简 settings）。
-- **外部依赖**：`claude`(2.1.159)、`codex-cli`(0.134.0)、PATH 上的 `c`（`/Users/duying/Desktop/Works/code/tools/c`）及其同目录 `config.env`、Python3 + PyYAML/pytest。
+- **外部依赖**：`claude`(2.1.159)、`codex-cli`(0.134.0)、PATH 上的 `c` 及其同目录 `config.env`、Python3 + PyYAML/pytest。
 
 ---
 
