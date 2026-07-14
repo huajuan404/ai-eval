@@ -61,13 +61,14 @@ def _seed_case():
     return cases, case
 
 
-def test_seed_case_full_chain_passing_runner() -> None:
+def test_seed_case_full_chain_passing_runner(tmp_path: Path) -> None:
     cases, seed = _seed_case()
     reg = {"codex": RunnerProfile("codex", "codex")}
     cfg = RunConfig(runners=("codex",), cases=(SEED,), repeat=1)
 
     result = run_matrix(
         cfg, reg, cases,
+        report_root=tmp_path,
         run_fn=_agent_run_fn(CORRECT_SOLUTION),
         adapter_factory=lambda p: _FakeAdapter(),
     )
@@ -93,13 +94,14 @@ def test_seed_case_full_chain_passing_runner() -> None:
     assert "1/1" in md  # check pass 率
 
 
-def test_seed_case_full_chain_failing_runner() -> None:
+def test_seed_case_full_chain_failing_runner(tmp_path: Path) -> None:
     cases, seed = _seed_case()
     reg = {"codex": RunnerProfile("codex", "codex")}
     cfg = RunConfig(runners=("codex",), cases=(SEED,), repeat=1)
 
     result = run_matrix(
         cfg, reg, cases,
+        report_root=tmp_path,
         run_fn=_agent_run_fn(WRONG_SOLUTION),
         adapter_factory=lambda p: _FakeAdapter(),
     )

@@ -16,9 +16,10 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from .orchestrator import MatrixResult
 from .case import Case
+from .comparison import RunnerComparison, compare_case_variants
 from .completion import CellCompletion, cell_completion, runner_completion
+from .orchestrator import MatrixResult
 from .record import RunRecord
 from .scrub import scrub_truncate
 
@@ -90,6 +91,7 @@ def _fmt(values: list[float | None], *, as_int: bool = False) -> str:
 @dataclass
 class CellAgg:
     runner_label: str
+    variant_label: str
     runner_model: str
     samples: int
     durations: list[float | None]
@@ -122,6 +124,7 @@ def _aggregate(records: list[RunRecord]) -> CellAgg:
     reasonings = [r.judge.reasoning for r in records if r.judge and r.judge.reasoning]
     return CellAgg(
         runner_label=records[0].runner_label,
+        variant_label=records[0].variant_label,
         runner_model=records[0].runner_model,
         samples=len(records),
         durations=[float(r.duration_ms) for r in records],
@@ -150,24 +153,37 @@ def _winners(cells: list[CellAgg]) -> dict[str, str]:
                 c.check_pass_rate if c.check_pass_rate is not None else -1,
                 c.judge_score_med if c.judge_score_med is not None else -1,
             )
-        out["quality"] = max(rated, key=q_key).runner_label
+        best_quality = max(q_key(cell) for cell in rated)
+        quality_winners = [cell for cell in rated if q_key(cell) == best_quality]
+        if len(quality_winners) == 1:
+            out["quality"] = _cell_label(quality_winners[0])
 
     lat = [c for c in cells if c.duration_med is not None]
     if lat:
-        out["latency"] = min(lat, key=lambda c: c.duration_med).runner_label
+        best_latency = min(c.duration_med for c in lat)
+        latency_winners = [c for c in lat if c.duration_med == best_latency]
+        if len(latency_winners) == 1:
+            out["latency"] = _cell_label(latency_winners[0])
 
     cost = [c for c in cells if c.cost_med is not None]
     # 只有 ≥2 个 runner 报了成本数据，选「最省」才有意义；
     # 否则（例如只有 claude 启动器的 2 个模型有成本，c 路由的全部显示「—」）
     # 会产生"opus 最省"这种从残缺数据得出的误导结论。
     if len(cost) >= 2:
-        out["cost"] = min(cost, key=lambda c: c.cost_med).runner_label
+        best_cost = min(c.cost_med for c in cost)
+        cost_winners = [c for c in cost if c.cost_med == best_cost]
+        if len(cost_winners) == 1:
+            out["cost"] = _cell_label(cost_winners[0])
 
     return out
 
 
 def _bundle_label(cell: CellAgg) -> str:
     return f"{cell.runner_label}" + (f" ({cell.runner_model})" if cell.runner_model else "")
+
+
+def _cell_label(cell: CellAgg) -> str:
+    return f"{cell.runner_label}@{cell.variant_label}"
 
 
 def _truncate(text: str, limit: int) -> str:
@@ -235,10 +251,9 @@ def _judging_summary(case: Case) -> str:
     return "；".join(parts)
 
 
-def _task_card(case: Case) -> list[str]:
+def _task_card(case: Case, run_id: str) -> list[str]:
     """单用例的「任务说明卡」：简介 + 输入/期望产出/判分 + 完整输出指引。"""
     title, brief = _task_brief(case)
-    out_root = case.directory / "output"
     head = f"**{title}**" + (f" — {brief}" if brief else "")
     return [
         "### 📋 任务说明",
@@ -252,37 +267,51 @@ def _task_card(case: Case) -> list[str]:
         f"| 期望产出 | {_expected_output_summary(case)} |",
         f"| 判分 | {_judging_summary(case)} |",
         "",
-        f"📂 **完整输出**（各 runner 原始产物，在 `{out_root}/<runner>/` 下）："
-        "`artifacts-0/OUTPUT.txt`（模型最终答案）、`artifacts-0/PROMPT.txt`（投喂的 prompt）、"
-        "`run.0.json`（结构化记录 + 裁判理由）、`run.0.raw.txt`（启动器原始流）。",
+        f"📂 **完整输出**：`runs/{run_id}/cells/{case.name}/<variant>/<runner>/repeat-<N>/`"
+        "（相对评测产物根；本计分卡原件与 cells/ 同级），"
+        "其中 `artifacts/OUTPUT.txt` 为模型最终答案，`run.json` 为结构化记录，"
+        "`raw.txt` 为脱敏启动器流。",
         "",
     ]
 
 
 def build_scorecard(
-    result: MatrixResult, *, judge_label: str = "claude", cases: dict[str, Case] | None = None
+    result: MatrixResult,
+    *,
+    judge_label: str = "claude",
+    cases: dict[str, Case] | None = None,
+    comparisons: dict[str, list[RunnerComparison]] | None = None,
 ) -> str:
     """从矩阵结果生成可分享 markdown 计分卡。
 
     传入 `cases`（name→Case）即可算「任务完成度」列（核心结果信号）；省略则退化为旧版四维表。
     """
     cases = cases or {}
-    by_case: dict[str, dict[str, list[RunRecord]]] = defaultdict(lambda: defaultdict(list))
+    by_case: dict[str, dict[tuple[str, str], list[RunRecord]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
     for rec in result.records:
-        by_case[rec.case][rec.runner_label].append(rec)
+        by_case[rec.case][(rec.variant_label, rec.runner_label)].append(rec)
+    if comparisons is None:
+        comparisons = {
+            case_name: compare_case_variants(case, by_case.get(case_name, {}))
+            for case_name, case in cases.items()
+            if case.evaluation.comparison is not None
+        }
 
     # 预算各 case×runner 完成度（需 case 对象）；comp_accum 供跨 case 汇总表
-    comp_by_case: dict[str, dict[str, CellCompletion]] = {}
+    comp_by_case: dict[str, dict[tuple[str, str], CellCompletion]] = {}
     comp_accum: dict[str, list[CellCompletion]] = defaultdict(list)
     for case_name, case_records in by_case.items():
         case_obj = cases.get(case_name)
         if case_obj is None:
             continue
-        m: dict[str, CellCompletion] = {}
-        for label, recs in case_records.items():
+        m: dict[tuple[str, str], CellCompletion] = {}
+        for key, recs in case_records.items():
             cc = cell_completion(recs, case_obj)
-            m[label] = cc
-            comp_accum[label].append(cc)
+            m[key] = cc
+            variant, label = key
+            comp_accum[f"{label}@{variant}"].append(cc)
         comp_by_case[case_name] = m
 
     skipped_by_case: dict[str, list] = defaultdict(list)
@@ -344,19 +373,38 @@ def build_scorecard(
         lines.append("")
         case_obj = cases.get(case_name)
         if case_obj is not None:
-            lines.extend(_task_card(case_obj))  # 任务简介 + 输入/输出/判分 + 完整输出指引
+            lines.extend(
+                _task_card(case_obj, result.run_id)
+            )  # 任务简介 + 输入/输出/判分 + 完整输出指引
+            scope = case_obj.evaluation.scope
+            role = case_obj.evaluation.role
+            if role:
+                lines.append(f"> **评测角色**：`{role}`。")
+            if scope:
+                lines.append(f"> **评测范围**：`{scope}`。")
+            if case_obj.evaluation.generalizes is False:
+                lines.append("> 本用例不是泛化证据，不用于宣称总体效果或通用赢家。")
+            if case_obj.schema_version >= 2:
+                lines.append(
+                    "> **统计口径**：分析单位 "
+                    f"`{case_obj.evaluation.unit_of_analysis}`，独立单位 "
+                    f"`{case_obj.evaluation.independent_unit}`；下表“运行轮次”不是独立样本量。"
+                )
+            if role or scope or case_obj.schema_version >= 2:
+                lines.append("")
         case_records = by_case.get(case_name, {})
         cells = [_aggregate(recs) for recs in case_records.values()]
-        cells.sort(key=lambda c: c.runner_label)
+        cells.sort(key=lambda c: (c.runner_label, c.variant_label))
         comp_by_runner = comp_by_case.get(case_name, {})
 
         lines.append(
-            "| Runner (启动器+模型) | 样本 | 任务完成 | check pass | judge 分 | 耗时(ms) | "
+            "| Runner (启动器+模型) | Variant | 运行轮次 | 任务完成 | check pass | judge 分 | 耗时(ms) | "
             "tokens(in✦/out) | cost($) | files_changed◇ |"
         )
-        lines.append("|---|---|---|---|---|---|---|---|---|")
+        lines.append("|---|---|---|---|---|---|---|---|---|---|")
         for c in cells:
-            comp_str = comp_by_runner[c.runner_label].display if c.runner_label in comp_by_runner else _DASH
+            comp_key = (c.variant_label, c.runner_label)
+            comp_str = comp_by_runner[comp_key].display if comp_key in comp_by_runner else _DASH
             pass_str = (
                 f"{int(round(c.check_pass_rate * c.samples))}/{c.samples}"
                 if c.check_pass_rate is not None
@@ -370,12 +418,14 @@ def build_scorecard(
                 else _DASH
             )
             lines.append(
-                f"| {_bundle_label(c)} | {c.samples} | {comp_str} | {pass_str} | {judge_str} | "
+                f"| {_bundle_label(c)} | `{c.variant_label}` | {c.samples} | {comp_str} | {pass_str} | {judge_str} | "
                 f"{_fmt(c.durations, as_int=True)} | {tok_str} | "
                 f"{_fmt(c.costs)} | {_fmt(c.files_changed, as_int=True)} |"
             )
         for sk in skipped_by_case.get(case_name, []):
-            lines.append(f"| {sk.runner_label} | — | N/A | N/A | N/A | N/A | N/A | N/A | N/A |")
+            lines.append(
+                f"| {sk.runner_label} | `{sk.variant_label}` | — | N/A | N/A | N/A | N/A | N/A | N/A | N/A |"
+            )
         lines.append("")
         lines.append(
             "✦ in 为真实总输入（含缓存读写 cache_read/creation）；cost 仅对真 Anthropic 计费的 claude 启动器显示，"
@@ -384,7 +434,12 @@ def build_scorecard(
         lines.append("◇ files_changed 为无方向诊断量（含创建/修改/删除），仅与 check/judge 并读，不单独评优劣。")
         lines.append("")
 
-        winners = _winners(cells)
+        winners = (
+            {}
+            if case_obj is not None
+            and case_obj.evaluation.generalizes is False
+            else _winners(cells)
+        )
         if winners:
             parts = []
             if "quality" in winners:
@@ -407,12 +462,58 @@ def build_scorecard(
             lines.append("")
             for c in reasoning_cells:
                 for rsn in c.reasonings:
-                    lines.append(f"- **{c.runner_label}**: {scrub_truncate(rsn, 600)}")
+                    lines.append(
+                        f"- **{_cell_label(c)}**: {scrub_truncate(rsn, 600)}"
+                    )
             lines.append("")
             lines.append("</details>")
             lines.append("")
 
+        if case_obj is not None:
+            lines.extend(_render_variant_comparisons(comparisons.get(case_name, [])))
+
     return "\n".join(lines)
+
+
+def _render_variant_comparisons(comparisons: list[RunnerComparison]) -> list[str]:
+    lines: list[str] = []
+    for comparison in comparisons:
+        if comparison.unavailable_reason:
+            lines.extend(
+                [
+                    "### Variant 配对比较",
+                    "",
+                    f"Runner `{comparison.runner}`：paired comparison unavailable；"
+                    f"{comparison.unavailable_reason}。",
+                    "",
+                ]
+            )
+            continue
+        lines.extend(
+            [
+                "### Variant 配对比较",
+                "",
+                f"Runner `{comparison.runner}`：baseline=`{comparison.baseline}`，"
+                f"candidate=`{comparison.candidate}`；strict fixed={comparison.fixed}，"
+                f"regressed={comparison.regressed}。",
+                "",
+                f"> 方法 `{comparison.method}`；分析单位 `{comparison.unit_of_analysis}`，"
+                f"独立单位 `{comparison.independent_unit}`。结果仅作描述性比较，不把条目或重复运行"
+                "当作独立样本，不做显著性推断。",
+                "",
+                "| ID | Baseline correct | Candidate correct | Baseline disagreement | Candidate disagreement | 状态 |",
+                "|---|---:|---:|---:|---:|---|",
+            ]
+        )
+        for row in comparison.rows:
+            lines.append(
+                f"| `{row.item_id}` | {row.baseline_correct}/{comparison.repeats} | "
+                f"{row.candidate_correct}/{comparison.repeats} | "
+                f"{row.baseline_disagreement:.3f} | {row.candidate_disagreement:.3f} | "
+                f"{row.status} |"
+            )
+        lines.append("")
+    return lines
 
 
 def _tradeoff_sentence(winners: dict[str, str]) -> str:

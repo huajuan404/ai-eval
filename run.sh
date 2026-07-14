@@ -8,6 +8,7 @@
 #   ./run.sh -c <case>                       # 只跑指定用例
 #   ./run.sh -c <case> -r codex,claude       # 指定用例与 runner（覆盖 config）
 #   ./run.sh --repeat 3                      # 每格跑 3 次（中位数 + 离散度）
+#   ./run.sh --report <run_id>               # 对已完成的 run 重建 HTML 报告
 #   ./run.sh -w 1                            # 强制串行（调试/测试）
 #   ./run.sh -q                              # 静默模式（只输出警告与汇总）
 

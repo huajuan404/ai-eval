@@ -84,6 +84,7 @@ class CheckResult:
     ran: bool = False
     passed: bool | None = None
     detail: str = ""
+    report: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -101,12 +102,16 @@ class JudgeResult:
 
 @dataclass(frozen=True)
 class RunRecord:
-    """单次 (case × runner × repeat_index) 运行记录。"""
+    """单次 (case × runner × prompt_variant × repeat_index) 运行记录。"""
 
     case: str
     runner_label: str
     launcher_type: str
     runner_model: str = ""
+    run_id: str = "legacy"
+    variant_label: str = "default"
+    prompt_template_sha256: str = ""
+    input_manifest_sha256: str = ""
     repeat_index: int = 0
     started_at: str = ""
     duration_ms: int = 0
@@ -148,6 +153,10 @@ class RunRecord:
             runner_label=data["runner_label"],
             launcher_type=data["launcher_type"],
             runner_model=data.get("runner_model", ""),
+            run_id=data.get("run_id", "legacy"),
+            variant_label=data.get("variant_label", "default"),
+            prompt_template_sha256=data.get("prompt_template_sha256", ""),
+            input_manifest_sha256=data.get("input_manifest_sha256", ""),
             repeat_index=data.get("repeat_index", 0),
             started_at=data.get("started_at", ""),
             duration_ms=data.get("duration_ms", 0),

@@ -29,6 +29,16 @@ runners:
   minimax-m3:
     launcher: c
     config: 0
+  # 同一 lane 的直调路径：用于需要隔离 Agent harness 的结构化 prompt 评测。
+  # 运行时脚本由对应 case protocol 放入 workdir；本机缺少 CONFIG_0 时明确失败。
+  minimax-m3-c0-direct:
+    launcher: command
+    template: "python3 {cwd}/run_provider.py --prompt-file {prompt_file} --workdir {cwd} --lane 0"
+    model: MiniMax-M3
+    metrics: none
+  minimax-m2.7:
+    launcher: c
+    config: 5
   deepseek-v4:
     launcher: c
     config: 1
@@ -36,6 +46,9 @@ runners:
     launcher: c
     config: 9   # 与 deepseek-v4(pro/config 1) 同 endpoint+token，仅 MODEL 不同（flash）
   glm-5.1:
+    launcher: c
+    config: 3
+  glm-5.2:
     launcher: c
     config: 2
   agnes-2.0-flash:

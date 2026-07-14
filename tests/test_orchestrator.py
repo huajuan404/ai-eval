@@ -8,10 +8,13 @@ import threading
 import time
 from pathlib import Path
 
+import pytest
+
 from bench.adapters.base import Adapter, ParsedOutput
 from bench.case import load_case
 from bench.config import RunConfig
-from bench.orchestrator import run_matrix
+from bench.layout import RunLayout
+from bench.orchestrator import OrchestratorError, run_matrix
 from bench.record import Usage
 from bench.registry import RunnerProfile
 
@@ -90,7 +93,7 @@ def test_matrix_2runners_1case_repeat2(tmp_path: Path) -> None:
     cfg = RunConfig(runners=("a", "b"), repeat=2)
     res = run_matrix(
         cfg, reg, [case],
-        run_fn=_make_run_fn(),
+        report_root=tmp_path, run_fn=_make_run_fn(),
         adapter_factory=lambda p: FakeAdapter("claude" if p.label == "a" else "codex", parsed),
         clock=_fixed_clock(),
         now=lambda: "2026-06-02T00:00:00Z",
@@ -100,17 +103,66 @@ def test_matrix_2runners_1case_repeat2(tmp_path: Path) -> None:
     assert {r.runner_label for r in res.records} == {"a", "b"}
 
 
+def test_schedule_callback_runs_before_first_cell(tmp_path: Path) -> None:
+    case = load_case(_make_case(tmp_path, "c1"))
+    registry = {"a": RunnerProfile("a", "claude")}
+    events: list[str] = []
+
+    def persist_schedule(schedule):
+        assert schedule
+        events.append("schedule")
+
+    def run_fn(cmd, cwd, env):
+        events.append("cell")
+        return "{}", "", 0
+
+    run_matrix(
+        RunConfig(runners=("a",), workers=1),
+        registry,
+        [case],
+        report_root=tmp_path, run_fn=run_fn,
+        adapter_factory=lambda profile: FakeAdapter("claude", ParsedOutput()),
+        clock=_fixed_clock(),
+        schedule_callback=persist_schedule,
+    )
+
+    assert events == ["schedule", "cell"]
+
+
 def test_empty_cases_runs_all(tmp_path: Path) -> None:
     cases = [load_case(_make_case(tmp_path, "c1")), load_case(_make_case(tmp_path, "c2"))]
     reg = {"a": RunnerProfile("a", "claude")}
     cfg = RunConfig(runners=("a",), cases=())
     res = run_matrix(
         cfg, reg, cases,
-        run_fn=_make_run_fn(),
+        report_root=tmp_path, run_fn=_make_run_fn(),
         adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
         clock=_fixed_clock(),
     )
     assert {r.case for r in res.records} == {"c1", "c2"}
+
+
+def test_run_plan_rejects_duplicate_runner_and_case_identity(tmp_path: Path) -> None:
+    case = load_case(_make_case(tmp_path, "c1"))
+    registry = {"a": RunnerProfile("a", "claude")}
+    with pytest.raises(OrchestratorError, match="runner 选择含重复"):
+        run_matrix(
+            RunConfig(runners=("a", "a")),
+            registry,
+            [case],
+            report_root=tmp_path, run_fn=_make_run_fn(),
+            adapter_factory=lambda profile: FakeAdapter("claude", ParsedOutput()),
+        )
+
+    duplicate = load_case(_make_case(tmp_path / "other", "c1"))
+    with pytest.raises(OrchestratorError, match="可用 case 含重复"):
+        run_matrix(
+            RunConfig(runners=("a",)),
+            registry,
+            [case, duplicate],
+            report_root=tmp_path, run_fn=_make_run_fn(),
+            adapter_factory=lambda profile: FakeAdapter("claude", ParsedOutput()),
+        )
 
 
 def test_usage_filled_and_degraded(tmp_path: Path) -> None:
@@ -125,7 +177,7 @@ def test_usage_filled_and_degraded(tmp_path: Path) -> None:
         return fa
 
     res = run_matrix(
-        cfg, reg, [case], run_fn=_make_run_fn(),
+        cfg, reg, [case], report_root=tmp_path, run_fn=_make_run_fn(),
         adapter_factory=factory, clock=_fixed_clock(),
     )
     by_label = {r.runner_label: r for r in res.records}
@@ -145,7 +197,7 @@ def test_cell_failure_does_not_abort(tmp_path: Path) -> None:
 
     # good 用正常 run_fn，bad 用抛异常的：用 adapter 无法区分 run_fn，改为都抛，验证两格都 is_error 但都产出 record
     res = run_matrix(
-        cfg, reg, [case], run_fn=run_fn,
+        cfg, reg, [case], report_root=tmp_path, run_fn=run_fn,
         adapter_factory=lambda p: FakeAdapter(p.launcher, ParsedOutput()),
         clock=_fixed_clock(),
     )
@@ -159,7 +211,7 @@ def test_wall_clock_recorded(tmp_path: Path) -> None:
     reg = {"a": RunnerProfile("a", "claude")}
     res = run_matrix(
         RunConfig(runners=("a",)), reg, [case],
-        run_fn=_make_run_fn(),
+        report_root=tmp_path, run_fn=_make_run_fn(),
         adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
         clock=_fixed_clock(),
     )
@@ -171,7 +223,7 @@ def test_files_changed_ignores_noise(tmp_path: Path) -> None:
     reg = {"a": RunnerProfile("a", "claude")}
     res = run_matrix(
         RunConfig(runners=("a",)), reg, [case],
-        run_fn=_make_run_fn(create_files=2, create_noise=True),
+        report_root=tmp_path, run_fn=_make_run_fn(create_files=2, create_noise=True),
         adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
         clock=_fixed_clock(),
     )
@@ -182,16 +234,16 @@ def test_files_changed_ignores_noise(tmp_path: Path) -> None:
 def test_requires_engine_incompatible_skipped(tmp_path: Path) -> None:
     case = load_case(_make_case(tmp_path, "c1", requires_engine="claude"))
     reg = {"x": RunnerProfile("x", "codex")}
-    res = run_matrix(
-        RunConfig(runners=("x",)), reg, [case],
-        run_fn=_make_run_fn(),
-        adapter_factory=lambda p: FakeAdapter("codex", ParsedOutput()),
-        clock=_fixed_clock(),
-    )
-    assert res.records == []
-    assert len(res.skipped) == 1
-    assert res.skipped[0].runner_label == "x"
-    assert res.skipped[0].case == "c1"
+    with pytest.raises(
+        OrchestratorError,
+        match=r"没有可执行组合.*\./run\.sh -l",
+    ):
+        run_matrix(
+            RunConfig(runners=("x",)), reg, [case],
+            report_root=tmp_path, run_fn=_make_run_fn(),
+            adapter_factory=lambda p: FakeAdapter("codex", ParsedOutput()),
+            clock=_fixed_clock(),
+        )
 
 
 def test_output_txt_written_for_judge(tmp_path: Path) -> None:
@@ -203,11 +255,13 @@ def test_output_txt_written_for_judge(tmp_path: Path) -> None:
 
     run_matrix(
         RunConfig(runners=("a",)), reg, [case],
-        run_fn=run_fn,
+        report_root=tmp_path, run_fn=run_fn,
         adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
         clock=_fixed_clock(),
+        run_id="run-output",
     )
-    out = case.output_dir("a") / "artifacts-0" / "OUTPUT.txt"
+    layout = RunLayout(tmp_path, "run-output")
+    out = layout.cell_dir(case.name, "default", "a", 0) / "artifacts" / "OUTPUT.txt"
     # FakeAdapter 用默认 extract_final_text → 返回整段 stdout
     assert out.exists() and out.read_text() == "MODEL FINAL ANSWER"
 
@@ -228,12 +282,14 @@ def test_output_txt_not_scrubbed_preserves_commit_hash(tmp_path: Path) -> None:
 
     run_matrix(
         RunConfig(runners=("a",)), reg, [case],
-        run_fn=run_fn,
+        report_root=tmp_path, run_fn=run_fn,
         adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
         clock=_fixed_clock(),
+        run_id="run-scrub",
     )
-    out_txt = case.output_dir("a") / "artifacts-0" / "OUTPUT.txt"
-    raw_txt = case.output_dir("a") / "run.0.raw.txt"
+    cell = RunLayout(tmp_path, "run-scrub").cell_dir(case.name, "default", "a", 0)
+    out_txt = cell / "artifacts" / "OUTPUT.txt"
+    raw_txt = cell / "raw.txt"
     # OUTPUT.txt 保留完整 hash（check.sh 要读）
     assert long_hash in out_txt.read_text(encoding="utf-8")
     # raw.txt 反而被脱敏（分享用）
@@ -246,14 +302,17 @@ def test_run_record_persisted_to_disk(tmp_path: Path) -> None:
     reg = {"a": RunnerProfile("a", "claude")}
     run_matrix(
         RunConfig(runners=("a",), repeat=2), reg, [case],
-        run_fn=_make_run_fn(),
+        report_root=tmp_path, run_fn=_make_run_fn(),
         adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
         clock=_fixed_clock(),
+        run_id="run-persist",
     )
-    out = case.output_dir("a")
-    assert (out / "run.0.json").exists()
-    assert (out / "run.1.json").exists()
-    assert (out / "run.0.raw.txt").exists()
+    layout = RunLayout(tmp_path, "run-persist")
+    first = layout.cell_dir(case.name, "default", "a", 0)
+    second = layout.cell_dir(case.name, "default", "a", 1)
+    assert (first / "run.json").exists()
+    assert (second / "run.json").exists()
+    assert (first / "raw.txt").exists()
 
 
 # ─── 并发与日志 ───────────────────────────────────────────
@@ -276,7 +335,7 @@ def test_workers_1_runs_serially(tmp_path: Path, caplog) -> None:
     caplog.set_level(logging.INFO)
     run_matrix(
         RunConfig(runners=("a", "b"), workers=1), reg, [case],
-        run_fn=run_fn,
+        report_root=tmp_path, run_fn=run_fn,
         adapter_factory=lambda p: FakeAdapter(
             "claude" if p.label == "a" else "codex", ParsedOutput()
         ),
@@ -300,7 +359,7 @@ def test_workers_2_uses_two_threads(tmp_path: Path) -> None:
 
     res = run_matrix(
         RunConfig(runners=("a", "b"), workers=2), reg, [case],
-        run_fn=run_fn,
+        report_root=tmp_path, run_fn=run_fn,
         adapter_factory=lambda p: FakeAdapter(
             "claude" if p.label == "a" else "codex", ParsedOutput()
         ),
@@ -308,6 +367,59 @@ def test_workers_2_uses_two_threads(tmp_path: Path) -> None:
     )
     assert len(res.records) == 2
     assert len(set(seen)) >= 2, f"workers=2 应至少用 2 个线程，实际: {set(seen)}"
+
+
+def test_parallel_workers_preserve_variant_schedule_within_case_runner(
+    tmp_path: Path,
+) -> None:
+    case_dir = _make_case(tmp_path, "variant-case")
+    (case_dir / "prompts" / "original.md").write_text("ORIGINAL", encoding="utf-8")
+    (case_dir / "prompts" / "candidate.md").write_text("CANDIDATE", encoding="utf-8")
+    (case_dir / "case.yaml").write_text(
+        textwrap.dedent(
+            """
+            name: variant-case
+            task:
+              type: custom
+              variants:
+                original: {prompt_file: prompts/original.md}
+                candidate: {prompt_file: prompts/candidate.md}
+              default_variant: candidate
+            """
+        ),
+        encoding="utf-8",
+    )
+    case = load_case(case_dir)
+    seen: list[str] = []
+    active = 0
+    max_active = 0
+    lock = threading.Lock()
+
+    def run_fn(cmd, cwd, env):
+        nonlocal active, max_active
+        with lock:
+            active += 1
+            max_active = max(max_active, active)
+            seen.append("original" if cmd[1] == "ORIGINAL" else "candidate")
+        time.sleep(0.01)
+        with lock:
+            active -= 1
+        return "{}", "", 0
+
+    result = run_matrix(
+        RunConfig(runners=("a",), variants=("*",), repeat=2, workers=4),
+        {"a": RunnerProfile("a", "claude")},
+        [case],
+        report_root=tmp_path, run_fn=run_fn,
+        adapter_factory=lambda profile: FakeAdapter("claude", ParsedOutput()),
+        clock=_fixed_clock(),
+        run_id="ordered-variants",
+    )
+    planned = [
+        label for schedule in result.schedule for label in schedule["variants"]
+    ]
+    assert seen == planned
+    assert max_active == 1
 
 
 def test_log_emits_start_done_summary(tmp_path: Path, caplog) -> None:
@@ -318,7 +430,7 @@ def test_log_emits_start_done_summary(tmp_path: Path, caplog) -> None:
     caplog.set_level(logging.INFO)
     run_matrix(
         RunConfig(runners=("a",), workers=1), reg, [case],
-        run_fn=_make_run_fn(),
+        report_root=tmp_path, run_fn=_make_run_fn(),
         adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
         clock=_fixed_clock(),
     )
@@ -338,7 +450,7 @@ def test_log_emits_progress_only_with_parallel(tmp_path: Path, caplog) -> None:
     caplog.set_level(logging.INFO)
     run_matrix(
         RunConfig(runners=("a", "b"), workers=1), reg, [case],
-        run_fn=_make_run_fn(),
+        report_root=tmp_path, run_fn=_make_run_fn(),
         adapter_factory=lambda p: FakeAdapter(
             "claude" if p.label == "a" else "codex", ParsedOutput()
         ),
@@ -352,7 +464,7 @@ def test_log_emits_progress_only_with_parallel(tmp_path: Path, caplog) -> None:
     case2 = load_case(_make_case(tmp_path, "c2"))
     run_matrix(
         RunConfig(runners=("a",), cases=("c1", "c2"), workers=4), reg, [case, case2],
-        run_fn=_make_run_fn(),
+        report_root=tmp_path, run_fn=_make_run_fn(),
         adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
         clock=_fixed_clock(),
     )
@@ -361,16 +473,20 @@ def test_log_emits_progress_only_with_parallel(tmp_path: Path, caplog) -> None:
     )
 
 
-def test_log_skip_emitted_for_incompatible_cell(tmp_path: Path, caplog) -> None:
+def test_log_skip_emitted_when_other_cell_is_compatible(tmp_path: Path, caplog) -> None:
     case = load_case(_make_case(tmp_path, "c1", requires_engine="claude"))
-    reg = {"x": RunnerProfile("x", "codex")}
+    reg = {
+        "x": RunnerProfile("x", "codex"),
+        "y": RunnerProfile("y", "claude"),
+    }
     caplog.set_level(logging.INFO)
     res = run_matrix(
-        RunConfig(runners=("x",), workers=1), reg, [case],
-        run_fn=_make_run_fn(),
-        adapter_factory=lambda p: FakeAdapter("codex", ParsedOutput()),
+        RunConfig(runners=("x", "y"), workers=1), reg, [case],
+        report_root=tmp_path, run_fn=_make_run_fn(),
+        adapter_factory=lambda p: FakeAdapter(p.launcher, ParsedOutput()),
         clock=_fixed_clock(),
     )
+    assert len(res.records) == 1
     assert res.skipped and len(res.skipped) == 1
     assert any("[skip ]" in r.message for r in caplog.records), caplog.records
 
@@ -383,7 +499,7 @@ def test_repeat_default_is_one(tmp_path: Path) -> None:
     cfg = RunConfig(runners=("a",))
     res = run_matrix(
         cfg, reg, [case],
-        run_fn=_make_run_fn(),
+        report_root=tmp_path, run_fn=_make_run_fn(),
         adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
         clock=_fixed_clock(),
     )
@@ -392,7 +508,7 @@ def test_repeat_default_is_one(tmp_path: Path) -> None:
     cfg3 = RunConfig(runners=("a",), repeat=3)
     res3 = run_matrix(
         cfg3, reg, [case],
-        run_fn=_make_run_fn(),
+        report_root=tmp_path, run_fn=_make_run_fn(),
         adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
         clock=_fixed_clock(),
     )
@@ -422,7 +538,7 @@ def test_auto_workers_resolves_to_provider_count(tmp_path: Path, caplog) -> None
     caplog.set_level(logging.INFO)
     res = run_matrix(
         RunConfig(runners=("a", "b", "c"), workers=0), reg, [case],  # workers=0 = 自动
-        run_fn=run_fn,
+        report_root=tmp_path, run_fn=run_fn,
         adapter_factory=lambda p: FakeAdapter(
             {"a": "claude", "b": "codex", "c": "claude"}[p.label], ParsedOutput()
         ),
@@ -451,7 +567,7 @@ def test_auto_workers_capped_at_six(tmp_path: Path, caplog) -> None:
     caplog.set_level(logging.INFO)
     res = run_matrix(
         RunConfig(runners=tuple(reg), workers=0), reg, [case],
-        run_fn=run_fn,
+        report_root=tmp_path, run_fn=run_fn,
         adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
         clock=_fixed_clock(),
     )
@@ -476,7 +592,7 @@ def test_auto_workers_single_provider_runs_serially(tmp_path: Path) -> None:
 
     res = run_matrix(
         RunConfig(runners=("a",), workers=0), reg, [case],
-        run_fn=run_fn,
+        report_root=tmp_path, run_fn=run_fn,
         adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
         clock=_fixed_clock(),
     )
@@ -499,7 +615,7 @@ def test_explicit_workers_overrides_auto(tmp_path: Path) -> None:
 
     res = run_matrix(
         RunConfig(runners=tuple(reg), workers=2), reg, [case],
-        run_fn=run_fn,
+        report_root=tmp_path, run_fn=run_fn,
         adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
         clock=_fixed_clock(),
     )
@@ -523,7 +639,7 @@ def test_explicit_workers_serial(tmp_path: Path) -> None:
 
     res = run_matrix(
         RunConfig(runners=tuple(reg), workers=1), reg, [case],
-        run_fn=run_fn,
+        report_root=tmp_path, run_fn=run_fn,
         adapter_factory=lambda p: FakeAdapter("claude", ParsedOutput()),
         clock=_fixed_clock(),
     )

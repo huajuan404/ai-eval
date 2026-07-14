@@ -42,16 +42,83 @@ benchmark 只替换模型/启动器，重跑同一任务，采集四维指标并
 - **启动器抽象**：`runner`（跑用例）和 `judge`（裁判）共用同一套档案注册表与配置。
 - **比较口径诚实**：比的是「启动器 + 模型」捆绑，不是裸模型（harness 是已知混淆变量）。
 
+### 一个矩阵、三个比较轴
+
+执行模型是一个 `runner × prompt variant × data item` 三维矩阵。case 永远只是
+「任务 + 数据 + 真值 + 判分」，**在比什么由运行时的选择决定**：
+
+| 比较轴 | 你想回答的问题 | 怎么触发 | 结果看哪里 |
+|---|---|---|---|
+| **Runner 轴**（评模型/provider） | 这个任务该用哪个模型/启动器？ | `-r a,b,c` 传多个 runner | 完成率矩阵、四维每维赢家 |
+| **Prompt 轴**（评方案） | 新 prompt 修复了什么、退化了什么？ | `--variants x,y` 固定 runner | variant 配对表（fixed/regressed） |
+| **数据轴**（评数据） | 哪类输入拖垮了哪个组合？ | case 的 check report 产出 `items[]` | item 级明细网格 |
+
+三个轴可叠加：一次运行既可以多 runner × 多 variant，item 明细自动细分到每格。
+
 ## 快速开始
 
+从使用目的看，case 分为两大类。它们共用同一个 `case.yaml` schema 和执行框架，
+不是两个互不兼容的技术类型：
+
+1. **模型选型 case**：固定任务和判分方式，同时运行多个 runner，回答“这个任务该用哪个模型/启动器”。
+2. **方案迭代 case**：固定 runner 和数据集，同时运行多个 prompt variant，回答“新 prompt 是否修复旧错误、是否引入退化”。
+
+先列出本机实际可用的 case、runner 和 variant：
+
 ```bash
-# 1. 看有哪些 runner 档案和用例
 ./run.sh -l
+```
 
-# 2. 跑一个用例，多模型对比（每格跑 2 次取中位数 + 离散度）
-./run.sh -c 2026-06-02-001-fizzbuzz -r codex,claude --repeat 2
+### 第一类：模型选型 case
 
-# 3. 计分卡生成在 scorecards/<date>-<case>-<runners>.md（同日多跑不覆盖）；把表现写进模型档案：
+给 `-r` 传入多个 runner。没有指定 `--variants` 时，框架只运行该 case 的默认 variant：
+
+```bash
+# 同一个端到端任务分别交给 codex 和 claude；每个组合运行 2 次
+./run.sh \
+  -c 2026-06-02-001-fizzbuzz \
+  -r codex,claude \
+  --repeat 2
+```
+
+结果重点看计分卡中的任务完成率、check/judge、耗时和 token。这里比较的是
+“runner + 模型”整体，不是脱离启动器的裸模型。
+
+### 第二类：方案迭代 case
+
+给 `-r` 传入一个固定 runner，用 `--variants` 选择要配对比较的 prompt 版本：
+
+```bash
+# 同一个 runner、同一批数据，比较 baseline 与 candidate
+./run.sh \
+  -c <case名> \
+  -r <runner名> \
+  --variants baseline,candidate \
+  --repeat 5
+```
+
+variant 名以 `./run.sh -l` 显示的 `[variants=...]` 为准；`--variants '*'` 运行该 case
+声明的全部版本。不传 `--variants` 只跑默认版本，**不会产生 variant 配对比较**。
+如果 `case.yaml` 已声明 `repeat`，以 case 的值为准；否则使用命令行的 `--repeat`。
+
+这类 case 的计分卡除常规指标外，还会显示每个条目的 `fixed`（新版本修复）与
+`regressed`（新版本退化）。比较结论只适用于该 case 声明的数据和评测范围，不自动外推。
+
+例如，本仓库配套私有库中的 Step2 prompt variant case 可这样运行：
+
+```bash
+./run.sh \
+  -c 2026-07-13-001-step2-prompt-variant \
+  -r minimax-m3-c0-direct \
+  --variants original,v4
+```
+
+一次运行的全部结果（manifest、每格产物、计分卡、HTML 报告）自包含在
+`runs/<run_id>/`（公开 case → 仓库根，私有 case → 私有根，见下文目录地图）；
+`scorecards/` 另存一份计分卡副本便于浏览历史，同日重复运行不会互相覆盖。
+仅公开模型选型结果可按需写入模型档案：
+
+```bash
 ./run.sh -c 2026-06-02-001-fizzbuzz -r codex --write-profiles
 ```
 
@@ -60,6 +127,9 @@ benchmark 只替换模型/启动器，重跑同一任务，采集四维指标并
 ## 启动器（4 类）
 
 在 `runners.yaml` 注册命名档案，runner 与 judge 共用：
+
+runner 使用统一注册表，不区分公开或私有；私有性只属于 case 数据。本机缺少某个 runner
+依赖或配置时会明确失败，可先用 `./run.sh -l` 查看并通过 `-r` 选择本机可用档案。
 
 | launcher | 说明 | 关键字段 |
 |---|---|---|
@@ -98,7 +168,40 @@ benchmark 只替换模型/启动器，重跑同一任务，采集四维指标并
 - `repeat>1` → 中位数 + 离散度，check 报 pass 率。
 - 进入可分享 markdown 前对裁判理由/原始输出**脱敏**。
 
-## 目录结构
+## HTML 报告
+
+每次运行结束自动在 `runs/<run_id>/report.html` 生成**单文件、零外部依赖**的交互报告，
+浏览器直接打开即可（与计分卡同一数据源，只做渲染）：
+
+- **汇总层**：任务完成率总览矩阵（runner@variant × case 色块）+ 每用例四维表 + 每维赢家；
+- **Prompt 轴**：variant 配对表，fixed / regressed 逐 item 列出；
+- **数据轴**：item × runner@variant 通过网格，哪类输入拖垮了哪个组合一目了然；
+- **逐格明细**：每格可展开 check 详情、裁判理由（已脱敏）、耗时/token，
+  并有相对链接直达同目录 `cells/` 下的 `run.json` / `raw.txt` / `artifacts/`。
+
+对历史 run 重建（不重跑、不重判分）：
+
+```bash
+./run.sh --report <run_id>
+```
+
+## 目录地图：什么在哪
+
+拨乱反正的两条铁律：**case 目录 = 纯定义**（评什么、喂什么、怎么判，永不写入运行产物）；
+**一次运行 = 一个自包含目录** `runs/<run_id>/`（这次评测的一切都在里面）。
+
+| 你想找… | 在哪 |
+|---|---|
+| case 本身（任务 prompt） | `cases/<name>/prompts/`（variants 各一个文件），入口 `case.yaml` |
+| 选手可见的输入/数据集 | `cases/<name>/input/`（运行时拷入隔离 workdir） |
+| 预期结果（真值） | 单一预期值 → `case.yaml` 的 `expected:`；批量标签 → `oracle/`（选手不可见）；可执行基准 → `verify/`（check 前强制还原，防篡改） |
+| 评测标准 | 确定性 → `check.sh`（或 protocol 的 check）；主观 → `prompts/rubric.md`（judge） |
+| 在比 runner / prompt / 数据？ | 由运行选择决定（见「一个矩阵、三个比较轴」），case 不用改 |
+| 一次评测的全部结果 | `runs/<run_id>/`（公开 case → 仓库根；私有 case → 私有根） |
+| 每次 LLM 请求的原始返回 | `runs/<run_id>/cells/<case>/<variant>/<runner>/repeat-<N>/raw.txt`（脱敏启动器流） |
+| 模型最终答案纯文本 | 同上 cell 目录 `artifacts/OUTPUT.txt`（不脱敏，供 check/judge 读） |
+| 单格结构化记录（指标+判分） | 同上 cell 目录 `run.json` |
+| 汇总视图 | `runs/<run_id>/report.html`（交互）与 `scorecard.md`（纯文本，`scorecards/` 有副本） |
 
 ```
 ai-eval/
@@ -108,37 +211,67 @@ ai-eval/
 ├── bench/                 # Python 编排器包
 │   ├── registry.py        # 档案加载 + 密钥校验
 │   ├── adapters/          # claude / codex / c / command 适配器
-│   ├── case.py            # 用例加载 + 隔离 workdir
-│   ├── orchestrator.py    # 矩阵 × repeat 执行 + 指标
+│   ├── case.py            # v1/v2 用例加载 + 隔离 workdir
+│   ├── protocol.py        # 可复用的声明式 case 机制
+│   ├── layout.py          # 一次运行的产物布局（runs/<run_id>/ 唯一出处）
+│   ├── orchestrator.py    # 预校验 RunPlan + 矩阵执行
+│   ├── comparison.py      # variant 配对比较
 │   ├── scoring.py         # check + 裁判
-│   ├── scorecard.py       # 计分卡 + 档案写入
+│   ├── scorecard.py       # markdown 计分卡 + 档案写入
+│   ├── report.py          # 自包含 HTML 报告（--report 可重建）
 │   ├── scrub.py           # 密钥脱敏
 │   └── record.py          # run record schema
-├── cases/<name>/          # 用例（case.yaml/input/prompts/check.sh/expected/output）
+├── cases/<name>/          # 用例纯定义：case.yaml + prompts/ + input/ + oracle/ + verify/
+├── protocols/<name>/      # 多个 case 共用时才需要的运行/check 机制
+├── runs/<run_id>/         # 一次运行的全部结果（gitignored；私有 case 落私有根）
+│   ├── run_manifest.json  #   选择、完整性锁、状态
+│   ├── cells/...          #   每格 run.json + raw.txt + artifacts/
+│   ├── scorecard.md       #   计分卡原件
+│   └── report.html        #   HTML 报告
 ├── models/<label>.md      # 模型档案（计分卡沉淀目标）
-├── scorecards/            # 生成的计分卡（gitignored，按需分享）
+├── scorecards/            # 计分卡浏览副本（gitignored，按需分享）
 └── tests/                 # pytest
 ```
 
 ## 加一个用例
 
-在 `cases/<name>/` 建 `case.yaml`：
+在 `cases/<name>/` 建 `case.yaml`。最小 case v2 只需声明任务和判分入口，`name` 默认取目录名，
+`class` 默认是 `coding`：
 
 ```yaml
-name: <name>
-task:
-  type: prompt          # prompt | skill | slash | custom
-  prompt_file: prompts/task.md
-check:
-  type: script          # script | none
-  script: check.sh      # 退出 0 = 通过
-judge:
-  enabled: true
-  rubric_file: prompts/rubric.md
-  dimensions: [correctness, code_quality]
+schema_version: 2
+task: prompts/task.md
+check: check.sh
+judge: prompts/rubric.md
 # requires_engine: claude   # 仅限某引擎时声明，矩阵会跳过不兼容格标 N/A
 # repeat: 3                  # 覆盖全局 repeat
 ```
+
+同一数据比较多个 prompt 时只增加 variant，不复制 case：
+
+```yaml
+schema_version: 2
+task:
+  variants:
+    baseline: prompts/baseline.md
+    candidate: prompts/candidate.md
+  default: candidate
+evaluation:
+  role: calibration
+  generalizes: false
+  comparison: {method: item_exact_match, baseline: baseline, candidate: candidate}
+  unit_of_analysis: item
+  independent_unit: batch
+```
+
+`item_exact_match` 明确要求 check report 提供 `items[].id/actual/correct`。数值、rubric 或生成式结果
+不能套用这个方法，应先由领域 check 产出指标，再新增有明确定义的比较方法。
+
+只有当多个 case 反复复制同一运行脚本、check 或 variant 参数时，才在同仓库
+`protocols/<name>/protocol.yaml` 定义一个声明式 protocol，并让 case 增加 `protocol: <name>`。
+protocol 只复用机制；dataset、prompt、oracle 和评测范围仍由 case 明确声明。旧 case v1 保持兼容。
+schema v2 必须至少有一个可用的 check 或 judge；声明 variant comparison 时还必须显式写
+`role`、`generalizes`、比较方法和统计单位，框架不替使用者猜测这些结论边界。
 
 输入资产放 `input/`（运行时拷入隔离 workdir，不污染源）。
 **只读校验资产**（如基准测试）放 `verify/`——它**不进入选手 workdir**，check 前还原到产物目录，
@@ -156,7 +289,7 @@ cp private.env.example private.env        # 改成你的私有 cases 根（仓�
 ```
 
 - `run.sh` 自动 source gitignored 的 `private.env`，框架经 `AI_EVAL_PRIVATE_CASES`（`:` 分隔可多个根）
-  发现公开 + 私有 case；私有 case 的 `output/` 也落在私有路径，产物不外泄。
+  发现公开 + 私有 case；私有 case 的 `runs/`（含 report.html）和 `scorecards/` 都落在私有根，产物不外泄。
 - 建议把私有 cases 目录单独做成一个**私有 git 仓**（内部可共享、有版本）。
 - **case-gen skill 默认把蒸馏出的 case 写到私有路径**（`config.toml` 的 `private_cases_path`），
   除非你显式要求"放公开"——蒸馏自真实 session 的 case 天然可能含敏感数据。
@@ -188,7 +321,7 @@ bash case-gen/install.sh
 
 - 子进程用最小环境，剔除无关凭证（每个 launcher 只放行自己的 auth）。
 - 原始输出、裁判理由、check 详情进入可分享产物前脱敏。
-- 所有 `cases/*/output/` 产物已 gitignore。
+- 运行产物 `runs/` 与计分卡副本 `scorecards/` 已 gitignore（历史遗留的 `cases/*/output/` 同样忽略，仅只读保留）。
 
 ## 已知边界
 

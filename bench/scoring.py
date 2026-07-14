@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -59,14 +60,80 @@ def run_check(
     """
     if case.check.type != "script" or not case.check.script:
         return CheckResult(ran=False)
-    script = case.directory / case.check.script
-    if not script.exists():
+    script = case.check_script_path
+    if script is None or not script.exists():
         return CheckResult(ran=True, passed=False, detail=f"check 脚本不存在: {case.check.script}")
     restore_verify_assets(case, work_dir)  # 还原只读基准，防选手改测试拿 pass
     env = minimal_os_env()
+    env["AI_EVAL_CASE_DIR"] = str(case.directory.resolve())
+    env["AI_EVAL_WORKDIR"] = str(Path(work_dir).resolve())
     stdout, stderr, code = run_fn(["bash", str(script)], str(work_dir), env)
     detail = scrub_truncate((stdout or "") + (("\n" + stderr) if stderr else ""), DETAIL_LIMIT)
-    return CheckResult(ran=True, passed=(code == 0), detail=detail)
+    if not case.check.report_file:
+        return CheckResult(ran=True, passed=(code == 0), detail=detail)
+
+    report_path = Path(work_dir) / case.check.report_file
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return CheckResult(
+            ran=True,
+            passed=False,
+            detail=scrub_truncate(f"{detail}\n结构化 check report 无法解析: {exc}", DETAIL_LIMIT),
+        )
+    error = _validate_check_report(report)
+    if error:
+        return CheckResult(
+            ran=True,
+            passed=False,
+            detail=scrub_truncate(f"{detail}\n结构化 check report 非法: {error}", DETAIL_LIMIT),
+        )
+    process_passed = code == 0
+    report_passed = report["passed"]
+    if process_passed != report_passed:
+        return CheckResult(
+            ran=True,
+            passed=False,
+            detail=scrub_truncate(
+                f"{detail}\ncheck 退出码与 report.passed 矛盾: code={code} passed={report_passed}",
+                DETAIL_LIMIT,
+            ),
+            report=report,
+        )
+    return CheckResult(ran=True, passed=report_passed, detail=detail, report=report)
+
+
+def _validate_check_report(report: object) -> str | None:
+    if not isinstance(report, dict):
+        return "顶层必须是映射"
+    if report.get("schema_version") != 1:
+        return "schema_version 必须为 1"
+    if not isinstance(report.get("passed"), bool):
+        return "passed 必须是 boolean"
+    if not isinstance(report.get("summary"), dict):
+        return "summary 必须是映射"
+    items = report.get("items")
+    if not isinstance(items, list):
+        return "items 必须是列表"
+    if not isinstance(report.get("errors"), list):
+        return "errors 必须是列表"
+    seen: set[str] = set()
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            return f"items[{index}] 必须是映射"
+        required = ("id", "expected", "actual", "correct")
+        missing = [key for key in required if key not in item]
+        if missing:
+            return f"items[{index}] 缺字段 {missing}"
+        item_id = str(item["id"])
+        if item_id in seen:
+            return f"items id 重复: {item_id}"
+        seen.add(item_id)
+        if not isinstance(item["correct"], bool):
+            return f"items[{index}].correct 必须是 boolean"
+        if "slices" in item and not isinstance(item["slices"], dict):
+            return f"items[{index}].slices 必须是映射"
+    return None
 
 
 def gather_contestant_output(
@@ -146,7 +213,12 @@ def run_judge(
 
     adapter = adapter_factory(judge_profile)
     output_text, inline = gather_contestant_output(record.artifacts_dir, inline_limit)
-    prompt = assemble_judge_prompt(case.judge.rubric, case.task.prompt, output_text, inline)
+    prompt = assemble_judge_prompt(
+        case.judge.rubric,
+        case.task.prompt_for(record.variant_label),
+        output_text,
+        inline,
+    )
     cwd = record.artifacts_dir or str(case.directory)
     cmd = adapter.build_command(judge_profile, prompt, cwd)
     env = adapter.build_env(judge_profile)

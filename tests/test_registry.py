@@ -88,6 +88,19 @@ def test_command_requires_template(tmp_path: Path) -> None:
         load_registry(p)
 
 
+def test_runner_label_rejects_path_segments(tmp_path: Path) -> None:
+    p = _write(
+        tmp_path,
+        """
+        runners:
+          ../escape:
+            launcher: claude
+        """,
+    )
+    with pytest.raises(RegistryError, match="label 非法"):
+        load_registry(p)
+
+
 def test_plaintext_secret_rejected(tmp_path: Path) -> None:
     p = _write(
         tmp_path,
@@ -128,7 +141,7 @@ def test_get_profile_missing_label(tmp_path: Path) -> None:
         """,
     )
     reg = load_registry(p)
-    with pytest.raises(RegistryError, match="未找到 runner 档案 'nope'"):
+    with pytest.raises(RegistryError, match=r"未找到 runner 档案 'nope'.*\./run\.sh -l"):
         get_profile(reg, "nope")
 
 
@@ -147,3 +160,4 @@ def test_real_registry_loads() -> None:
     assert "codex" in reg and reg["codex"].launcher == "codex"
     assert "claude" in reg and reg["claude"].launcher == "claude"
     assert "glm-5.1" in reg and reg["glm-5.1"].launcher == "c"
+    assert reg["minimax-m3-c0-direct"].launcher == "command"

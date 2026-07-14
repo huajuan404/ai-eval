@@ -22,6 +22,7 @@ __pycache__/
 
 # 计分卡为生成产物（可复现）；按需 git add -f 单个分享，默认不入库
 scorecards/
+runs/
 
 # 临时文件
 *.log
@@ -46,3 +47,6 @@ cases/_private/
 _schema/
 rescore.py
 save.txt
+
+# 旧安装布局残留：指向 case-gen 自身的自引用软链，本地保留不入库
+case-gen/session-to-eval

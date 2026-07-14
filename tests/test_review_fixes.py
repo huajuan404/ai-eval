@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -124,6 +126,8 @@ def test_run_check_passes_correct_solution_with_verify(tmp_path) -> None:
 # ── P2: judge 标签校验 ───────────────────────────────
 def test_run_benchmark_bogus_judge_fails(tmp_path, monkeypatch) -> None:
     # 真实种子用例（judge enabled）+ 不存在的 judge 标签 → 应报错而非静默跳过
+    root = tmp_path / "public"
+    shutil.copytree(ROOT / "cases" / SEED, root / "cases" / SEED)
     reg = {"codex": RunnerProfile("codex", "codex")}
     cfg = RunConfig(runners=("codex",), cases=(SEED,), judge="ghost-judge")
 
@@ -133,8 +137,13 @@ def test_run_benchmark_bogus_judge_fails(tmp_path, monkeypatch) -> None:
 
     with pytest.raises(RegistryError, match="ghost-judge"):
         run_benchmark(
-            cfg, reg, ROOT,
+            cfg, reg, root,
             run_fn=fake_run,
             adapter_factory=lambda p: _FakeAdapter(),
             judge_run_fn=lambda c, w, e: ("{}", "", 0),
         )
+    manifests = list((root / "runs").glob("*/run_manifest.json"))
+    assert len(manifests) == 1
+    failed = json.loads(manifests[0].read_text(encoding="utf-8"))
+    assert failed["status"] == "failed"
+    assert failed["error"]["type"] == "RegistryError"

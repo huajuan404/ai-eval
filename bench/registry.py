@@ -16,6 +16,7 @@ import yaml
 
 VALID_LAUNCHERS = ("claude", "codex", "c", "command")
 VALID_METRICS = ("auto", "none")
+_RUNNER_LABEL_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 # 明文密钥模式：OpenAI 风格 sk-、Bearer token、40+ 位 hex（典型 API key / token）。
 # 凭证必须用 ${ENV_VAR} 插值，不得明文写入 runners.yaml。
@@ -79,6 +80,8 @@ def _assert_no_plaintext_secret(label: str, profile_data: dict[str, Any]) -> Non
 
 
 def _build_profile(label: str, data: dict[str, Any]) -> RunnerProfile:
+    if not _RUNNER_LABEL_RE.fullmatch(label):
+        raise RegistryError(f"档案 label 非法: {label!r}；只允许字母、数字、.、_、-。")
     if not isinstance(data, dict):
         raise RegistryError(f"档案 '{label}' 必须是映射，实际是 {type(data).__name__}。")
 
@@ -141,5 +144,8 @@ def get_profile(registry: dict[str, RunnerProfile], label: str) -> RunnerProfile
     """按标签取档案，不存在时报清晰错误。"""
     if label not in registry:
         available = ", ".join(sorted(registry)) or "(空)"
-        raise RegistryError(f"未找到 runner 档案 '{label}'；可用档案: {available}。")
+        raise RegistryError(
+            f"未找到 runner 档案 '{label}'；可用档案: {available}。"
+            "请先运行 ./run.sh -l，再通过 -r <runner名> 选择本机已配置的 runner。"
+        )
     return registry[label]

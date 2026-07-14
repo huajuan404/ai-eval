@@ -62,19 +62,11 @@ description: 把 session 里执行过的真实任务蒸馏成 ai-eval 可执行�
 ### `case.yaml` 字段
 
 ```yaml
-name: <name>                 # 通常同目录名
-class: reasoning             # reasoning | coding | tool-using | writing（四类之一，必填且合法）
-task:
-  type: prompt               # prompt | skill | slash | custom
-  prompt_file: prompts/task.md   # prompt/custom 必填；指向任务 prompt 文件
-  # skill 类用 skill: <名> + args；slash 类用 command: <命令> + args
-check:
-  type: script               # script | none
-  script: check.sh           # script 类必填；退出码 0 = 通过；从 cwd（产物目录）运行
-judge:
-  enabled: true              # 是否启用 LLM 裁判
-  rubric_file: prompts/rubric.md   # enabled 时必填；rubric 文本含 JSON 输出约定
-  dimensions: [correctness, code_quality]   # 评分维度名
+schema_version: 2
+class: reasoning             # 可省略，默认 coding
+task: prompts/task.md        # prompt/custom 的最简写法
+check: check.sh              # 可选；退出码 0 = 通过
+judge: prompts/rubric.md     # 可选；rubric 含 JSON 输出约定
 requires_engine: claude      # 可选；仅某引擎可跑时声明，矩阵跳过不兼容格
 repeat: 3                    # 可选；覆盖全局 repeat
 expected:                    # 可选；YAML **dict 字段**（不是目录！）。ground-truth，check.sh / judge 读
@@ -220,11 +212,13 @@ case_dir = f"{cases_root}/{name}"
 
 ```yaml
 # case.yaml
-name: <name>
+schema_version: 2
 class: coding
-task: {type: prompt, prompt_file: prompts/task.md}
-check: {type: script, script: check.sh}
-judge: {enabled: true, rubric_file: prompts/rubric.md, dimensions: [correctness, code_quality]}
+task: prompts/task.md
+check: check.sh
+judge:
+  rubric: prompts/rubric.md
+  dimensions: [correctness, code_quality]
 expected: {synthesized: <bool>}
 ```
 - `input/` 放起始脚手架（reconstruct 的 read 前态）。
@@ -234,9 +228,13 @@ expected: {synthesized: <bool>}
 ### tool-using
 
 ```yaml
+schema_version: 2
 class: tool-using
-check: {type: script, script: check.sh}
-judge: {enabled: true, rubric_file: prompts/rubric.md, dimensions: [accuracy, investigation_process]}
+task: prompts/task.md
+check: check.sh
+judge:
+  rubric: prompts/rubric.md
+  dimensions: [accuracy, investigation_process]
 expected: {answer: "<TODO 外部真值>", synthesized: <bool>}
 ```
 - task.md 约定模型把结论写成 `ANSWER: <值>` 一行。这**不违反**"框架/case 泾渭分明"——
@@ -248,9 +246,12 @@ expected: {answer: "<TODO 外部真值>", synthesized: <bool>}
 ### reasoning / writing
 
 ```yaml
+schema_version: 2
 class: reasoning   # 或 writing
-check: {type: none}
-judge: {enabled: true, rubric_file: prompts/rubric.md, dimensions: [<维度...>]}
+task: prompts/task.md
+judge:
+  rubric: prompts/rubric.md
+  dimensions: [<维度...>]
 expected: {max_score: <N>, passing_threshold: <M>}
 ```
 - 无确定性 check；rubric N 维，必含 JSON 输出约定。

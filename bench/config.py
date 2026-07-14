@@ -25,10 +25,17 @@ class RunConfig:
 
     runners: tuple[str, ...] = ()
     cases: tuple[str, ...] = ()
+    variants: tuple[str, ...] = ()
     judge: str = "claude"
     repeat: int = 1
     workers: int = 0  # 0 = 自动 = min(选中 runners, 6)；显式传 N 走 N（测试用 1 串行）
     dimensions: dict[str, bool] = field(default_factory=lambda: dict(DEFAULT_DIMENSIONS))
+
+    def __post_init__(self) -> None:
+        if isinstance(self.repeat, bool) or not isinstance(self.repeat, int) or self.repeat < 1:
+            raise ConfigError("repeat 必须是正整数。")
+        if isinstance(self.workers, bool) or not isinstance(self.workers, int) or self.workers < 0:
+            raise ConfigError("workers 必须是非负整数。")
 
 
 def load_config(path: str | Path) -> RunConfig:
@@ -42,8 +49,9 @@ def load_config(path: str | Path) -> RunConfig:
     return RunConfig(
         runners=tuple(doc.get("runners") or ()),
         cases=tuple(doc.get("cases") or ()),
+        variants=tuple(doc.get("variants") or ()),
         judge=str(doc.get("judge") or "claude"),
-        repeat=int(doc.get("repeat") or 1),
-        workers=int(doc.get("workers") or 0),
+        repeat=int(doc["repeat"]) if "repeat" in doc else 1,
+        workers=int(doc["workers"]) if "workers" in doc else 0,
         dimensions=dims,
     )
