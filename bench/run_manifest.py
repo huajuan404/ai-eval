@@ -216,7 +216,12 @@ def _is_sha256(value: object) -> bool:
     )
 
 
-def _load_request_manifest_v2(data: dict[str, Any], manifest_path: Path) -> dict[str, Any]:
+def _load_request_manifest_v2(
+    data: dict[str, Any],
+    manifest_path: Path,
+    *,
+    allow_failed_requests: bool = False,
+) -> dict[str, Any]:
     allowed_top = {
         "schema_version",
         "provider",
@@ -234,7 +239,7 @@ def _load_request_manifest_v2(data: dict[str, Any], manifest_path: Path) -> dict
     requests = data.get("requests")
     if not isinstance(provider, dict) or not isinstance(variant, dict):
         raise RunManifestError(f"request manifest v2 缺少 provider/variant: {manifest_path}")
-    if not isinstance(requests, list) or not requests:
+    if not isinstance(requests, list) or (not requests and not allow_failed_requests):
         raise RunManifestError(f"request manifest v2 requests 必须是非空列表: {manifest_path}")
     if not _is_sha256(data.get("runtime_sha256")):
         raise RunManifestError(f"request manifest v2 runtime_sha256 非法: {manifest_path}")
@@ -274,12 +279,41 @@ def _load_request_manifest_v2(data: dict[str, Any], manifest_path: Path) -> dict
         "auth_succeeded",
         "returned_model",
     }
-    allowed_request = required_request | {"provider_request_id"}
+    allowed_request = required_request | {"provider_request_id", "failure_stage"}
+    allowed_failure_stages = {
+        "response_decode",
+        "response_envelope",
+        "response_truncated",
+    }
     seen_units: set[str] = set()
     for index, request in enumerate(requests):
         if not isinstance(request, dict):
             raise RunManifestError(f"requests[{index}] 必须是映射: {manifest_path}")
+        status = request.get("status_code")
+        auth_succeeded = request.get("auth_succeeded")
+        if type(status) is not int:
+            raise RunManifestError(f"provider status_code 非整数: unit={request.get('unit_id')} status={status}")
+        if not isinstance(auth_succeeded, bool):
+            raise RunManifestError(
+                f"provider auth_succeeded 非布尔值: unit={request.get('unit_id')}"
+            )
+        failure_stage = request.get("failure_stage")
+        if failure_stage is not None and failure_stage not in allowed_failure_stages:
+            raise RunManifestError(
+                f"provider failure_stage 非法: unit={request.get('unit_id')} "
+                f"stage={failure_stage!r}"
+            )
+        if failure_stage is not None and not allow_failed_requests:
+            raise RunManifestError(
+                f"成功 cell 不得包含 failure_stage: unit={request.get('unit_id')}"
+            )
+        may_omit_returned_model = allow_failed_requests and (
+            not 200 <= status < 300 or auth_succeeded is False
+            or failure_stage in {"response_decode", "response_envelope"}
+        )
         missing = sorted(required_request - set(request))
+        if may_omit_returned_model:
+            missing = [field for field in missing if field != "returned_model"]
         unknown = sorted(set(request) - allowed_request)
         if missing or unknown:
             raise RunManifestError(
@@ -293,20 +327,27 @@ def _load_request_manifest_v2(data: dict[str, Any], manifest_path: Path) -> dict
             request.get("request_sha256")
         ):
             raise RunManifestError(f"request manifest v2 request hash 非法: unit={unit_id}")
-        status = request.get("status_code")
-        if not isinstance(status, int) or not 200 <= status < 300:
+        if not allow_failed_requests and not 200 <= status < 300:
             raise RunManifestError(f"provider 请求失败: unit={unit_id} status={status}")
-        if request.get("auth_succeeded") is not True:
+        if not allow_failed_requests and auth_succeeded is not True:
             raise RunManifestError(f"provider 认证失败: unit={unit_id}")
-        if not _same_model_identity(provider["requested_model"], request.get("returned_model")):
+        returned_model = request.get("returned_model")
+        if returned_model is None:
+            if not may_omit_returned_model:
+                raise RunManifestError(f"provider returned_model 缺失: unit={unit_id}")
+        elif not isinstance(returned_model, str) or not returned_model:
+            raise RunManifestError(f"provider returned_model 非空字符串: unit={unit_id}")
+        elif not _same_model_identity(provider["requested_model"], returned_model):
             raise RunManifestError(
                 f"provider 返回模型与请求不一致: unit={unit_id} "
-                f"requested={provider['requested_model']!r} returned={request.get('returned_model')!r}"
+                f"requested={provider['requested_model']!r} returned={returned_model!r}"
             )
     return data
 
 
-def load_request_manifest(path: str | Path) -> dict[str, Any]:
+def load_request_manifest(
+    path: str | Path, *, allow_failed_requests: bool = False
+) -> dict[str, Any]:
     manifest_path = Path(path)
     try:
         data = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -315,7 +356,11 @@ def load_request_manifest(path: str | Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise RunManifestError(f"request manifest 顶层必须是映射: {manifest_path}")
     if data.get("schema_version") == 2:
-        return _load_request_manifest_v2(data, manifest_path)
+        return _load_request_manifest_v2(
+            data,
+            manifest_path,
+            allow_failed_requests=allow_failed_requests,
+        )
     if data.get("schema_version") != 1:
         raise RunManifestError(f"request manifest schema_version 必须为 1 或 2: {manifest_path}")
     allowed_top = {
@@ -382,7 +427,22 @@ def load_request_manifest(path: str | Path) -> dict[str, Any]:
     for index, request in enumerate(requests):
         if not isinstance(request, dict):
             raise RunManifestError(f"requests[{index}] 必须是映射: {manifest_path}")
+        status = request.get("status_code")
+        auth_succeeded = request.get("auth_succeeded")
+        if type(status) is not int:
+            raise RunManifestError(
+                f"provider status_code 非整数: batch={request.get('batch_id')} status={status}"
+            )
+        if not isinstance(auth_succeeded, bool):
+            raise RunManifestError(
+                f"provider auth_succeeded 非布尔值: batch={request.get('batch_id')}"
+            )
+        may_omit_returned_model = allow_failed_requests and (
+            not 200 <= status < 300 or auth_succeeded is False
+        )
         missing = [key for key in required_request if key not in request]
+        if may_omit_returned_model:
+            missing = [field for field in missing if field != "returned_model"]
         if missing:
             raise RunManifestError(
                 f"requests[{index}] 缺字段 {missing}: {manifest_path}"
@@ -396,17 +456,22 @@ def load_request_manifest(path: str | Path) -> dict[str, Any]:
         if batch_id in seen_batches:
             raise RunManifestError(f"request manifest batch_id 重复: {batch_id}")
         seen_batches.add(batch_id)
-        status = request["status_code"]
-        if not isinstance(status, int) or not 200 <= status < 300:
+        if not allow_failed_requests and not 200 <= status < 300:
             raise RunManifestError(f"provider 请求失败: batch={batch_id} status={status}")
-        if request["auth_succeeded"] is not True:
+        if not allow_failed_requests and auth_succeeded is not True:
             raise RunManifestError(f"provider 认证失败: batch={batch_id}")
-        if not _same_model_identity(provider["requested_model"], request["returned_model"]):
+        returned_model = request.get("returned_model")
+        if returned_model is None:
+            if not may_omit_returned_model:
+                raise RunManifestError(f"provider returned_model 缺失: batch={batch_id}")
+        elif not isinstance(returned_model, str) or not returned_model:
+            raise RunManifestError(f"provider returned_model 非空字符串: batch={batch_id}")
+        elif not _same_model_identity(provider["requested_model"], returned_model):
             raise RunManifestError(
                 f"provider 返回模型与请求不一致: batch={batch_id} "
-                f"requested={provider['requested_model']!r} returned={request['returned_model']!r}"
+                f"requested={provider['requested_model']!r} returned={returned_model!r}"
             )
-    if not requests:
+    if not requests and not allow_failed_requests:
         raise RunManifestError(f"request manifest.requests 不能为空: {manifest_path}")
     return data
 
@@ -441,7 +506,7 @@ def validate_provider_invariants(
             if case.run_contract.request_manifest_required:
                 raise RunManifestError(f"request manifest 缺失: {path}")
             continue
-        data = load_request_manifest(path)
+        data = load_request_manifest(path, allow_failed_requests=record.is_error)
         provider = data["provider"]
         is_v2 = data["schema_version"] == 2
         provider_identity = (provider["endpoint"], provider["requested_model"])

@@ -299,6 +299,98 @@ def test_provider_invariants_tolerate_partial_manifest_of_error_cell(
         validate_provider_invariants([healthy, drifted], {case.name: case})
 
 
+def test_provider_invariants_tolerate_empty_manifest_only_for_error_cell(
+    tmp_path: Path,
+) -> None:
+    """HTTP 超时前没有成功请求时，错误 cell 可保留空 manifest，健康 cell 不可。"""
+    case = _manifest_case(tmp_path)
+    for repeat, (empty, error_match) in enumerate(
+        [
+            (_request_manifest(), "requests 不能为空"),
+            (_request_manifest_v2(), "requests 必须是非空列表"),
+        ]
+    ):
+        empty["requests"] = []
+        failed = replace(_record(case, tmp_path, "a", repeat, empty), is_error=True)
+        summaries = validate_provider_invariants([failed], {case.name: case})
+        assert summaries[0]["cell_is_error"] is True
+        assert summaries[0]["requests"] == []
+
+        healthy = _record(case, tmp_path, "a", repeat + 10, empty)
+        with pytest.raises(RunManifestError, match=error_match):
+            validate_provider_invariants([healthy], {case.name: case})
+
+
+def test_provider_invariants_tolerate_failed_http_entry_only_for_error_cell(
+    tmp_path: Path,
+) -> None:
+    """非 2xx 响应没有 returned_model 是失败证据，不应否决错误 cell 的整份报告。"""
+    case = _manifest_case(tmp_path)
+    for repeat, failed_http in enumerate([_request_manifest(), _request_manifest_v2()]):
+        request = failed_http["requests"][0]
+        request["status_code"] = 529
+        request.pop("returned_model")
+
+        failed = replace(_record(case, tmp_path, "a", repeat, failed_http), is_error=True)
+        summaries = validate_provider_invariants([failed], {case.name: case})
+        assert summaries[0]["requests"][0]["status_code"] == 529
+        assert summaries[0]["requests"][0]["returned_model"] is None
+
+        healthy = _record(case, tmp_path, "a", repeat + 10, failed_http)
+        with pytest.raises(RunManifestError, match="returned_model"):
+            validate_provider_invariants([healthy], {case.name: case})
+
+
+def test_error_cell_still_requires_returned_model_for_successful_request(
+    tmp_path: Path,
+) -> None:
+    """cell 后续解析失败不能抹掉已成功 HTTP 请求的模型身份完整性。"""
+    case = _manifest_case(tmp_path)
+    repeat = 0
+    for successful in [_request_manifest(), _request_manifest_v2()]:
+        for returned_model in (None, "missing"):
+            request = successful["requests"][0]
+            if returned_model == "missing":
+                request.pop("returned_model", None)
+            else:
+                request["returned_model"] = None
+            record = replace(
+                _record(case, tmp_path, "a", repeat, successful), is_error=True
+            )
+            with pytest.raises(RunManifestError, match="returned_model"):
+                validate_provider_invariants([record], {case.name: case})
+            repeat += 1
+
+
+def test_error_cell_allows_missing_model_after_response_decode_failure(
+    tmp_path: Path,
+) -> None:
+    manifest = _request_manifest_v2()
+    request = manifest["requests"][0]
+    request.pop("returned_model")
+    request["failure_stage"] = "response_decode"
+    path = tmp_path / "request_manifest.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    loaded = load_request_manifest(path, allow_failed_requests=True)
+
+    assert loaded["requests"][0]["failure_stage"] == "response_decode"
+    with pytest.raises(RunManifestError, match="failure_stage"):
+        load_request_manifest(path)
+
+
+def test_error_cell_rejects_boolean_http_status(tmp_path: Path) -> None:
+    """JSON true 不能利用 Python bool 是 int 子类的特性伪装成 HTTP 状态码。"""
+    case = _manifest_case(tmp_path)
+    for repeat, manifest in enumerate([_request_manifest(), _request_manifest_v2()]):
+        request = manifest["requests"][0]
+        request["status_code"] = True
+        request.pop("returned_model")
+        record = replace(_record(case, tmp_path, "a", repeat, manifest), is_error=True)
+        with pytest.raises(RunManifestError, match="status_code 非整数"):
+            validate_provider_invariants([record], {case.name: case})
+
+
 def test_provider_invariants_reject_cell_input_hash_drift(tmp_path: Path) -> None:
     case = _manifest_case(tmp_path)
     record = _record(case, tmp_path, "a", 0, _request_manifest())

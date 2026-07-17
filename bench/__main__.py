@@ -263,7 +263,10 @@ def _run_benchmark_impl(
     log = get_logger()
     case_by_name = {case.name: case for case in selected_cases}
     # 若有 judge-enabled 用例参与，则 judge 标签必须存在，否则 typo 会静默移除质量信号。
-    needs_judge = any(case_by_name[r.case].judge.enabled for r in result.records)
+    needs_judge = any(
+        not record.is_error and case_by_name[record.case].judge.enabled
+        for record in result.records
+    )
     judge_profile = get_profile(registry, config.judge) if needs_judge else registry.get(config.judge)
     total = len(result.records)
 

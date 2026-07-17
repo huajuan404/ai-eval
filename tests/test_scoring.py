@@ -2,19 +2,118 @@
 
 from __future__ import annotations
 
+import json
 import textwrap
 from pathlib import Path
 
 from bench.adapters.base import Adapter, ParsedOutput
 from bench.case import load_case
-from bench.record import RunRecord
+from bench.record import CheckResult, JudgeResult, RunRecord
 from bench.registry import RunnerProfile
 from bench.scoring import (
+    _validate_check_report,
     assemble_judge_prompt,
     gather_contestant_output,
     run_check,
     run_judge,
+    score_record,
 )
+
+
+def test_review_check_report_accepts_reference_and_null_correct() -> None:
+    report = {
+        "schema_version": 1,
+        "passed": True,
+        "summary": {"evaluation_mode": "baseline_snapshot_review"},
+        "items": [
+            {
+                "id": "1",
+                "reference": "true",
+                "actual": "false",
+                "correct": None,
+                "evaluated": True,
+            }
+        ],
+        "errors": [],
+    }
+
+    assert _validate_check_report(
+        report, expected_mode="baseline_snapshot_review"
+    ) is None
+    report["items"][0]["correct"] = False
+    assert "必须为 null" in (
+        _validate_check_report(report, expected_mode="baseline_snapshot_review") or ""
+    )
+
+
+def test_oracle_contract_rejects_self_declared_review_mode() -> None:
+    report = {
+        "schema_version": 1,
+        "passed": True,
+        "summary": {"evaluation_mode": "baseline_snapshot_review"},
+        "items": [
+            {
+                "id": "1",
+                "reference": "true",
+                "actual": "false",
+                "correct": None,
+                "evaluated": True,
+            }
+        ],
+        "errors": [],
+    }
+
+    assert "与 case comparison 合同不一致" in (_validate_check_report(report) or "")
+
+
+def test_run_check_accepts_review_report_end_to_end(tmp_path: Path) -> None:
+    case_dir = _make_case(tmp_path, judge=False)
+    manifest = case_dir / "case.yaml"
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8").replace(
+            "  script: check.sh\n", "  script: check.sh\n  report_file: evaluation.json\n"
+        ),
+        encoding="utf-8",
+    )
+    case = load_case(case_dir)
+    from dataclasses import replace
+    from bench.case import EvaluationPolicy, VariantComparisonSpec
+
+    case = replace(
+        case,
+        evaluation=EvaluationPolicy(
+            role="human_review",
+            generalizes=False,
+            comparison=VariantComparisonSpec(
+                "original", "v4", method="item_value_diff"
+            ),
+            unit_of_analysis="item",
+        ),
+    )
+    report = {
+        "schema_version": 1,
+        "passed": True,
+        "summary": {"evaluation_mode": "baseline_snapshot_review"},
+        "items": [
+            {
+                "id": "1",
+                "reference": "true",
+                "actual": "false",
+                "correct": None,
+                "evaluated": True,
+            }
+        ],
+        "errors": [],
+    }
+
+    def fake_run(command, cwd, env):
+        Path(cwd, "evaluation.json").write_text(json.dumps(report), encoding="utf-8")
+        return "review", "", 0
+
+    result = run_check(case, tmp_path, run_fn=fake_run)
+
+    assert result.ran and result.passed is True
+    assert result.report["items"][0]["correct"] is None
 
 
 def _make_case(tmp_path: Path, *, check: bool = True, judge: bool = True) -> Path:
@@ -183,3 +282,32 @@ def test_run_judge_disabled(tmp_path: Path) -> None:
         run_fn=lambda c, w, e: ("{}", "", 0),
     )
     assert res.ran is False
+
+
+def test_score_record_skips_scoring_after_runner_error(tmp_path: Path) -> None:
+    case = load_case(_make_case(tmp_path))
+    stale = RunRecord(
+        case="case",
+        runner_label="failed",
+        launcher_type="command",
+        is_error=True,
+        check=CheckResult(ran=True, passed=False, detail="stale check"),
+        judge=JudgeResult(ran=True, model="stale", score=0),
+        artifacts_dir=str(tmp_path / "missing-artifacts"),
+    )
+
+    def must_not_run(*args, **kwargs):
+        raise AssertionError("执行失败后不应调用 check/judge")
+
+    scored = score_record(
+        case,
+        stale,
+        RunnerProfile("judge", "command", template="judge"),
+        check_run_fn=must_not_run,
+        judge_run_fn=must_not_run,
+    )
+
+    assert scored.check.ran is False
+    assert scored.check.passed is None
+    assert "执行失败" in scored.check.detail
+    assert scored.judge is None

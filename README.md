@@ -173,6 +173,9 @@ runner 使用统一注册表，不区分公开或私有；私有性只属于 cas
 每次运行结束自动在 `runs/<run_id>/report.html` 生成**单文件、零外部依赖**的交互报告，
 浏览器直接打开即可（与计分卡同一数据源，只做渲染）：
 
+> `scorecard.md` 是默认可分享摘要；`report.html` 可能包含任务输入与模型输出正文，
+> 必须按 case 的保密级别保存，不应未经复核直接外发。
+
 - **汇总层**：任务完成率总览矩阵（runner@variant × case 色块）+ 每用例四维表 + 每维赢家；
 - **Prompt 轴**：variant 配对表，fixed / regressed 逐 item 列出；
 - **数据轴**：item × runner@variant 通过网格，哪类输入拖垮了哪个组合一目了然；
@@ -320,7 +323,8 @@ bash case-gen/install.sh
 ## 安全
 
 - 子进程用最小环境，剔除无关凭证（每个 launcher 只放行自己的 auth）。
-- 原始输出、裁判理由、check 详情进入可分享产物前脱敏。
+- 凭证类敏感信息进入报告或计分卡前脱敏；`report.html` 仍可能包含业务正文，按 case 保密级别保存。
+- `scorecard.md` 是默认可分享摘要；`report.html`、`cells/`、`run.json` 与 `artifacts/` 不应未经复核直接外发。
 - 运行产物 `runs/` 与计分卡副本 `scorecards/` 已 gitignore（历史遗留的 `cases/*/output/` 同样忽略，仅只读保留）。
 
 ## 已知边界
