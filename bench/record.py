@@ -111,6 +111,7 @@ class RunRecord:
     run_id: str = "legacy"
     variant_label: str = "default"
     prompt_template_sha256: str = ""
+    run_context_sha256: str = ""
     input_manifest_sha256: str = ""
     repeat_index: int = 0
     started_at: str = ""
@@ -123,6 +124,9 @@ class RunRecord:
     judge: JudgeResult | None = None
     human_note: str = ""
     artifacts_dir: str = ""
+    request_manifest_file: str = ""
+    request_manifest_sha256: str = ""
+    response_sha256: dict[str, str] = field(default_factory=dict)
 
     def with_usage(self, usage: Usage | None) -> "RunRecord":
         return replace(self, usage=usage)
@@ -156,6 +160,7 @@ class RunRecord:
             run_id=data.get("run_id", "legacy"),
             variant_label=data.get("variant_label", "default"),
             prompt_template_sha256=data.get("prompt_template_sha256", ""),
+            run_context_sha256=data.get("run_context_sha256", ""),
             input_manifest_sha256=data.get("input_manifest_sha256", ""),
             repeat_index=data.get("repeat_index", 0),
             started_at=data.get("started_at", ""),
@@ -168,6 +173,9 @@ class RunRecord:
             judge=JudgeResult(**judge) if judge is not None else None,
             human_note=data.get("human_note", ""),
             artifacts_dir=data.get("artifacts_dir", ""),
+            request_manifest_file=data.get("request_manifest_file", ""),
+            request_manifest_sha256=data.get("request_manifest_sha256", ""),
+            response_sha256=data.get("response_sha256") or {},
         )
 
     @classmethod

@@ -201,6 +201,37 @@ def test_comparison_unavailable_when_one_variant_runs_fail(tmp_path: Path) -> No
     assert "original 有 1/1 次运行失败" in markdown
 
 
+def test_comparison_unavailable_when_semantic_projection_is_incomplete(
+    tmp_path: Path,
+) -> None:
+    case = _case(tmp_path)
+    original = _record(case, "original", 0, False)
+    incomplete_report = {
+        **original.check.report,
+        "items": [
+            {
+                "id": "1",
+                "expected": "false",
+                "actual": "unavailable",
+                "correct": False,
+                "evaluated": False,
+            }
+        ],
+    }
+    original = replace(
+        original,
+        check=replace(original.check, report=incomplete_report),
+    )
+
+    markdown = build_scorecard(
+        MatrixResult(records=[original, _record(case, "v4", 0, True)]),
+        cases={case.name: case},
+    )
+
+    assert "paired comparison unavailable" in markdown
+    assert "语义投影未覆盖" in markdown
+
+
 def test_scorecard_marks_single_variant_comparison_unavailable(tmp_path: Path) -> None:
     case = _case(tmp_path)
     markdown = build_scorecard(
@@ -208,3 +239,171 @@ def test_scorecard_marks_single_variant_comparison_unavailable(tmp_path: Path) -
         cases={case.name: case},
     )
     assert "paired comparison unavailable" in markdown
+
+
+def test_value_diff_comparison_does_not_claim_correctness(tmp_path: Path) -> None:
+    case = _case(tmp_path)
+    review_case = replace(
+        case,
+        evaluation=EvaluationPolicy(
+            role="human_review",
+            generalizes=False,
+            comparison=VariantComparisonSpec(
+                "original", "v4", method="item_value_diff"
+            ),
+            unit_of_analysis="item",
+            independent_unit="batch",
+        ),
+    )
+
+    markdown = build_scorecard(
+        MatrixResult(
+            records=[
+                _record(review_case, "original", 0, False),
+                _record(review_case, "v4", 0, True),
+            ]
+        ),
+        cases={review_case.name: review_case},
+    )
+
+    assert "分歧=1/1" in markdown
+    assert "数据库 baseline 快照仅作分层与参照，不是真值" in markdown
+    assert "fixed=" not in markdown and "regressed=" not in markdown
+
+
+def test_value_diff_pairs_values_by_repeat_index_not_record_order(tmp_path: Path) -> None:
+    case = _case(tmp_path)
+    review_case = replace(
+        case,
+        evaluation=EvaluationPolicy(
+            role="human_review",
+            generalizes=False,
+            comparison=VariantComparisonSpec(
+                "original", "v4", method="item_value_diff"
+            ),
+            unit_of_analysis="item",
+            independent_unit="batch",
+        ),
+    )
+    records = [
+        _record(review_case, "original", 0, True),
+        _record(review_case, "original", 1, False),
+        _record(review_case, "v4", 1, False),
+        _record(review_case, "v4", 0, True),
+    ]
+
+    markdown = build_scorecard(
+        MatrixResult(records=records), cases={review_case.name: review_case}
+    )
+
+    assert "分歧=0/1" in markdown
+
+
+def test_value_diff_keeps_comparable_items_when_one_item_is_unavailable(
+    tmp_path: Path,
+) -> None:
+    case = _case(tmp_path)
+    review_case = replace(
+        case,
+        evaluation=EvaluationPolicy(
+            role="human_review",
+            generalizes=False,
+            comparison=VariantComparisonSpec(
+                "original", "v4", method="item_value_diff"
+            ),
+            unit_of_analysis="item",
+            independent_unit="batch",
+        ),
+    )
+    original = _record(review_case, "original", 0, True)
+    candidate = _record(review_case, "v4", 0, False)
+    original_items = [
+        {"id": "1", "reference": "false", "actual": "false", "correct": None, "evaluated": True},
+        {"id": "2", "reference": "true", "actual": "true", "correct": None, "evaluated": True},
+    ]
+    candidate_items = [
+        {"id": "1", "reference": "false", "actual": "true", "correct": None, "evaluated": True},
+        {"id": "2", "reference": "true", "actual": "unavailable", "correct": None, "evaluated": False},
+    ]
+    original = replace(
+        original, check=replace(original.check, report={**original.check.report, "items": original_items})
+    )
+    candidate = replace(
+        candidate, check=replace(candidate.check, report={**candidate.check.report, "items": candidate_items})
+    )
+
+    markdown = build_scorecard(
+        MatrixResult(records=[original, candidate]), cases={review_case.name: review_case}
+    )
+
+    assert "分歧=1/1；不可比较=1" in markdown
+
+
+def test_value_diff_uses_evaluated_flag_and_scrubs_markdown_cells(
+    tmp_path: Path,
+) -> None:
+    case = _case(tmp_path)
+    review_case = replace(
+        case,
+        evaluation=EvaluationPolicy(
+            role="human_review",
+            generalizes=False,
+            comparison=VariantComparisonSpec(
+                "original", "v4", method="item_value_diff"
+            ),
+            unit_of_analysis="item",
+            independent_unit="batch",
+        ),
+    )
+    original = _record(review_case, "original", 0, True)
+    candidate = _record(review_case, "v4", 0, False)
+    original_items = [
+        {
+            "id": "1",
+            "reference": "false",
+            "actual": "false",
+            "correct": None,
+            "evaluated": True,
+        },
+        {
+            "id": "2",
+            "reference": "api_key=super-secret-value|line\nnext",
+            "actual": "unknown",
+            "correct": None,
+            "evaluated": False,
+        },
+    ]
+    candidate_items = [
+        {
+            "id": "1",
+            "reference": "false",
+            "actual": "</code><img src=x onerror=alert(1)>|true\nnext",
+            "correct": None,
+            "evaluated": True,
+        },
+        {
+            "id": "2",
+            "reference": "api_key=super-secret-value|line\nnext",
+            "actual": "different",
+            "correct": None,
+            "evaluated": False,
+        },
+    ]
+    original = replace(
+        original,
+        check=replace(original.check, report={**original.check.report, "items": original_items}),
+    )
+    candidate = replace(
+        candidate,
+        check=replace(candidate.check, report={**candidate.check.report, "items": candidate_items}),
+    )
+
+    markdown = build_scorecard(
+        MatrixResult(records=[original, candidate]), cases={review_case.name: review_case}
+    )
+
+    assert "分歧=1/1；不可比较=1" in markdown
+    assert "super-secret-value" not in markdown
+    assert "<img" not in markdown
+    assert "Baseline 快照" not in markdown
+    assert "逐条业务值仅在" in markdown

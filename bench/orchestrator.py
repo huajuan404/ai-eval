@@ -227,6 +227,9 @@ def _execute_cell(
         repeat_index=repeat_index,
         started_at=now(),
     )
+    run_context_sha256 = ""
+    request_manifest_sha256 = ""
+    response_sha256: dict[str, str] = {}
     with isolated_workdir(case) as wd:
         # command 适配器约定从 workdir/PROMPT.txt 读 prompt
         (wd / PROMPT_FILENAME).write_text(prompt, encoding="utf-8")
@@ -307,6 +310,35 @@ def _execute_cell(
         # 误伤 commit hash / 答案 hash）。raw.txt 仍是脱敏的（给人类看 / 分享用）。
         final_text = adapter.extract_final_text(stdout) if not failed else ""
         (artifacts_dir / "OUTPUT.txt").write_text(final_text, encoding="utf-8")
+        copied_run_context = artifacts_dir / "RUN_CONTEXT.json"
+        try:
+            run_context_sha256 = sha256_bytes(copied_run_context.read_bytes())
+        except OSError as exc:
+            is_error = True
+            stderr = (stderr + "\n" if stderr else "") + f"{type(exc).__name__}: {exc}"
+        if request_manifest:
+            copied_request_manifest = artifacts_dir / request_manifest
+            if copied_request_manifest.is_file():
+                try:
+                    request_manifest_sha256 = sha256_bytes(
+                        copied_request_manifest.read_bytes()
+                    )
+                except OSError as exc:
+                    is_error = True
+                    stderr = (stderr + "\n" if stderr else "") + (
+                        f"{type(exc).__name__}: {exc}"
+                    )
+        response_dir = artifacts_dir / "responses"
+        if response_dir.is_dir():
+            try:
+                response_sha256 = {
+                    path.name: sha256_bytes(path.read_bytes())
+                    for path in sorted(response_dir.glob("*.json"))
+                }
+            except OSError as exc:
+                response_sha256 = {}
+                is_error = True
+                stderr = (stderr + "\n" if stderr else "") + f"{type(exc).__name__}: {exc}"
         (cell_dir / "raw.txt").write_text(
             scrub_text(stdout) + ("\n--- stderr ---\n" + scrub_text(stderr) if stderr else ""),
             encoding="utf-8",
@@ -320,6 +352,10 @@ def _execute_cell(
         usage=usage,
         agentic=Agentic(num_turns=num_turns, files_changed=files_changed),
         artifacts_dir=str(artifacts_dir),
+        run_context_sha256=run_context_sha256,
+        request_manifest_file=request_manifest or "",
+        request_manifest_sha256=request_manifest_sha256,
+        response_sha256=response_sha256,
     )
     (cell_dir / "run.json").write_text(record.to_json(), encoding="utf-8")
     return record

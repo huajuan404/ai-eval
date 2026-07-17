@@ -81,7 +81,13 @@ def run_check(
             passed=False,
             detail=scrub_truncate(f"{detail}\n结构化 check report 无法解析: {exc}", DETAIL_LIMIT),
         )
-    error = _validate_check_report(report)
+    comparison = case.evaluation.comparison
+    expected_mode = (
+        "baseline_snapshot_review"
+        if comparison is not None and comparison.method == "item_value_diff"
+        else "oracle_exact_match"
+    )
+    error = _validate_check_report(report, expected_mode=expected_mode)
     if error:
         return CheckResult(
             ran=True,
@@ -103,7 +109,9 @@ def run_check(
     return CheckResult(ran=True, passed=report_passed, detail=detail, report=report)
 
 
-def _validate_check_report(report: object) -> str | None:
+def _validate_check_report(
+    report: object, *, expected_mode: str = "oracle_exact_match"
+) -> str | None:
     if not isinstance(report, dict):
         return "顶层必须是映射"
     if report.get("schema_version") != 1:
@@ -117,11 +125,24 @@ def _validate_check_report(report: object) -> str | None:
         return "items 必须是列表"
     if not isinstance(report.get("errors"), list):
         return "errors 必须是列表"
+    evaluation_mode = report["summary"].get("evaluation_mode", "oracle_exact_match")
+    if evaluation_mode not in {"oracle_exact_match", "baseline_snapshot_review"}:
+        return f"summary.evaluation_mode 不支持: {evaluation_mode!r}"
+    if evaluation_mode != expected_mode:
+        return (
+            "summary.evaluation_mode 与 case comparison 合同不一致: "
+            f"expected={expected_mode!r} actual={evaluation_mode!r}"
+        )
+    review_mode = evaluation_mode == "baseline_snapshot_review"
     seen: set[str] = set()
     for index, item in enumerate(items):
         if not isinstance(item, dict):
             return f"items[{index}] 必须是映射"
-        required = ("id", "expected", "actual", "correct")
+        required = (
+            ("id", "reference", "actual", "correct", "evaluated")
+            if review_mode
+            else ("id", "expected", "actual", "correct")
+        )
         missing = [key for key in required if key not in item]
         if missing:
             return f"items[{index}] 缺字段 {missing}"
@@ -129,8 +150,13 @@ def _validate_check_report(report: object) -> str | None:
         if item_id in seen:
             return f"items id 重复: {item_id}"
         seen.add(item_id)
-        if not isinstance(item["correct"], bool):
+        if review_mode:
+            if item["correct"] is not None:
+                return f"items[{index}].correct 在 baseline_snapshot_review 中必须为 null"
+        elif not isinstance(item["correct"], bool):
             return f"items[{index}].correct 必须是 boolean"
+        if "evaluated" in item and not isinstance(item["evaluated"], bool):
+            return f"items[{index}].evaluated 必须是 boolean"
         if "slices" in item and not isinstance(item["slices"], dict):
             return f"items[{index}].slices 必须是映射"
     return None
@@ -256,6 +282,10 @@ def score_record(
     adapter_factory: Callable[[RunnerProfile], object] = get_adapter,
 ) -> RunRecord:
     """对一条 record 跑 check + judge，返回填充判分结果的新 record。"""
+    if record.is_error:
+        return record.with_check(
+            CheckResult(ran=False, detail="runner 执行失败，跳过 check / judge")
+        ).with_judge(None)
     check = run_check(case, record.artifacts_dir or case.directory, run_fn=check_run_fn)
     record = record.with_check(check)
     if case.judge.enabled and judge_profile is not None:

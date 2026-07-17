@@ -486,9 +486,10 @@ def _parse_evaluation(
             method = "item_exact_match"
             baseline = comparison_map.get("baseline_variant")
             candidate = comparison_map.get("candidate_variant")
-        if method != "item_exact_match":
+        if method not in {"item_exact_match", "item_value_diff"}:
             raise CaseError(
-                f"用例 '{name}' 的 comparison.method 当前仅支持 item_exact_match。"
+                f"用例 '{name}' 的 comparison.method 当前仅支持 "
+                "item_exact_match 或 item_value_diff。"
             )
         if not isinstance(baseline, str) or not isinstance(candidate, str):
             raise CaseError(f"用例 '{name}' 的 comparison 必须声明 baseline/candidate。")
@@ -528,7 +529,7 @@ def _parse_evaluation(
             )
         if unit.strip() != "item":
             raise CaseError(
-                f"用例 '{name}' 的 item_exact_match comparison 要求 unit_of_analysis=item。"
+                f"用例 '{name}' 的 item comparison 要求 unit_of_analysis=item。"
             )
         if role in {"calibration", "synthetic_diagnostic"} and generalizes:
             raise CaseError(
@@ -707,7 +708,7 @@ def load_case(case_dir: str | Path) -> Case:
         check.type != "script" or not check.report_file
     ):
         raise CaseError(
-            f"用例 '{name}' 的 item_exact_match comparison 必须使用结构化 script check。"
+            f"用例 '{name}' 的 item comparison 必须使用结构化 script check。"
         )
     if schema_version == 2 and check.type == "none" and not (
         judge.enabled and judge.rubric

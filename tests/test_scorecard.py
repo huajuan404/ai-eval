@@ -65,6 +65,7 @@ def _rec(
     judge_reasoning: str = "",
     files: int = 1,
     repeat_index: int = 0,
+    is_error: bool = False,
 ) -> RunRecord:
     return RunRecord(
         case=case,
@@ -72,6 +73,7 @@ def _rec(
         launcher_type=label,
         runner_model=model,
         repeat_index=repeat_index,
+        is_error=is_error,
         duration_ms=duration,
         usage=usage,
         agentic=Agentic(files_changed=files),
@@ -82,7 +84,7 @@ def _rec(
     )
 
 
-def _mk_reasoning_case(root, name="t-1"):
+def _mk_reasoning_case(root, name="t-1", *, check_only=False):
     """建一个 reasoning 用例（task.md + input/ + case.yaml），供任务说明卡测试。"""
     from bench.case import load_case
 
@@ -95,12 +97,22 @@ def _mk_reasoning_case(root, name="t-1"):
     (d / "input" / "rules.txt").write_text("rules", encoding="utf-8")
     (d / "input" / "ticket.json").write_text("{}", encoding="utf-8")
     (d / "prompts" / "rubric.md").write_text("rubric", encoding="utf-8")
+    if check_only:
+        check = d / "check.sh"
+        check.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+        check.chmod(0o755)
+        scoring = "check: {type: script, script: check.sh}\njudge: {enabled: false}\n"
+    else:
+        scoring = (
+            "check: {type: none}\n"
+            "judge: {enabled: true, rubric_file: prompts/rubric.md, "
+            "dimensions: [correctness, evidence]}\n"
+            "expected: {max_score: 20, passing_threshold: 14}\n"
+        )
     (d / "case.yaml").write_text(
         f"name: {name}\nclass: reasoning\n"
         "task: {type: prompt, prompt_file: prompts/task.md}\n"
-        "check: {type: none}\n"
-        "judge: {enabled: true, rubric_file: prompts/rubric.md, dimensions: [correctness, evidence]}\n"
-        "expected: {max_score: 20, passing_threshold: 14}\n",
+        + scoring,
         encoding="utf-8",
     )
     return load_case(str(d))
@@ -114,9 +126,42 @@ def test_scorecard_task_card_renders(tmp_path) -> None:
     assert "工单线上问题判定" in md                       # 标题
     assert "你是工单分析员" in md                          # 一句话简介
     assert "`rules.txt`" in md and "`ticket.json`" in md   # 输入资产
+    assert "| 期望产出 | 任务定义指定的结果 |" in md       # schema 未声明时不臆造产物形态
     assert "judge 4 维" not in md and "judge 2 维" in md    # 判分维度数
     assert "完成度=judge ≥ 14/20" in md                    # 完成度判据
     assert "完整输出" in md and "OUTPUT.txt" in md          # 输出指引
+
+
+def test_scorecard_task_card_does_not_invent_check_only_output_contract(tmp_path) -> None:
+    case = _mk_reasoning_case(tmp_path, check_only=True)
+    rec = _rec(case.name, "minimax", passed=True)
+    md = build_scorecard(MatrixResult(records=[rec]), cases={case.name: case})
+    assert "| 期望产出 | 任务定义指定的结果 |" in md
+    assert "| 判分 | 确定性 check（`check.sh`）；完成度=check 通过 |" in md
+    assert "由 judge 按 rubric 评分" not in md
+
+
+def test_scorecard_uses_evaluated_checks_as_check_denominator(tmp_path) -> None:
+    case = _mk_reasoning_case(tmp_path, check_only=True)
+    failed = _rec(case.name, "minimax", passed=False, is_error=True, repeat_index=0)
+    healthy = _rec(case.name, "minimax", passed=True, repeat_index=1)
+    md = build_scorecard(
+        MatrixResult(records=[failed, healthy]),
+        cases={case.name: case},
+    )
+
+    assert "| 执行成功 |" in md
+    assert "| 2 | 1/2 | 1/2 | 1/1 |" in md
+
+
+def test_scorecard_does_not_reward_fast_execution_failure() -> None:
+    failed = _rec("seed", "failed", duration=10, passed=False, is_error=True)
+    healthy = _rec("seed", "healthy", duration=100, passed=True)
+    md = build_scorecard(MatrixResult(records=[failed, healthy]))
+
+    assert "质量=healthy@default" in md
+    assert "速度=healthy@default" in md
+    assert "速度=failed@default" not in md
 
 
 def test_scorecard_no_card_without_cases() -> None:
@@ -178,10 +223,24 @@ def test_scorecard_skipped_cell_na() -> None:
 
 def test_scorecard_scrubs_judge_reasoning() -> None:
     records = [
-        _rec("seed", "codex", judge_score=8, judge_reasoning="leaked sk-abcdefghij0123456789 token")
+        _rec(
+            "seed",
+            "codex</code><img src=x onerror=alert(1)>",
+            model="api_key=model-secret",
+            judge_score=8,
+            judge_reasoning=(
+                "</details><img src=x onerror=alert(1)>\n"
+                "leaked sk-abcdefghij0123456789 token"
+            ),
+        )
     ]
-    md = build_scorecard(MatrixResult(records=records))
+    md = build_scorecard(
+        MatrixResult(records=records), judge_label="api_key=judge-secret"
+    )
     assert "sk-abcdefghij0123456789" not in md
+    assert "model-secret" not in md and "judge-secret" not in md
+    assert "<img" not in md
+    assert "&lt;/details&gt;&lt;img" in md
     assert "***REDACTED***" in md
 
 

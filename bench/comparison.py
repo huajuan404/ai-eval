@@ -21,6 +21,9 @@ class ItemComparison:
     baseline_disagreement: float
     candidate_disagreement: float
     status: str
+    baseline_value: str = ""
+    candidate_value: str = ""
+    reference_value: str = ""
 
 
 @dataclass(frozen=True)
@@ -34,6 +37,8 @@ class RunnerComparison:
     repeats: int = 0
     fixed: int = 0
     regressed: int = 0
+    changed: int = 0
+    unavailable_items: int = 0
     rows: tuple[ItemComparison, ...] = ()
     unavailable_reason: str | None = None
 
@@ -43,11 +48,11 @@ def validate_comparison_contract(case: Case) -> None:
     spec = case.evaluation.comparison
     if spec is None:
         return
-    if spec.method != "item_exact_match":
+    if spec.method not in {"item_exact_match", "item_value_diff"}:
         raise ComparisonError(f"不支持的 variant comparison method: {spec.method}")
     if case.check.type != "script" or not case.check.report_file:
         raise ComparisonError(
-            f"item_exact_match 要求结构化 script check: case={case.name}"
+            f"item comparison 要求结构化 script check: case={case.name}"
         )
     if case.evaluation.role is None or case.evaluation.generalizes is None:
         raise ComparisonError(
@@ -55,7 +60,7 @@ def validate_comparison_contract(case: Case) -> None:
         )
     if case.evaluation.unit_of_analysis != "item":
         raise ComparisonError(
-            f"item_exact_match 要求 unit_of_analysis=item: case={case.name}"
+            f"item comparison 要求 unit_of_analysis=item: case={case.name}"
         )
     if (
         case.evaluation.role in {"calibration", "synthetic_diagnostic"}
@@ -78,8 +83,14 @@ def compare_case_variants(
     results: list[RunnerComparison] = []
     runners = sorted({runner for _, runner in case_records})
     for runner in runners:
-        baseline_records = case_records.get((spec.baseline, runner), [])
-        candidate_records = case_records.get((spec.candidate, runner), [])
+        baseline_records = sorted(
+            case_records.get((spec.baseline, runner), []),
+            key=lambda record: record.repeat_index,
+        )
+        candidate_records = sorted(
+            case_records.get((spec.candidate, runner), []),
+            key=lambda record: record.repeat_index,
+        )
         if not baseline_records or not candidate_records:
             results.append(
                 RunnerComparison(
@@ -127,6 +138,32 @@ def compare_case_variants(
             raise ComparisonError(
                 f"paired delta 缺少结构化 check report: case={case.name} runner={runner}"
             )
+        unevaluated_notes = []
+        for label, records in (
+            (spec.baseline, baseline_records),
+            (spec.candidate, candidate_records),
+        ):
+            missing = sum(
+                1
+                for record in records
+                for item in (record.check.report.get("items") or [])
+                if item.get("evaluated") is False
+            )
+            if missing:
+                unevaluated_notes.append(f"{label} 语义投影未覆盖 {missing} 个 item/repeat")
+        if unevaluated_notes and spec.method != "item_value_diff":
+            results.append(
+                RunnerComparison(
+                    runner=runner,
+                    baseline=spec.baseline,
+                    candidate=spec.candidate,
+                    method=spec.method,
+                    unit_of_analysis=case.evaluation.unit_of_analysis,
+                    independent_unit=case.evaluation.independent_unit,
+                    unavailable_reason="；".join(unevaluated_notes),
+                )
+            )
+            continue
         baseline_repeats = {record.repeat_index for record in baseline_records}
         candidate_repeats = {record.repeat_index for record in candidate_records}
         if len(baseline_repeats) != len(baseline_records) or len(
@@ -172,6 +209,8 @@ def compare_case_variants(
         rows: list[ItemComparison] = []
         fixed = 0
         regressed = 0
+        changed = 0
+        unavailable_items = 0
         repeats = len(baseline_records)
         for item_id in sorted(baseline_ids):
             baseline_items = by_variant[spec.baseline][item_id]
@@ -181,8 +220,6 @@ def compare_case_variants(
                     f"paired delta item repeat 缺失: case={case.name} "
                     f"runner={runner} id={item_id}"
                 )
-            baseline_correct = sum(1 for item in baseline_items if item["correct"])
-            candidate_correct = sum(1 for item in candidate_items if item["correct"])
             baseline_values = [str(item["actual"]) for item in baseline_items]
             candidate_values = [str(item["actual"]) for item in candidate_items]
             baseline_disagreement = 1 - max(
@@ -191,13 +228,35 @@ def compare_case_variants(
             candidate_disagreement = 1 - max(
                 candidate_values.count(value) for value in set(candidate_values)
             ) / repeats
-            status = "unchanged"
-            if baseline_correct != repeats and candidate_correct == repeats:
-                status = "fixed"
-                fixed += 1
-            elif baseline_correct == repeats and candidate_correct != repeats:
-                status = "regressed"
-                regressed += 1
+            baseline_value = baseline_values[0] if len(set(baseline_values)) == 1 else "mixed"
+            candidate_value = candidate_values[0] if len(set(candidate_values)) == 1 else "mixed"
+            references = {
+                str(item.get("reference", item.get("expected", "")))
+                for item in baseline_items + candidate_items
+                if item.get("reference", item.get("expected")) is not None
+            }
+            reference_value = next(iter(references)) if len(references) == 1 else ""
+            if spec.method == "item_value_diff":
+                baseline_correct = candidate_correct = 0
+                if any(
+                    item.get("evaluated") is False
+                    for item in baseline_items + candidate_items
+                ):
+                    status = "unavailable"
+                    unavailable_items += 1
+                else:
+                    status = "changed" if baseline_values != candidate_values else "same"
+                    changed += int(status == "changed")
+            else:
+                baseline_correct = sum(1 for item in baseline_items if item["correct"])
+                candidate_correct = sum(1 for item in candidate_items if item["correct"])
+                status = "unchanged"
+                if baseline_correct != repeats and candidate_correct == repeats:
+                    status = "fixed"
+                    fixed += 1
+                elif baseline_correct == repeats and candidate_correct != repeats:
+                    status = "regressed"
+                    regressed += 1
             rows.append(
                 ItemComparison(
                     item_id=item_id,
@@ -206,6 +265,9 @@ def compare_case_variants(
                     baseline_disagreement=baseline_disagreement,
                     candidate_disagreement=candidate_disagreement,
                     status=status,
+                    baseline_value=baseline_value,
+                    candidate_value=candidate_value,
+                    reference_value=reference_value,
                 )
             )
         results.append(
@@ -219,6 +281,8 @@ def compare_case_variants(
                 repeats=repeats,
                 fixed=fixed,
                 regressed=regressed,
+                changed=changed,
+                unavailable_items=unavailable_items,
                 rows=tuple(rows),
             )
         )
