@@ -47,10 +47,13 @@ runners:
     config: 9   # 与 deepseek-v4(pro/config 1) 同 endpoint+token，仅 MODEL 不同（flash）
   glm-5.1:
     launcher: c
-    config: 3
+    config: 6   # 本机 CONFIG_6 = open.bigmodel.cn/anthropic, MODEL=glm-5.1
   glm-5.2:
     launcher: c
     config: 2
+  kimi-k3:
+    launcher: c
+    config: 3   # 本机 CONFIG_3 = api.kimi.com/coding, MODEL=k3[1m]
   agnes-2.0-flash:
     launcher: c
     config: 4   # config.env 的 CONFIG_4：apihub.agnes-ai.com/v1，PROTOCOL=openai（本机 c 脚本做 openai→claude 转换）

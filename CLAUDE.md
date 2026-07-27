@@ -51,7 +51,7 @@
 | 8 | `qwen-0.5b-weak` |
 | 9 | `deepseek-v4-flash` |
 
-`runners.yaml` 用 `c` 类档案引用这些编号（如 `glm-5.1 → config: 3`）。`minimax-m3-c0-direct`
+`runners.yaml` 用 `c` 类档案引用这些编号（如 `glm-5.1 → config: 6`）。`minimax-m3-c0-direct`
 是复用 lane 0 配置的 `command` runner，不改变 `minimax-m3` 的 Agent 路径语义。各编号对应的端点、凭证和
 本机搭建都在 `c` 切换器的 config.env 里，属本机环境，不在本仓库记录（编号 8 还需本机额外服务，跨机不可移植）。
 
