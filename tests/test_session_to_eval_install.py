@@ -1,4 +1,4 @@
-"""U1：case-gen 安装与配置契约（精简：配置字段 + install.sh 软链行为）。"""
+"""U1：session-to-eval skill 安装与配置契约（精简：配置字段 + install.sh 软链行为）。"""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import subprocess
 import tomllib
 from pathlib import Path
 
-CASE_GEN = Path(__file__).resolve().parent.parent / "case-gen"
-INSTALL_SH = CASE_GEN / "install.sh"
+SKILL_DIR = Path(__file__).resolve().parent.parent / ".claude" / "skills" / "session-to-eval"
+INSTALL_SH = SKILL_DIR / "install.sh"
 SKILL_NAME = "session-to-eval"
 
 
@@ -23,7 +23,7 @@ def _run_install(skills_dir: Path) -> subprocess.CompletedProcess:
 
 
 def test_config_example_has_ai_eval_path():
-    data = tomllib.loads((CASE_GEN / "config.example.toml").read_text(encoding="utf-8"))
+    data = tomllib.loads((SKILL_DIR / "config.example.toml").read_text(encoding="utf-8"))
     assert "ai_eval_path" in data
 
 
@@ -33,7 +33,7 @@ def test_install_creates_symlink(tmp_path):
     assert proc.returncode == 0, proc.stderr
     link = skills / SKILL_NAME
     assert link.is_symlink()
-    assert link.resolve() == CASE_GEN.resolve()
+    assert link.resolve() == SKILL_DIR.resolve()
 
 
 def test_install_idempotent(tmp_path):

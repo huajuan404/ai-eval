@@ -11,6 +11,8 @@
 
 # 工具目录
 .serena/
+.omx/
+.tmp/
 
 # 运行产物（按 runner 标签分目录的实际输出，含原始模型输出）
 cases/*/output/*/
@@ -34,7 +36,7 @@ runs/
 cases/2026-06-03-001-git-bisect-bug-hunt/input/repo/
 
 # session-to-eval skill 本机配置（含绝对路径，不入库；用 config.example.toml 作模板）
-case-gen/config.toml
+.claude/skills/session-to-eval/config.toml
 
 # 私有 case 路径配置（本机绝对路径，不入库；用 private.env.example 作模板）。
 # 私有 case 本体放在公开仓**之外**（见 private.env 的 AI_EVAL_PRIVATE_CASES），故无需在此忽略 case 目录。
@@ -47,6 +49,3 @@ cases/_private/
 _schema/
 rescore.py
 save.txt
-
-# 旧安装布局残留：指向 case-gen 自身的自引用软链，本地保留不入库
-case-gen/session-to-eval

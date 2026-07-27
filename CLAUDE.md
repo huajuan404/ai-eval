@@ -44,9 +44,10 @@
 | 0 | `minimax-m3` |
 | 1 | `deepseek-v4` |
 | 2 | `glm-5.2` |
-| 3 | `glm-5.1` |
+| 3 | `kimi-k3` |
 | 4 | `agnes-2.0-flash` |
 | 5 | `minimax-m2.7` |
+| 6 | `glm-5.1` |
 | 8 | `qwen-0.5b-weak` |
 | 9 | `deepseek-v4-flash` |
 
@@ -54,7 +55,7 @@
 是复用 lane 0 配置的 `command` runner，不改变 `minimax-m3` 的 Agent 路径语义。各编号对应的端点、凭证和
 本机搭建都在 `c` 切换器的 config.env 里，属本机环境，不在本仓库记录（编号 8 还需本机额外服务，跨机不可移植）。
 
-## case-gen/（从 session 蒸馏 case 的可移植 skill）
+## .claude/skills/session-to-eval/（从 session 蒸馏 case 的可移植 skill）
 
 独立子系统，两种入口：**倒出模式**（"把刚才的任务抽成 eval case"，蒸馏当前 session）与**检索模式**
 （给一句意图描述，自动在当前 session + 本项目历史 session 双端检索命中任务，缺输入/真值时挖项目 CLAUDE.md/README/代码补全，
@@ -69,8 +70,8 @@
   `scan_all_projects_for_terms` 跨项目候选发现（D1 线索）。语义精排与缺口挖掘由 SKILL.md 交 LLM 做。
 - `scripts/validate_case.py` — 路径信任校验 + `bench.case.load_case` 静态加载 + 廉价断言；区分 `valid`（能加载）与 `complete`（真值已补）。
 - `SKILL.md` — 触发描述（倒出 + 检索双入口）+ 内联 case 契约 + 四类生成模板 + 完整编排 + 检索模式 R1–R7。
-- `config.toml`（gitignore，从 `config.example.toml` 复制）记 `ai_eval_path`；`bash install.sh` 双端软链进
-  `~/.claude/skills` 与 `~/.codex/skills`，源码原地生效。
+- `config.toml`（gitignore，从 `config.example.toml` 复制）记 `ai_eval_path`；`bash install.sh` 三端软链进
+  `~/.claude/skills`、`~/.codex/skills` 与 `~/.agents/skills`，源码原地生效。
 - 诚实边界：ground-truth 与大工作集多需外部 → 默认产 setup.sh/expected 桩 + TODO；校验门只证明能加载，**不**证明能跑出有意义的分。
 
 ## 开发约定
@@ -78,13 +79,13 @@
 - Python 3.11+；不可变优先（dataclass frozen + replace）；多个小文件 > 大文件。
 - 新 case 优先用严格且极简的 `schema_version: 2`；只有至少两个 case 共享同一机制时才新增 protocol。旧 v1 只做兼容维护。
 - 新增功能写测试（pytest，`tests/` 下）；`./run.sh` 是薄入口委托给 `python3 -m bench`。
-- 运行测试：`python3 -m pytest`；lint：`python3 -m ruff check bench/ case-gen/ tests/`。
-- `runs/`、`scorecards/`、`case-gen/config.toml`、`private.env` 为生成产物 / 本机配置，已 gitignore
+- 运行测试：`python3 -m pytest`；lint：`python3 -m ruff check bench/ .claude/skills/session-to-eval/ tests/`。
+- `runs/`、`scorecards/`、`.claude/skills/session-to-eval/config.toml`、`private.env` 为生成产物 / 本机配置，已 gitignore
   （历史遗留 `cases/*/output/` 同样忽略，仅只读保留，新运行不再写入）。
 - **私有 case**（公司内部 / 不可开源）放**仓库外**：`private.env`（gitignore，由 `run.sh` 自动 source）
-  设 `AI_EVAL_PRIVATE_CASES` 指向仓库外的私有 cases 根；case-gen skill **默认写私有路径**（`config.toml` 的
+  设 `AI_EVAL_PRIVATE_CASES` 指向仓库外的私有 cases 根；session-to-eval skill **默认写私有路径**（`config.toml` 的
   `private_cases_path`），除非用户显式要求公开。公开仓 `cases/_private/` 前缀已 gitignore 作误放兜底。
-- 文档只写在 `README.md` 和本文件，不新增散落 md（用例自己的 README、`case-gen/SKILL.md` 除外）。
+- 文档只写在 `README.md` 和本文件，不新增散落 md（用例自己的 README、`.claude/skills/session-to-eval/SKILL.md` 除外）。
 
 ## 运行
 

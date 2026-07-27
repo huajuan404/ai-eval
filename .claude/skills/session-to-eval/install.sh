@@ -3,7 +3,7 @@
 # 软链而非拷贝：源码随 ai-eval 仓库更新即时生效（单一事实源），config.toml 也随软链生效。
 #
 # 用法：
-#   bash install.sh                       # 默认装进 Claude Code 与 Codex 两端
+#   bash install.sh                       # 默认装进 Claude Code / Codex / .agents 三端
 # 显式单目标（测试 / 自定义）：
 #   CLAUDE_SKILLS_DIR=/tmp/skills bash install.sh
 set -euo pipefail
@@ -39,8 +39,9 @@ if [ -n "${CLAUDE_SKILLS_DIR:-}" ]; then
   exit 0
 fi
 
-# 默认：装进 Claude Code 与 Codex 两端 skills 目录（任一失败不阻断另一端）。
+# 默认：装进 Claude Code / Codex / .agents 三端 skills 目录（任一失败不阻断其余）。
 rc=0
 link_into "${HOME}/.claude/skills" || rc=1
 link_into "${HOME}/.codex/skills" || rc=1
+link_into "${HOME}/.agents/skills" || rc=1
 exit "${rc}"
