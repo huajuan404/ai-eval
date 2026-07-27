@@ -31,7 +31,7 @@ ai-eval 为后一类任务而生，回答的就是：**如何用「刚刚好」�
 1. **拿你自己的真实任务当试卷**：一手、可复现、贴合你的工作流，直接产出
    「这个任务上，哪个模型完成了、花了多少 token、多少时间」的并排答案。
 2. **让任何人都能构建属于自己的评测集**：通过 skill 从历史 session 里自动蒸馏任务
-   （见下文 case-gen），把「建评测」的成本从手写降到一句话——评测能力不再是少数团队的专利。
+   （见下文 session-to-eval skill），把「建评测」的成本从手写降到一句话——评测能力不再是少数团队的专利。
 
 ## 核心理念
 
@@ -294,13 +294,13 @@ cp private.env.example private.env        # 改成你的私有 cases 根（仓�
 - `run.sh` 自动 source gitignored 的 `private.env`，框架经 `AI_EVAL_PRIVATE_CASES`（`:` 分隔可多个根）
   发现公开 + 私有 case；私有 case 的 `runs/`（含 report.html）和 `scorecards/` 都落在私有根，产物不外泄。
 - 建议把私有 cases 目录单独做成一个**私有 git 仓**（内部可共享、有版本）。
-- **case-gen skill 默认把蒸馏出的 case 写到私有路径**（`config.toml` 的 `private_cases_path`），
+- **session-to-eval skill 默认把蒸馏出的 case 写到私有路径**（`config.toml` 的 `private_cases_path`），
   除非你显式要求"放公开"——蒸馏自真实 session 的 case 天然可能含敏感数据。
 - 安全网：公开仓的 `cases/_private/` 前缀已 gitignore，万一内部 case 误放进公开 `cases/` 也提交不上去。
 
-## 从 session 自动蒸馏用例（case-gen skill）
+## 从 session 自动蒸馏用例（session-to-eval skill）
 
-手写用例慢。`case-gen/` 提供一个**可移植 skill**，两种入口：
+手写用例慢。`.claude/skills/session-to-eval/` 提供一个**可移植 skill**，两种入口：
 
 - **倒出模式**：说"把刚才的任务抽成 eval case"，蒸馏**当前 session**里的 1..N 个任务。
 - **检索模式**：给一句意图描述（如"把判断工单是否线上问题并分级的推理抽成 case"），skill 自动在
@@ -310,15 +310,15 @@ cp private.env.example private.env        # 改成你的私有 cases 根（仓�
 两种入口都兼容 Claude Code 与 Codex，蒸馏成对齐上面契约的**草稿 case** 写进 `cases/`。
 
 ```bash
-# 一次性安装（软链进 ~/.claude/skills/）
-cp case-gen/config.example.toml case-gen/config.toml   # 填入本仓库绝对路径
-bash case-gen/install.sh
+# 一次性安装（软链进 ~/.claude/skills/、~/.codex/skills/、~/.agents/skills/）
+cp .claude/skills/session-to-eval/config.example.toml .claude/skills/session-to-eval/config.toml   # 填入本仓库绝对路径
+bash .claude/skills/session-to-eval/install.sh
 ```
 
 诚实边界：transcript 里没有外部验证过的 ground-truth、大型工作集无法完整复原，
 所以产物默认是**草稿级**——能精确复原的精确复原，不能的产出 `setup.sh` 桩 + `ground-truth TODO`
 + 人工确认点，区分度由人在落地前签字。落盘前 `validate_case.py` 做静态结构校验
-（只证明能被 bench 加载，**不**证明能跑出有意义的分）。详见 `case-gen/SKILL.md`。
+（只证明能被 bench 加载，**不**证明能跑出有意义的分）。详见 `.claude/skills/session-to-eval/SKILL.md`。
 
 ## 安全
 
