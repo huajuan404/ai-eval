@@ -18,6 +18,10 @@ runners:
   sonnet-4.6:
     launcher: claude          # 启动器类型，只能是 claude/codex/c/command
     model: claude-sonnet-4-6  # 模型走独立的 model 字段（适配器会拼成 --model）
+  sonnet-4.6-bare:
+    launcher: claude
+    model: claude-sonnet-4-6
+    args: ["--setting-sources", "project"]  # 隔离全局 ~/.claude/CLAUDE.md，只读 workdir 项目级指令；用于痛点用例 bare/clause 档校准
   opus-4.6:
     launcher: claude
     model: claude-opus-4-6

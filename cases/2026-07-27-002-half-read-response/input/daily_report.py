@@ -11,7 +11,7 @@ def load_response() -> dict:
 
 
 def build_report(resp: dict) -> str:
-    order_count = resp["count"]
+    order_count = resp["today_order_count"]
     total_amount = sum(o["amount"] for o in resp.get("orders", [])[:order_count])
     return f"今日订单数: {order_count}\n今日总金额: {total_amount:.2f} 元"
 

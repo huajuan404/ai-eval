@@ -9,5 +9,5 @@
 
 def calculate_discount(total: float) -> float:
     if total > 100:
-        return round(total * 0.9, 2)
-    return round(total, 2)
+        return float(round(total * 0.9, 2))
+    return float(round(total, 2))
