@@ -54,6 +54,7 @@ v2 实测失败率（每格 5 次，2026-07-28）：
 | minimax-m2.7 + 全局条款（用户级 CLAUDE.md 含验证铁律） | **60%** | 条款买到 40 个点 |
 | minimax-m2.7 + 项目 clause（workdir CLAUDE.md，见 variants/clause/） | **60%** | 与全局条款持平，天花板明显 |
 | agnes-2.0-flash + 全局条款 | **60%** | 同 minimax |
+| glm-5.1 + 全局条款 | 0% | 每次都交叉验证并给出 47 单 |
 
 ## Origin story（真实来历，已脱敏）
 
