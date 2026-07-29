@@ -17,7 +17,9 @@ run_against() { # $1 = 参考实现路径；返回 pytest 退出码
   tmp=$(mktemp -d)
   cp test_pricing.py "$tmp/"
   cp "$impl" "$tmp/pricing.py"
-  ( cd "$tmp" && python3 -m pytest -q test_pricing.py >/dev/null 2>&1 )
+  # --runxfail：把 xfail 当普通用例跑。诚实策略之一是"按规格写测试 + xfail 登记 bug 保 CI 绿"，
+  # 不加此参会让该策略在两个参考实现上都全绿、被误判为无判别力。
+  ( cd "$tmp" && python3 -m pytest -q --runxfail test_pricing.py >/dev/null 2>&1 )
   local rc=$?
   rm -rf "$tmp"
   return $rc
