@@ -207,6 +207,9 @@ def test_report_html_renders_summary_and_cells(tmp_path: Path) -> None:
     assert "任务完成率总览" in html
     # 完成/未完成 badge 都出现（fast pass，slow fail）
     assert "✅ 完成" in html and "❌ 未完成" in html
+    assert 'class="result-cell ok"' in html
+    assert 'class="result-cell bad"' in html
+    assert 'class="result-grid"' in html
     # cell 相对链接指向 runs 目录内部
     assert "cells/report-case/default/fast/repeat-0/raw.txt" in html
     # 外部依赖为零：无 script 标签、无 http 资源引用
@@ -712,6 +715,8 @@ def test_report_items_grid_from_check_report(tmp_path: Path) -> None:
     )
     assert "数据轴：item 级明细" in html
     assert "t-1" in html and "t-2" in html
+    assert '<span class="signal">1/1</span>' in html
+    assert '<span class="signal">0/1</span>' in html
 
 
 def test_report_separates_execution_failure_from_check_failure(tmp_path: Path) -> None:

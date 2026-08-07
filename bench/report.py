@@ -67,13 +67,15 @@ def _cell_href(record: RunRecord) -> str:
 
 _CSS = """
 :root{--bg:#ffffff;--fg:#1b1f24;--muted:#667085;--line:#e4e7ec;--card:#f8fafc;
---ok:#158a44;--ok-bg:#e7f6ec;--bad:#c9312b;--bad-bg:#fdebea;--warn:#b96b00;
---warn-bg:#fdf3e2;--na:#98a2b3;--na-bg:#f2f4f7;--accent:#175cd3;
+--ok:#24745f;--ok-bg:#eaf5f1;--ok-line:#b8dcd0;--bad:#ad4f5b;--bad-bg:#faedef;
+--bad-line:#e9c3c8;--warn:#946821;--warn-bg:#fbf3e4;--warn-line:#e8d4aa;
+--na:#6f7d91;--na-bg:#f0f3f7;--na-line:#d5dce6;--accent:#175cd3;
 --diff-add:#116329;--diff-add-bg:#dafbe1;--diff-del:#82071e;--diff-del-bg:#ffebe9;
 --diff-hunk:#0550ae;--diff-hunk-bg:#ddf4ff;}
 @media (prefers-color-scheme: dark){:root{--bg:#101418;--fg:#e6e9ee;--muted:#98a2b3;
---line:#2b3440;--card:#171d24;--ok:#5cc98a;--ok-bg:#12301e;--bad:#f08981;--bad-bg:#3a1715;
---warn:#e8ab52;--warn-bg:#332405;--na:#7a8699;--na-bg:#1d2530;--accent:#7ab3ff;
+--line:#2b3440;--card:#171d24;--ok:#72c7aa;--ok-bg:#173128;--ok-line:#285c4b;
+--bad:#e99aa3;--bad-bg:#381f24;--bad-line:#69404a;--warn:#dfb469;--warn-bg:#332a19;
+--warn-line:#65512d;--na:#9aa8ba;--na-bg:#202833;--na-line:#364252;--accent:#7ab3ff;
 --diff-add:#7ee787;--diff-add-bg:#12261e;--diff-del:#ffa198;--diff-del-bg:#31171b;
 --diff-hunk:#79c0ff;--diff-hunk-bg:#121d2f;}}
 *{box-sizing:border-box}
@@ -95,13 +97,29 @@ table{border-collapse:collapse;width:100%;font-size:13.5px}
 th,td{padding:7px 12px;text-align:left;border-bottom:1px solid var(--line);
 white-space:nowrap;vertical-align:top}
 tr:last-child td{border-bottom:none}
+tbody tr{transition:background-color .16s ease}
+tbody tr:hover{background:color-mix(in srgb,var(--accent) 3%,transparent)}
 th{background:var(--card);font-weight:600;position:sticky;top:0}
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
-.badge{display:inline-block;border-radius:6px;padding:1px 8px;font-size:12.5px;font-weight:600}
-.badge.ok{color:var(--ok);background:var(--ok-bg)}
-.badge.bad{color:var(--bad);background:var(--bad-bg)}
-.badge.warn{color:var(--warn);background:var(--warn-bg)}
-.badge.na{color:var(--na);background:var(--na-bg)}
+.badge{display:inline-flex;align-items:center;gap:6px;border:1px solid transparent;
+border-radius:999px;padding:2px 9px;font-size:12.5px;font-weight:650;line-height:1.45;
+letter-spacing:.01em;white-space:nowrap}
+.badge::before,.result-cell .signal::before{content:"";width:6px;height:6px;border-radius:50%;
+background:currentColor;box-shadow:0 0 0 3px color-mix(in srgb,currentColor 13%,transparent);
+flex:0 0 auto}
+.badge.ok{color:var(--ok);background:var(--ok-bg);border-color:var(--ok-line)}
+.badge.bad{color:var(--bad);background:var(--bad-bg);border-color:var(--bad-line)}
+.badge.warn{color:var(--warn);background:var(--warn-bg);border-color:var(--warn-line)}
+.badge.na{color:var(--na);background:var(--na-bg);border-color:var(--na-line)}
+.result-grid td.result-cell{padding:0;border-left:1px solid var(--bg);border-right:1px solid var(--bg);
+font-variant-numeric:tabular-nums;transition:filter .16s ease,box-shadow .16s ease}
+.result-cell .signal{display:flex;align-items:center;justify-content:center;gap:7px;min-height:36px;
+padding:7px 12px;color:inherit;font-weight:700;letter-spacing:.015em;white-space:nowrap}
+.result-cell.ok{color:var(--ok);background:var(--ok-bg);box-shadow:inset 0 1px var(--ok-line)}
+.result-cell.bad{color:var(--bad);background:var(--bad-bg);box-shadow:inset 0 1px var(--bad-line)}
+.result-cell.warn{color:var(--warn);background:var(--warn-bg);box-shadow:inset 0 1px var(--warn-line)}
+.result-cell.na{color:var(--na);background:var(--na-bg);box-shadow:inset 0 1px var(--na-line)}
+.result-grid tbody tr:hover .result-cell{filter:saturate(1.08);box-shadow:inset 0 0 0 1px currentColor}
 .note{color:var(--muted);font-size:13px;margin:6px 0}
 .card{background:var(--card);border:1px solid var(--line);border-radius:8px;
 padding:12px 16px;margin:10px 0}
@@ -129,6 +147,11 @@ def _chip(label: str, value: object) -> str:
 
 def _badge(text: str, klass: str) -> str:
     return f'<span class="badge {klass}">{_e(text)}</span>'
+
+
+def _result_cell(text: str, klass: str) -> str:
+    """W3C implementation-report 式结果格：整格传达状态，文字保留可访问性。"""
+    return f'<td class="result-cell {klass}"><span class="signal">{_e(text)}</span></td>'
 
 
 def _completion_badge(comp: CellCompletion) -> str:
@@ -717,19 +740,26 @@ def _render_summary(
         cells = comp[label]
         summary = runner_completion(label, list(cells.values()))
         tds = "".join(
-            f"<td>{_completion_badge(cells[cn]) if cn in cells else _DASH}</td>"
+            _result_cell(cells[cn].display, _completion_class(cells[cn]))
+            if cn in cells
+            else _result_cell(_DASH, "na")
             for cn in case_names
+        )
+        summary_class = (
+            "na"
+            if summary.rate is None
+            else ("ok" if summary.rate >= 1 else ("bad" if summary.rate <= 0 else "warn"))
         )
         rows.append(
             f"<tr><td><code>{_e(label)}</code></td>{tds}"
-            f"<td>{_e(summary.display)}</td></tr>"
+            f"{_result_cell(summary.display, summary_class)}</tr>"
         )
     heads = "".join(f"<th>{_e(cn)}</th>" for cn in case_names)
     return (
         "<h2>任务完成率总览</h2>"
         '<p class="note">完成 = 通过用例权威判据（check 通过 / judge ≥ 阈值 / 核心维达标）；'
         "「未评」不冤判为未完成，也不计入分母。</p>"
-        '<div class="tablewrap"><table><thead><tr><th>Runner@Variant</th>'
+        '<div class="tablewrap"><table class="result-grid"><thead><tr><th>Runner@Variant</th>'
         f"{heads}<th>跨用例汇总</th></tr></thead><tbody>{''.join(rows)}</tbody></table></div>"
     )
 
@@ -1135,18 +1165,18 @@ def _render_items_grid(case_records: dict[tuple[str, str], list[RunRecord]]) -> 
         for key in columns:
             got = per_col[key].get(item_id)
             if got is None:
-                tds.append(f"<td>{_DASH}</td>")
+                tds.append(_result_cell(_DASH, "na"))
                 continue
             passed, total = got
             klass = "ok" if passed == total else ("bad" if passed == 0 else "warn")
-            tds.append(f"<td class='num'>{_badge(f'{passed}/{total}', klass)}</td>")
+            tds.append(_result_cell(f"{passed}/{total}", klass))
         rows.append(f"<tr><td><code>{_e(item_id)}</code></td>{''.join(tds)}</tr>")
     return (
         "<h3>数据轴：item 级明细</h3>"
         '<p class="note">每格 = 该条数据在此 runner@variant 下通过的已评测 repeat 数；'
         "runner 执行失败的 repeat 不进入分母；"
         "哪类输入拖垮了哪个组合一目了然。</p>"
-        '<div class="tablewrap"><table><thead><tr><th>Item</th>'
+        '<div class="tablewrap"><table class="result-grid"><thead><tr><th>Item</th>'
         f"{heads}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>"
     )
 
@@ -1217,9 +1247,9 @@ def _render_check_axes(case_records: dict[tuple[str, str], list[RunRecord]]) -> 
         )
         rows.append(
             f"<tr><td><code>{_e(f'{runner}@{variant}')}</code></td>"
-            f"<td class='num'>{_badge(structure_text, structure_class)}</td>"
-            f"<td class='num'>{_badge(coverage_text, coverage_class)}</td>"
-            f"<td class='num'>{_badge(accuracy_text, accuracy_class)}</td></tr>"
+            f"{_result_cell(structure_text, structure_class)}"
+            f"{_result_cell(coverage_text, coverage_class)}"
+            f"{_result_cell(accuracy_text, accuracy_class)}</tr>"
         )
     if not rows:
         return ""
@@ -1228,7 +1258,7 @@ def _render_check_axes(case_records: dict[tuple[str, str], list[RunRecord]]) -> 
         "<h3>Check 轴：结构与结论双轴</h3>"
         f'<p class="note">结构合规按 repeat 统计；结论覆盖按可审计的语义投影 item 统计。'
         f"{reference_note}格式恢复不改变结构判定。</p>"
-        '<div class="tablewrap"><table><thead><tr><th>Runner@Variant</th>'
+        '<div class="tablewrap"><table class="result-grid"><thead><tr><th>Runner@Variant</th>'
         "<th class='num'>结构合规</th><th class='num'>结论覆盖</th>"
         f"<th class='num'>{'Baseline 快照一致' if reference_mode else '结论正确'}</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></div>"
