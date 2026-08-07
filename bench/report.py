@@ -22,7 +22,7 @@ from typing import Any
 
 from .case import Case
 from .comparison import RunnerComparison
-from .completion import CellCompletion, cell_completion, runner_completion
+from .completion import CellCompletion, cell_completion, repeat_pass
 from .layout import RunLayout
 from .record import RunRecord
 from .run_manifest import RunManifestError, load_request_manifest
@@ -67,8 +67,8 @@ def _cell_href(record: RunRecord) -> str:
 
 _CSS = """
 :root{--bg:#ffffff;--fg:#1b1f24;--muted:#667085;--line:#e4e7ec;--card:#f8fafc;
---ok:#24745f;--ok-bg:#eaf5f1;--ok-line:#b8dcd0;--bad:#ad4f5b;--bad-bg:#faedef;
---bad-line:#e9c3c8;--warn:#946821;--warn-bg:#fbf3e4;--warn-line:#e8d4aa;
+--ok:#176a51;--ok-bg:#ddf2e9;--ok-line:#9fd2bf;--bad:#a63f50;--bad-bg:#f8e1e5;
+--bad-line:#e5aeb7;--warn:#885c16;--warn-bg:#f8edcf;--warn-line:#dfc681;
 --na:#6f7d91;--na-bg:#f0f3f7;--na-line:#d5dce6;--accent:#175cd3;
 --diff-add:#116329;--diff-add-bg:#dafbe1;--diff-del:#82071e;--diff-del-bg:#ffebe9;
 --diff-hunk:#0550ae;--diff-hunk-bg:#ddf4ff;}
@@ -120,6 +120,20 @@ padding:7px 12px;color:inherit;font-weight:700;letter-spacing:.015em;white-space
 .result-cell.warn{color:var(--warn);background:var(--warn-bg);box-shadow:inset 0 1px var(--warn-line)}
 .result-cell.na{color:var(--na);background:var(--na-bg);box-shadow:inset 0 1px var(--na-line)}
 .result-grid tbody tr:hover .result-cell{filter:saturate(1.08);box-shadow:inset 0 0 0 1px currentColor}
+.case-matrix th[scope=row]{min-width:240px;max-width:420px;white-space:normal}
+.case-matrix td.result-cell{min-width:176px}
+.case-matrix .signal{min-height:52px;flex-direction:column;gap:6px;text-transform:uppercase;
+font:750 12px/1.2 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+letter-spacing:.065em}
+.case-matrix .signal::before{display:none}
+.repeat-strip{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(12px,1fr);gap:4px;
+width:min(150px,100%)}
+.repeat-tile{height:8px;border-radius:2px;border:1px solid color-mix(in srgb,currentColor 28%,transparent);
+box-shadow:inset 0 1px rgba(255,255,255,.36)}
+.repeat-tile.ok{color:var(--ok);background:var(--ok)}
+.repeat-tile.bad{color:var(--bad);background:var(--bad)}
+.repeat-tile.na{color:var(--na);background:var(--na)}
+.case-matrix .summary-row th,.case-matrix .summary-row td{border-bottom:2px solid var(--line)}
 .note{color:var(--muted);font-size:13px;margin:6px 0}
 .card{background:var(--card);border:1px solid var(--line);border-radius:8px;
 padding:12px 16px;margin:10px 0}
@@ -152,6 +166,35 @@ def _badge(text: str, klass: str) -> str:
 def _result_cell(text: str, klass: str) -> str:
     """W3C implementation-report 式结果格：整格传达状态，文字保留可访问性。"""
     return f'<td class="result-cell {klass}"><span class="signal">{_e(text)}</span></td>'
+
+
+def _completion_result_cell(records: list[RunRecord], case: Case) -> str:
+    """渲染逐 repeat 结果色块；汇总文字不再掩盖具体失败轮次。"""
+    ordered = sorted(records, key=lambda record: record.repeat_index)
+    verdicts = [repeat_pass(record, case) for record in ordered]
+    comp = cell_completion(ordered, case)
+    failed = comp.evaluated - comp.passes
+    if comp.evaluated == 0:
+        label = "NO DATA"
+    elif comp.evaluated == 1:
+        label = "PASS" if comp.passes else "FAIL"
+    elif failed == 0:
+        label = f"{comp.passes}/{comp.evaluated} PASS"
+    elif comp.passes == 0:
+        label = f"0/{comp.evaluated} PASS"
+    else:
+        label = f"{comp.passes} PASS · {failed} FAIL"
+    tiles = "".join(
+        f'<span class="repeat-tile {"ok" if verdict is True else "bad" if verdict is False else "na"}" '
+        f'title="repeat-{record.repeat_index}: '
+        f'{"passed" if verdict is True else "failed" if verdict is False else "not evaluated"}"></span>'
+        for record, verdict in zip(ordered, verdicts, strict=True)
+    )
+    return (
+        f'<td class="result-cell {_completion_class(comp)}" aria-label="{_e(label)}">'
+        f'<span class="signal"><span>{_e(label)}</span>'
+        f'<span class="repeat-strip" aria-hidden="true">{tiles}</span></span></td>'
+    )
 
 
 def _completion_badge(comp: CellCompletion) -> str:
@@ -725,42 +768,61 @@ def _render_summary(
     cases: dict[str, Case],
     case_names: list[str],
 ) -> str:
-    """完成率总览矩阵：行 = runner@variant，列 = case，末列 = 跨用例汇总。"""
-    comp: dict[str, dict[str, CellCompletion]] = defaultdict(dict)
+    """W3C 式结果墙：行 = case，列 = runner@variant，每格直接展示 pass/fail。"""
+    labels = sorted(
+        {
+            f"{runner}@{variant}"
+            for case_records in by_case.values()
+            for variant, runner in case_records
+        }
+    )
+    if not labels:
+        return ""
+    outcomes: dict[str, list[CellCompletion]] = defaultdict(list)
+    rows: list[str] = []
     for case_name in case_names:
         case_obj = cases.get(case_name)
         if case_obj is None:
             continue
-        for (variant, runner), recs in by_case.get(case_name, {}).items():
-            comp[f"{runner}@{variant}"][case_name] = cell_completion(recs, case_obj)
-    if not comp:
-        return ""
-    rows: list[str] = []
-    for label in sorted(comp):
-        cells = comp[label]
-        summary = runner_completion(label, list(cells.values()))
-        tds = "".join(
-            _result_cell(cells[cn].display, _completion_class(cells[cn]))
-            if cn in cells
-            else _result_cell(_DASH, "na")
-            for cn in case_names
-        )
-        summary_class = (
-            "na"
-            if summary.rate is None
-            else ("ok" if summary.rate >= 1 else ("bad" if summary.rate <= 0 else "warn"))
-        )
+        records_by_label = {
+            f"{runner}@{variant}": records
+            for (variant, runner), records in by_case.get(case_name, {}).items()
+        }
+        cells: list[str] = []
+        for label in labels:
+            records = records_by_label.get(label)
+            if records:
+                outcomes[label].append(cell_completion(records, case_obj))
+                cells.append(_completion_result_cell(records, case_obj))
+            else:
+                cells.append(_result_cell("NO DATA", "na"))
         rows.append(
-            f"<tr><td><code>{_e(label)}</code></td>{tds}"
-            f"{_result_cell(summary.display, summary_class)}</tr>"
+            f'<tr><th scope="row"><code>{_e(case_name)}</code></th>{"".join(cells)}</tr>'
         )
-    heads = "".join(f"<th>{_e(cn)}</th>" for cn in case_names)
+    summary_cells: list[str] = []
+    for label in labels:
+        comps = outcomes[label]
+        passed = sum(comp.rate == 1 for comp in comps)
+        failed = sum(comp.rate == 0 for comp in comps)
+        partial = sum(comp.rate not in (None, 0, 1) for comp in comps)
+        no_data = sum(comp.rate is None for comp in comps)
+        parts = [f"{passed} pass", f"{failed} fail"]
+        if partial:
+            parts.append(f"{partial} partial")
+        if no_data:
+            parts.append(f"{no_data} no data")
+        klass = "na" if not comps or no_data == len(comps) else (
+            "ok" if passed == len(comps) else "bad" if failed == len(comps) else "warn"
+        )
+        summary_cells.append(_result_cell(" · ".join(parts), klass))
+    heads = "".join(f"<th>{_e(label)}</th>" for label in labels)
     return (
-        "<h2>任务完成率总览</h2>"
+        "<h2>用例通过矩阵</h2>"
         '<p class="note">完成 = 通过用例权威判据（check 通过 / judge ≥ 阈值 / 核心维达标）；'
-        "「未评」不冤判为未完成，也不计入分母。</p>"
-        '<div class="tablewrap"><table class="result-grid"><thead><tr><th>Runner@Variant</th>'
-        f"{heads}<th>跨用例汇总</th></tr></thead><tbody>{''.join(rows)}</tbody></table></div>"
+        "每个小条对应一次 repeat，绿色通过、红色失败、灰色未评。</p>"
+        '<div class="tablewrap"><table class="result-grid case-matrix"><thead><tr><th>Case</th>'
+        f'{heads}</tr></thead><tbody><tr class="summary-row"><th scope="row">总计</th>'
+        f'{"".join(summary_cells)}</tr>{"".join(rows)}</tbody></table></div>'
     )
 
 

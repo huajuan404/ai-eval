@@ -204,17 +204,36 @@ def test_report_html_renders_summary_and_cells(tmp_path: Path) -> None:
     assert "评测报告" in html
     assert "run-x" in html
     assert "fast" in html and "slow" in html
-    assert "任务完成率总览" in html
-    # 完成/未完成 badge 都出现（fast pass，slow fail）
+    assert "用例通过矩阵" in html
+    # 完成/未完成同时有文字判据与整格状态色（fast pass，slow fail）
     assert "✅ 完成" in html and "❌ 未完成" in html
     assert 'class="result-cell ok"' in html
     assert 'class="result-cell bad"' in html
-    assert 'class="result-grid"' in html
+    assert 'class="result-grid case-matrix"' in html
+    assert '<th scope="row"><code>report-case</code></th>' in html
+    assert ">PASS</span>" in html and ">FAIL</span>" in html
     # cell 相对链接指向 runs 目录内部
     assert "cells/report-case/default/fast/repeat-0/raw.txt" in html
     # 外部依赖为零：无 script 标签、无 http 资源引用
     assert "<script" not in html
     assert 'src="http' not in html and 'href="http' not in html
+
+
+def test_report_summary_exposes_each_repeat_as_a_status_tile(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    passing = replace(_record("mixed"), repeat_index=0)
+    failing = replace(_record("mixed", passed=False), repeat_index=1)
+
+    html = build_report_html(
+        run_id="run-x",
+        records=[passing, failing],
+        cases={"report-case": case},
+        comparisons={},
+    )
+
+    assert "1 PASS · 1 FAIL" in html
+    assert 'class="repeat-tile ok" title="repeat-0: passed"' in html
+    assert 'class="repeat-tile bad" title="repeat-1: failed"' in html
 
 
 def test_report_escapes_untrusted_judge_reasoning(tmp_path: Path) -> None:
