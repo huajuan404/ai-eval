@@ -1,0 +1,22 @@
+schema_version: 2
+name: 2026-08-29-001-visual-ui-coding
+class: coding
+task: prompts/task.md
+check:
+  script: check.sh
+  report_file: ai_eval_check_report.json
+  protected_files:
+    - verify/visual-contract.json
+judge:
+  rubric: prompts/rubric.md
+  dimensions:
+    - design_fidelity
+    - page_system
+    - interaction_states
+    - responsive_behavior
+    - engineering_validation
+expected:
+  max_score: 25
+  passing_threshold: 15
+  visual_similarity_floor: 0.55
+  source: https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash

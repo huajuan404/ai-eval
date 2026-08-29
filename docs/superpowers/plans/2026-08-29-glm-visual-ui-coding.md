@@ -4,7 +4,7 @@
 
 **Goal:** Add one public, runnable ai-eval case for the GLM-5.3-Flash official visual UI coding workflow.
 
-**Architecture:** The runner sees only four generated screenshots and a faithful model-independent task. A hidden locked Next.js reference app owns the screenshots and doubles as the positive fixture. A shell check builds the contestant project, starts it, drives four browser paths, captures screenshots, computes SSIM, and writes an item-level check report; an LLM rubric grades fidelity above the deterministic floor.
+**Architecture:** The runner sees only four generated screenshots and a faithful model-independent task. A hidden locked Next.js reference app owns the screenshots and doubles as the positive fixture. A shell check builds the contestant project, starts it, drives four browser paths, captures screenshots, computes normalized visual similarity from ImageMagick RMSE, and writes an item-level check report; an LLM rubric grades fidelity above the deterministic floor.
 
 **Tech Stack:** Python 3.11+, pytest, YAML schema v2, Bash, Node.js, Next.js, TypeScript, Playwright, ImageMagick.
 
@@ -144,7 +144,7 @@ The task keeps the official sequence and requirements but does not disclose outp
 
 - [ ] **Step 3: Implement `check.sh` and browser validation**
 
-The checker must reject zero/multiple project roots, missing dependencies, missing Next/React/TypeScript declarations, build failure, service startup failure, inaccessible interactions, missing screenshots, or insufficient SSIM. It writes schema v1 structured items for all four screens.
+The checker must reject zero/multiple project roots, missing dependencies, missing Next/React/TypeScript declarations, build failure, service startup failure, inaccessible interactions, missing screenshots, or insufficient visual similarity. It writes schema v1 structured items for all four screens.
 
 - [ ] **Step 4: Verify GREEN on contract tests**
 

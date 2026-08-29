@@ -28,7 +28,7 @@
 1. 工作区中恰有一个非 `node_modules` 的 `package.json`，且声明 Next.js、React 与 TypeScript。
 2. 已安装依赖，`npm run build` 成功；check 不替选手联网安装。
 3. 启动应用后，Playwright 能完成四条用户路径：打开总览、展开筛选、进入运行详情、在移动端打开侧栏。
-4. 固定 Chromium 与固定 viewport 截取四张实际图，使用 ImageMagick SSIM 与参考图比较；每屏记录 item 结果，总体必须达到视觉底线。
+4. 固定 Chromium 与固定 viewport 截取四张实际图，使用 ImageMagick 归一化 RMSE 换算 `1 - RMSE` 视觉相似度；每屏记录 item 结果，总体必须达到视觉底线。
 
 LLM judge 在 check 之后读取参考图、实际截图和源码，按五维各 0–5 分：设计系统还原、页面关系与共享组件、交互状态、响应式、工程与自我验证。check 是“任务是否真正跑通”的锚，judge 提供质量梯度。
 
