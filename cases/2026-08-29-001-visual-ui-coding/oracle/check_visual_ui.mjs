@@ -3,6 +3,7 @@ import {mkdir, readFile, writeFile} from "node:fs/promises";
 import {join} from "node:path";
 
 import {similarityFromNormalizedRmse} from "./visual_metric.mjs";
+import {findScreenshotSurface} from "./surface_guard.mjs";
 
 function argumentsMap(argv) {
   const result = {};
@@ -142,6 +143,34 @@ async function clickControl(client, {label, text, mobileMenu = false}) {
   if (!(await evaluate(client, expression))) throw new Error(`Control not found: ${label || text}`);
 }
 
+async function assertNoScreenshotSurface(client) {
+  const snapshot = await evaluate(client, `(() => {
+    const elements = [...document.querySelectorAll("img,canvas,video,*")].map((element) => {
+      const tag = element.tagName.toLowerCase();
+      const style = getComputedStyle(element);
+      const box = element.getBoundingClientRect();
+      return {
+        tag,
+        width: box.width,
+        height: box.height,
+        visible: style.visibility !== "hidden" && style.display !== "none",
+        opacity: Number(style.opacity),
+        backgroundImage: style.backgroundImage,
+        source: element.getAttribute("src") || style.backgroundImage.slice(0, 120),
+      };
+    });
+    return {viewportWidth: innerWidth, viewportHeight: innerHeight, elements};
+  })()`);
+  const suspect = findScreenshotSurface(
+    snapshot.elements,
+    snapshot.viewportWidth,
+    snapshot.viewportHeight,
+  );
+  if (suspect) {
+    throw new Error(`full-screen image reuse is not an implemented UI: ${suspect.tag} area=${suspect.areaRatio.toFixed(2)}`);
+  }
+}
+
 async function screenshot(client, filename) {
   const result = await client.call("Page.captureScreenshot", {format: "png", fromSurface: true, captureBeyondViewport: false});
   await writeFile(join(outputDir, filename), Buffer.from(result.data, "base64"));
@@ -166,6 +195,7 @@ try {
   await setViewport(client, specs[0].width, specs[0].height);
   await navigate(client, `${args["base-url"]}/`);
   await waitForValue(client, `document.body.innerText.includes("System pulse") || document.body.innerText.includes("Overview")`);
+  await assertNoScreenshotSurface(client);
   await screenshot(client, specs[0].filename);
   interactionPassed.set(specs[0].id, true);
 
@@ -174,11 +204,13 @@ try {
   await clickControl(client, {label: "Status filter", text: "Status"});
   await waitForValue(client, `document.body.innerText.includes("Completed") && document.body.innerText.includes("Failed") && document.body.innerText.includes("Running")`);
   await new Promise((resolve) => setTimeout(resolve, 200));
+  await assertNoScreenshotSurface(client);
   await screenshot(client, specs[1].filename);
   interactionPassed.set(specs[1].id, true);
 
   await clickControl(client, {label: "Run run-4821", text: "run-4821"});
   await waitForValue(client, `location.pathname.includes("run-4821") && document.body.innerText.toLowerCase().includes("run detail")`);
+  await assertNoScreenshotSurface(client);
   await screenshot(client, specs[2].filename);
   interactionPassed.set(specs[2].id, true);
 
@@ -187,6 +219,7 @@ try {
   await clickControl(client, {label: "Open navigation", text: "", mobileMenu: true});
   await waitForValue(client, `document.body.innerText.includes("NAVIGATION") && document.body.innerText.includes("WORKSPACE")`);
   await new Promise((resolve) => setTimeout(resolve, 200));
+  await assertNoScreenshotSurface(client);
   await screenshot(client, specs[3].filename);
   interactionPassed.set(specs[3].id, true);
 } catch (error) {
@@ -221,7 +254,13 @@ const correct = items.filter((item) => item.correct).length;
 const report = {
   schema_version: 1,
   passed: errors.length === 0 && correct === items.length,
-  summary: {evaluation_mode: "oracle_exact_match", correct, total: items.length},
+  summary: {
+    evaluation_mode: "oracle_exact_match",
+    correct,
+    total: items.length,
+    browser_version: args["browser-version"],
+    visual_metric: "1 - normalized RMSE",
+  },
   items,
   errors,
 };

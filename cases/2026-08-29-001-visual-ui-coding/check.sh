@@ -37,6 +37,9 @@ PY
   exit 1
 }
 
+node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)' \
+  || write_failure "Node.js 22 or newer is required for deterministic browser validation"
+
 mapfile_cmd="mapfile"
 if ! command -v "$mapfile_cmd" >/dev/null 2>&1; then
   mapfile_cmd="readarray"
@@ -73,12 +76,22 @@ then
   write_failure "project must declare Next.js, React, TypeScript, build, and start"
 fi
 
+if ! reuse_detail="$(python3 "$CASE_ROOT/oracle/detect_reference_reuse.py" \
+  "$PROJECT_ROOT" "$CASE_ROOT/input/reference" "$WORK_ROOT/reference" 2>&1)"; then
+  write_failure "reference screenshot reuse detected: $reuse_detail"
+fi
+
 if [ ! -x "$PROJECT_ROOT/node_modules/.bin/next" ]; then
   write_failure "dependencies are not installed; the submitted app was not runnable"
 fi
 
-if ! (cd "$PROJECT_ROOT" && NEXT_TELEMETRY_DISABLED=1 npm run build) >"$ARTIFACTS/build.log" 2>&1; then
-  write_failure "npm run build failed; see ai_eval/build.log"
+if ! (cd "$PROJECT_ROOT" && NEXT_TELEMETRY_DISABLED=1 npm run build) >"$ARTIFACTS/build.txt" 2>&1; then
+  write_failure "npm run build failed; see ai_eval/build.txt"
+fi
+
+if ! reuse_detail="$(python3 "$CASE_ROOT/oracle/detect_reference_reuse.py" \
+  "$PROJECT_ROOT" "$CASE_ROOT/input/reference" "$WORK_ROOT/reference" --include-build 2>&1)"; then
+  write_failure "reference screenshot reuse detected after build: $reuse_detail"
 fi
 
 free_port() {
@@ -102,7 +115,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-(cd "$PROJECT_ROOT" && NEXT_TELEMETRY_DISABLED=1 ./node_modules/.bin/next start --hostname 127.0.0.1 --port "$APP_PORT") >"$ARTIFACTS/server.log" 2>&1 &
+(cd "$PROJECT_ROOT" && NEXT_TELEMETRY_DISABLED=1 ./node_modules/.bin/next start --hostname 127.0.0.1 --port "$APP_PORT") >"$ARTIFACTS/server.txt" 2>&1 &
 APP_PID="$!"
 
 app_ready=0
@@ -112,7 +125,7 @@ for _ in $(seq 1 100); do
   sleep 0.2
 done
 if [ "$app_ready" -ne 1 ]; then
-  write_failure "application did not start; see ai_eval/server.log"
+  write_failure "application did not start; see ai_eval/server.txt"
 fi
 
 find_chrome() {
@@ -128,6 +141,7 @@ find_chrome() {
 }
 
 CHROME="$(find_chrome)" || write_failure "Chrome or Chromium is required for browser validation"
+CHROME_VERSION="$("$CHROME" --version 2>/dev/null | head -1 | sed 's/[[:space:]]*$//')"
 command -v magick >/dev/null 2>&1 || write_failure "ImageMagick 'magick' is required for visual comparison"
 VISUAL_FLOOR="$(node -e 'const c=require(process.argv[1]); if(c.schema_version!==1 || !Number.isFinite(c.visual_similarity_floor)) process.exit(1); process.stdout.write(String(c.visual_similarity_floor))' "$VISUAL_CONTRACT")" \
   || write_failure "visual contract is invalid"
@@ -139,7 +153,7 @@ VISUAL_FLOOR="$(node -e 'const c=require(process.argv[1]); if(c.schema_version!=
   --remote-debugging-port="$CDP_PORT" \
   --user-data-dir="$TMP_ROOT/chrome" \
   --force-device-scale-factor=1 \
-  about:blank >"$ARTIFACTS/chrome.log" 2>&1 &
+  about:blank >"$ARTIFACTS/chrome.txt" 2>&1 &
 CHROME_PID="$!"
 
 cdp_ready=0
@@ -149,7 +163,7 @@ for _ in $(seq 1 100); do
   sleep 0.1
 done
 if [ "$cdp_ready" -ne 1 ]; then
-  write_failure "headless Chrome did not expose the debugging endpoint; see ai_eval/chrome.log"
+  write_failure "headless Chrome did not expose the debugging endpoint; see ai_eval/chrome.txt"
 fi
 
 if node "$CASE_ROOT/oracle/check_visual_ui.mjs" \
@@ -158,6 +172,7 @@ if node "$CASE_ROOT/oracle/check_visual_ui.mjs" \
   --work-root "$WORK_ROOT" \
   --reference "$CASE_ROOT/input/reference" \
   --contract "$VISUAL_CONTRACT" \
+  --browser-version "$CHROME_VERSION" \
   --floor "$VISUAL_FLOOR"; then
   exit 0
 fi

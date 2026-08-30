@@ -28,14 +28,16 @@
 1. 工作区中恰有一个非 `node_modules` 的 `package.json`，且声明 Next.js、React 与 TypeScript。
 2. 已安装依赖，`npm run build` 成功；check 不替选手联网安装。
 3. 启动应用后，Playwright 能完成四条用户路径：打开总览、展开筛选、进入运行详情、在移动端打开侧栏。
-4. 固定 Chromium 与固定 viewport 截取四张实际图，使用 ImageMagick 归一化 RMSE 换算 `1 - RMSE` 视觉相似度；每屏记录 item 结果，总体必须达到视觉底线。
+4. 使用隔离 profile 的系统 Chrome/Chromium 与固定 viewport 截取四张实际图，把浏览器版本写入报告，并使用 ImageMagick 归一化 RMSE 换算 `1 - RMSE` 视觉相似度；每屏记录 item 结果，总体必须达到视觉底线。
+
+框架必须在 runner 结束后、原始隔离 workdir 销毁前执行 deterministic check；随后才过滤 `node_modules` 并复制 artifacts。CheckResult 与 check 生成的报告、截图和文本日志进入 RunRecord/artifacts，后续 scoring 不重复执行。
 
 LLM judge 在 check 之后读取参考图、实际截图和源码，按五维各 0–5 分：设计系统还原、页面关系与共享组件、交互状态、响应式、工程与自我验证。check 是“任务是否真正跑通”的锚，judge 提供质量梯度。
 
 ## 可复现性与错误处理
 
 - npm 版本全部锁定，参考应用提交 lockfile。
-- 渲染脚本使用本机 Chromium/Playwright，固定 viewport、时区、颜色模式并等待字体与动画稳定。
+- 参考渲染脚本使用 lockfile 固定的 Playwright Chromium；check 使用评测机系统 Chrome/Chromium 的隔离 profile。二者都固定 viewport、时区、颜色模式并等待字体与动画稳定，系统 Chrome 版本进入结构化报告以显式暴露跨机渲染变量。
 - check 将结构化结果写入 `ai_eval_check_report.json`；缺依赖、构建失败、服务未启动、元素不可操作或渲染失败都返回明确错误，不把环境异常伪装成视觉低分。
 - check 用 `AI_EVAL_CASE_DIR` 读取隐藏 oracle；runner 看不到 oracle。
 - README 明确 Node、Chromium/Playwright 与 ImageMagick 依赖，且说明该 case 比较完整 Agent 工作流，不是裸模型视觉能力。

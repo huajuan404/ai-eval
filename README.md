@@ -157,6 +157,8 @@ runner 使用统一注册表，不区分公开或私有；私有性只属于 cas
    选手产物用 `<contestant_output>` 分隔块包裹标注不可信（抗注入）；同源标 `same_source`。
 3. **人工备注**：run record 预留 `human_note`。
 
+确定性 check 在 runner 完成后、原始隔离 workdir 销毁前执行，因此可以验证已安装依赖和真实运行产物；check 生成的报告、截图与日志随后和选手文件一起裁剪复制到 artifacts。后续判分阶段复用该 CheckResult，只对历史缺失记录兼容性补跑，避免在已过滤 `node_modules` 的 artifacts 上误判。
+
 ## 计分卡
 
 - **任务完成度**（最直观的结果信号）：把 check / judge 折成「任务干成了没」一维——

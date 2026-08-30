@@ -144,7 +144,7 @@ The task keeps the official sequence and requirements but does not disclose outp
 
 - [ ] **Step 3: Implement `check.sh` and browser validation**
 
-The checker must reject zero/multiple project roots, missing dependencies, missing Next/React/TypeScript declarations, build failure, service startup failure, inaccessible interactions, missing screenshots, or insufficient visual similarity. It writes schema v1 structured items for all four screens.
+The checker must reject zero/multiple project roots, missing dependencies, missing Next/React/TypeScript declarations, copied or embedded reference screenshots, build failure, service startup failure, inaccessible interactions, full-screen image substitution, missing screenshots, or insufficient visual similarity. It writes schema v1 structured items for all four screens and records the system Chrome version.
 
 - [ ] **Step 4: Verify GREEN on contract tests**
 
@@ -184,3 +184,27 @@ Expected: valid and complete case; all tests pass; ruff and diff checks exit 0.
 git add cases/2026-08-29-001-visual-ui-coding tests/test_official_visual_ui_case.py
 git commit -m "feat: add official visual UI coding eval case"
 ```
+
+### Task 5: Preserve runnable-workdir check semantics
+
+**Files:**
+- Modify: `bench/orchestrator.py`
+- Modify: `bench/scoring.py`
+- Modify: `bench/__main__.py`
+- Modify: `tests/test_orchestrator.py`
+
+- [ ] **Step 1: Reproduce artifact filtering failure**
+
+Create a synthetic runner that writes `node_modules/.bin/runtime-marker`; its check must see the marker and emit `precheck.txt`, while final artifacts must omit `node_modules` and retain `precheck.txt`.
+
+- [ ] **Step 2: Run check before artifact copy**
+
+Write `OUTPUT.txt`, execute deterministic check, store CheckResult, then copy filtered artifacts. Keep runner duration and files_changed snapshots scoped to runner work only.
+
+- [ ] **Step 3: Reuse precomputed CheckResult**
+
+Make `score_record` skip check when `record.check.ran` is already true; preserve legacy fallback for historical or externally constructed records.
+
+- [ ] **Step 4: Add reference-reuse gates**
+
+Reject exact PNG copies, Base64 embeds, build-produced copies, and full-screen image/canvas/video/background substitution before accepting visual similarity.

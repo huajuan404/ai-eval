@@ -23,7 +23,7 @@
 cd oracle/reference-app
 npm ci
 npm run build
-cd ../../..
+cd ../../../..
 node cases/2026-08-29-001-visual-ui-coding/oracle/render_reference.mjs
 ```
 
@@ -37,12 +37,14 @@ node cases/2026-08-29-001-visual-ui-coding/oracle/render_reference.mjs
 
 ## 运行依赖
 
-- Node.js 与 npm；
+- Node.js 22+ 与 npm；
 - Chrome 或 Chromium；
 - ImageMagick 7（命令为 `magick`）；
 - Python 3.11+ 与 ai-eval 自身依赖。
 
 check 不会替选手联网安装依赖。官方任务要求完成后启动应用；提交时仍未安装依赖或无法生产构建，视为任务未完成。
+
+check 使用评测机上的隔离 headless Chrome/Chromium profile，并把浏览器版本写入结构化报告。参考 PNG 由 lockfile 固定的 Playwright Chromium 生成，因此跨机器仍可能存在字体与浏览器渲染差异；`0.55` 只是宽松完成底线，精细品质由同一次运行中的 judge 与人工并排查看。
 
 ## 运行
 

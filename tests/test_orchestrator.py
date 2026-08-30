@@ -17,6 +17,7 @@ from bench.layout import RunLayout
 from bench.orchestrator import OrchestratorError, run_matrix
 from bench.record import Usage
 from bench.registry import RunnerProfile
+from bench.scoring import score_record
 
 
 class FakeAdapter(Adapter):
@@ -57,6 +58,34 @@ def _make_case(tmp_path: Path, name: str, requires_engine: str | None = None) ->
     (d / "prompts").mkdir()
     (d / "prompts" / "task.md").write_text("do it", encoding="utf-8")
     return d
+
+
+def _make_runtime_check_case(tmp_path: Path) -> Path:
+    case_dir = tmp_path / "runtime-check"
+    (case_dir / "input").mkdir(parents=True)
+    (case_dir / "prompts").mkdir()
+    (case_dir / "prompts" / "task.md").write_text("build it", encoding="utf-8")
+    (case_dir / "check.sh").write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        "test -f node_modules/.bin/runtime-marker\n"
+        "test \"$(cat OUTPUT.txt)\" = done\n"
+        "printf checked > precheck.txt\n",
+        encoding="utf-8",
+    )
+    (case_dir / "case.yaml").write_text(
+        textwrap.dedent(
+            """
+            schema_version: 2
+            name: runtime-check
+            class: coding
+            task: prompts/task.md
+            check: check.sh
+            """
+        ),
+        encoding="utf-8",
+    )
+    return case_dir
 
 
 def _fixed_clock():
@@ -264,6 +293,46 @@ def test_output_txt_written_for_judge(tmp_path: Path) -> None:
     out = layout.cell_dir(case.name, "default", "a", 0) / "artifacts" / "OUTPUT.txt"
     # FakeAdapter 用默认 extract_final_text → 返回整段 stdout
     assert out.exists() and out.read_text() == "MODEL FINAL ANSWER"
+
+
+def test_runtime_check_runs_before_node_modules_are_filtered(tmp_path: Path) -> None:
+    case = load_case(_make_runtime_check_case(tmp_path))
+    registry = {"a": RunnerProfile("a", "claude")}
+
+    def runner(cmd, cwd, env):
+        marker = Path(cwd, "node_modules", ".bin", "runtime-marker")
+        marker.parent.mkdir(parents=True)
+        marker.write_text("runtime", encoding="utf-8")
+        return "done", "", 0
+
+    result = run_matrix(
+        RunConfig(runners=("a",)),
+        registry,
+        [case],
+        report_root=tmp_path,
+        run_fn=runner,
+        adapter_factory=lambda profile: FakeAdapter("claude", ParsedOutput()),
+        run_id="runtime-check-order",
+    )
+
+    record = result.records[0]
+    artifacts = Path(record.artifacts_dir)
+    assert record.check.ran and record.check.passed is True
+    assert record.agentic.files_changed == 0
+    assert (artifacts / "precheck.txt").read_text(encoding="utf-8") == "checked"
+    assert not (artifacts / "node_modules").exists()
+
+    def forbidden_rerun(cmd, cwd, env):
+        raise AssertionError("pre-computed check must not run again on filtered artifacts")
+
+    rescored = score_record(
+        case,
+        record,
+        None,
+        check_run_fn=forbidden_rerun,
+        judge_run_fn=lambda cmd, cwd, env: ("", "", 0),
+    )
+    assert rescored.check == record.check
 
 
 def test_output_txt_not_scrubbed_preserves_commit_hash(tmp_path: Path) -> None:

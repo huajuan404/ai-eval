@@ -286,8 +286,11 @@ def score_record(
         return record.with_check(
             CheckResult(ran=False, detail="runner 执行失败，跳过 check / judge")
         ).with_judge(None)
-    check = run_check(case, record.artifacts_dir or case.directory, run_fn=check_run_fn)
-    record = record.with_check(check)
+    # 新运行在原始隔离 workdir 销毁前已执行 check；历史 record / 直接构造的
+    # record 仍在这里补跑，保持旧数据和集成调用兼容。
+    if not record.check.ran and case.check.type == "script":
+        check = run_check(case, record.artifacts_dir or case.directory, run_fn=check_run_fn)
+        record = record.with_check(check)
     if case.judge.enabled and judge_profile is not None:
         judge = run_judge(
             case, record, judge_profile, run_fn=judge_run_fn, adapter_factory=adapter_factory

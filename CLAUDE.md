@@ -27,10 +27,10 @@
   环境变量 `AI_EVAL_PRIVATE_CASES` 指向的仓库外私有根，同名冲突公开优先，`is_private_case` 标记）
 - `protocol.py` — 同仓库 `protocols/<name>/` 声明式复用层，只承载 runtime/check/variant 参数/run contract，不动态加载插件
 - `layout.py` — `RunLayout`：一次运行全部产物路径的唯一出处（`runs/<run_id>/` 布局）
-- `orchestrator.py` — 全矩阵预校验 `RunPlan` + variant 调度 + 墙钟 + 指标 + 最小环境
+- `orchestrator.py` — 全矩阵预校验 `RunPlan` + variant 调度 + 墙钟 + 指标 + 最小环境；runner 后在原始 workdir 内先跑确定性 check，再裁剪复制 artifacts
 - `comparison.py` — variant 配对与跨 repeat 完整性校验；scorecard 只渲染结果
 - `run_manifest.py` — case/protocol 完整性锁、通用 request manifest v2 与旧 v1 校验
-- `scoring.py` — check 脚本 + LLM 裁判（抗注入 / advisory / 同源标注）
+- `scoring.py` — 原始 workdir check 执行器 + CheckResult 复用 + LLM 裁判（抗注入 / advisory / 同源标注）
 - `completion.py` — 任务完成度（check / judge 折成「完成了没」一维：单 cell 通过率 + 跨 case 等权汇总）
 - `scorecard.py` — 任务完成度列 + 跨用例完成率汇总 + 每维赢家 + 权衡摘要（不自动聚合）+ 模型档案写入
 - `report.py` — 自包含 HTML 报告（零外部依赖；三轴视图：完成率矩阵 / variant 配对 / item 网格 /
