@@ -1,7 +1,8 @@
 """编排器：runners × cases × repeat 矩阵执行 + 指标采集（R4/R8/R9/R10/R17/R19）。
 
 每格：requires_engine 兼容性 → 隔离 workdir → 最小环境子进程 + 墙钟 →
-解析 usage → files_changed 快照 diff → 脱敏 → run record。
+解析 usage → files_changed 快照 diff → 原 workdir 确定性 check →
+裁剪复制 artifacts → 脱敏 → run record。
 单元失败不中断其它格。
 
 并发：runners × cases × repeat 的每一格是独立 workdir 子进程，天然线程安全。
@@ -37,9 +38,10 @@ from .comparison import ComparisonError, validate_comparison_contract
 from .config import RunConfig
 from .layout import RunLayout
 from .log import get_logger
-from .record import Agentic, RunRecord, Usage
+from .record import Agentic, CheckResult, RunRecord, Usage
 from .registry import RunnerProfile, get_profile
 from .run_manifest import RunManifestError, load_request_manifest, sha256_bytes, tree_manifest_sha256
+from .scoring import run_check
 from .scrub import scrub_text
 
 # 单格墙钟上限：2 小时。长任务能跑多久本身就是模型能力的一部分，
@@ -205,6 +207,7 @@ def _execute_cell(
     variant_label: str,
     repeat_index: int,
     run_fn: RunFn,
+    check_run_fn: RunFn | None,
     clock: Callable[[], float],
     now: Callable[[], str],
 ) -> RunRecord:
@@ -230,6 +233,7 @@ def _execute_cell(
     run_context_sha256 = ""
     request_manifest_sha256 = ""
     response_sha256: dict[str, str] = {}
+    check = CheckResult()
     with isolated_workdir(case) as wd:
         # command 适配器约定从 workdir/PROMPT.txt 读 prompt
         (wd / PROMPT_FILENAME).write_text(prompt, encoding="utf-8")
@@ -299,6 +303,17 @@ def _execute_cell(
                 is_error = True
                 stderr = (stderr + "\n" if stderr else "") + str(exc)
 
+        # 确定性 check 必须在原始 workdir 仍存在时执行：artifact 复制会主动过滤
+        # node_modules 等运行时依赖。先写 OUTPUT.txt，保证纯答案类 check 也能读取。
+        final_text = adapter.extract_final_text(stdout) if not failed else ""
+        (wd / "OUTPUT.txt").write_text(final_text, encoding="utf-8")
+        if not is_error:
+            check = (
+                run_check(case, wd)
+                if check_run_fn is None
+                else run_check(case, wd, run_fn=check_run_fn)
+            )
+
         artifacts_dir = cell_dir / "artifacts"
         try:
             copy_artifacts(wd, artifacts_dir)
@@ -308,7 +323,7 @@ def _execute_cell(
         # 写出模型最终回答文本，供 judge 评分（纯分析任务的"产物"是回答而非文件）。
         # OUTPUT.txt 是 check.sh / judge 读的结构化答案，**不脱敏**（避免 40 字符 hex 等
         # 误伤 commit hash / 答案 hash）。raw.txt 仍是脱敏的（给人类看 / 分享用）。
-        final_text = adapter.extract_final_text(stdout) if not failed else ""
+        # copy 失败时仍尽力保留最终回答；正常路径下只是覆盖同内容。
         (artifacts_dir / "OUTPUT.txt").write_text(final_text, encoding="utf-8")
         copied_run_context = artifacts_dir / "RUN_CONTEXT.json"
         try:
@@ -351,6 +366,7 @@ def _execute_cell(
         is_error=is_error,
         usage=usage,
         agentic=Agentic(num_turns=num_turns, files_changed=files_changed),
+        check=check,
         artifacts_dir=str(artifacts_dir),
         run_context_sha256=run_context_sha256,
         request_manifest_file=request_manifest or "",
@@ -369,6 +385,7 @@ def _run_one(
     variant_label: str,
     repeat_index: int,
     run_fn: RunFn,
+    check_run_fn: RunFn | None,
     clock: Callable[[], float],
     now: Callable[[], str],
     log: logging.Logger,
@@ -378,7 +395,16 @@ def _run_one(
         f"[start] case={case.name} runner={profile.label} variant={variant_label} repeat={repeat_index}"
     )
     rec = _execute_cell(
-        case, profile, adapter, layout, variant_label, repeat_index, run_fn, clock, now
+        case,
+        profile,
+        adapter,
+        layout,
+        variant_label,
+        repeat_index,
+        run_fn,
+        check_run_fn,
+        clock,
+        now,
     )
     status = "err" if rec.is_error else "ok"
     bits = [f"status={status}", f"dur={rec.duration_ms}ms"]
@@ -388,6 +414,8 @@ def _run_one(
             bits.append(f"cost=${rec.usage.cost_usd:.4f}")
     else:
         bits.append("tokens=—")
+    if rec.check.ran:
+        bits.append(f"check={'pass' if rec.check.passed else 'fail'}")
     log.info(
         f"[done ] case={case.name} runner={profile.label} variant={variant_label} repeat={repeat_index} "
         + " ".join(bits)
@@ -399,6 +427,7 @@ def _run_group(
     cells: tuple[PlannedCell, ...],
     layout: RunLayout,
     run_fn: RunFn,
+    check_run_fn: RunFn | None,
     clock: Callable[[], float],
     now: Callable[[], str],
     log: logging.Logger,
@@ -413,6 +442,7 @@ def _run_group(
             cell.variant_label,
             cell.repeat_index,
             run_fn,
+            check_run_fn,
             clock,
             now,
             log,
@@ -535,10 +565,11 @@ def execute_plan(
     layout: RunLayout,
     *,
     run_fn: RunFn = run_subprocess,
+    check_run_fn: RunFn | None = None,
     clock: Callable[[], float] = time.perf_counter,
     now: Callable[[], str] = lambda: datetime.now(timezone.utc).isoformat(),
 ) -> MatrixResult:
-    """Execute an immutable, fully validated run plan; all artifacts land in layout.run_dir."""
+    """Execute runner + deterministic check; persist filtered artifacts in layout.run_dir."""
     if layout.run_id != plan.run_id:
         raise OrchestratorError(
             f"layout.run_id 与 plan.run_id 不一致: {layout.run_id} != {plan.run_id}"
@@ -577,6 +608,7 @@ def execute_plan(
                     cell.variant_label,
                     cell.repeat_index,
                     run_fn,
+                    check_run_fn,
                     clock,
                     now,
                     log,
@@ -593,6 +625,7 @@ def execute_plan(
                     tuple(cells),
                     layout,
                     run_fn,
+                    check_run_fn,
                     clock,
                     now,
                     log,
@@ -653,6 +686,7 @@ def run_matrix(
     *,
     report_root: "str | Path",
     run_fn: RunFn = run_subprocess,
+    check_run_fn: RunFn | None = None,
     adapter_factory: AdapterFactory = get_adapter,
     clock: Callable[[], float] = time.perf_counter,
     now: Callable[[], str] = lambda: datetime.now(timezone.utc).isoformat(),
@@ -670,4 +704,11 @@ def run_matrix(
     if schedule_callback is not None:
         schedule_callback(list(plan.schedule))
     layout = RunLayout(Path(report_root), plan.run_id)
-    return execute_plan(plan, layout, run_fn=run_fn, clock=clock, now=now)
+    return execute_plan(
+        plan,
+        layout,
+        run_fn=run_fn,
+        check_run_fn=check_run_fn,
+        clock=clock,
+        now=now,
+    )

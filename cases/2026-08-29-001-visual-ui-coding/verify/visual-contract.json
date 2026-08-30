@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "visual_similarity_floor": 0.55,
+  "screens": [
+    {"id": "overview-desktop", "filename": "01-overview-desktop.png", "width": 1440, "height": 1000},
+    {"id": "runs-filter-desktop", "filename": "02-runs-filter-desktop.png", "width": 1440, "height": 1000},
+    {"id": "run-detail-desktop", "filename": "03-run-detail-desktop.png", "width": 1440, "height": 1000},
+    {"id": "overview-mobile-menu", "filename": "04-overview-mobile-menu.png", "width": 390, "height": 844}
+  ]
+}

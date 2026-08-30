@@ -258,7 +258,12 @@ def _run_benchmark_impl(
         ],
     }
     _write_json(layout.manifest_path, manifest)
-    result = execute_plan(plan, layout, run_fn=run_fn)
+    result = execute_plan(
+        plan,
+        layout,
+        run_fn=run_fn,
+        check_run_fn=check_run_fn,
+    )
 
     log = get_logger()
     case_by_name = {case.name: case for case in selected_cases}
@@ -270,10 +275,10 @@ def _run_benchmark_impl(
     judge_profile = get_profile(registry, config.judge) if needs_judge else registry.get(config.judge)
     total = len(result.records)
 
-    # 评分并发：check + judge 都是独立子进程，天然线程安全；
-    # judge 是 LLM 调用（~2-6 min/cell），并发可把 N cell 的评分从 N×T 压到 ~T。
+    # deterministic check 已在原始 workdir 内完成；这里主要并发 judge。
+    # score_record 仅为历史/外部 record 兼容性补跑缺失的 check。
     score_workers = min(total, 6) if total > 1 else 1
-    log.info(f"[score] 判分阶段: {total} cells（check + judge，workers={score_workers}）")
+    log.info(f"[score] 判分阶段: {total} cells（judge + legacy check，workers={score_workers}）")
 
     def _score_one(rec: RunRecord) -> RunRecord:
         case = case_by_name[rec.case]

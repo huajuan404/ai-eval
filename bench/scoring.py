@@ -1,6 +1,6 @@
-"""判分：确定性 check + LLM 裁判（R11/R12，KTD7/KTD10）。
+"""判分：原 workdir 确定性 check + CheckResult 复用 + LLM 裁判。
 
-- check：跑用例 check 脚本，退出码 0=pass；
+- check：runner 后在原 workdir 跑用例脚本，退出码 0=pass；本模块也兼容补跑旧记录；
 - judge：通过 judge 档案适配器打分，runner 产物用分隔块包裹标注不可信（抗注入），
   产物小则内联、大则让 judge 读 cwd 文件；judge 分作 advisory；
   --json-schema/结构化输出失败时回退宽松 JSON 提取；同源标注 same_source。
@@ -286,8 +286,11 @@ def score_record(
         return record.with_check(
             CheckResult(ran=False, detail="runner 执行失败，跳过 check / judge")
         ).with_judge(None)
-    check = run_check(case, record.artifacts_dir or case.directory, run_fn=check_run_fn)
-    record = record.with_check(check)
+    # 新运行在原始隔离 workdir 销毁前已执行 check；历史 record / 直接构造的
+    # record 仍在这里补跑，保持旧数据和集成调用兼容。
+    if not record.check.ran and case.check.type == "script":
+        check = run_check(case, record.artifacts_dir or case.directory, run_fn=check_run_fn)
+        record = record.with_check(check)
     if case.judge.enabled and judge_profile is not None:
         judge = run_judge(
             case, record, judge_profile, run_fn=judge_run_fn, adapter_factory=adapter_factory
