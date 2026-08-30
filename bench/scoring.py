@@ -1,6 +1,6 @@
-"""判分：确定性 check + LLM 裁判（R11/R12，KTD7/KTD10）。
+"""判分：原 workdir 确定性 check + CheckResult 复用 + LLM 裁判。
 
-- check：跑用例 check 脚本，退出码 0=pass；
+- check：runner 后在原 workdir 跑用例脚本，退出码 0=pass；本模块也兼容补跑旧记录；
 - judge：通过 judge 档案适配器打分，runner 产物用分隔块包裹标注不可信（抗注入），
   产物小则内联、大则让 judge 读 cwd 文件；judge 分作 advisory；
   --json-schema/结构化输出失败时回退宽松 JSON 提取；同源标注 same_source。

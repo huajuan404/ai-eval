@@ -1,7 +1,8 @@
 """编排器：runners × cases × repeat 矩阵执行 + 指标采集（R4/R8/R9/R10/R17/R19）。
 
 每格：requires_engine 兼容性 → 隔离 workdir → 最小环境子进程 + 墙钟 →
-解析 usage → files_changed 快照 diff → 脱敏 → run record。
+解析 usage → files_changed 快照 diff → 原 workdir 确定性 check →
+裁剪复制 artifacts → 脱敏 → run record。
 单元失败不中断其它格。
 
 并发：runners × cases × repeat 的每一格是独立 workdir 子进程，天然线程安全。
@@ -568,7 +569,7 @@ def execute_plan(
     clock: Callable[[], float] = time.perf_counter,
     now: Callable[[], str] = lambda: datetime.now(timezone.utc).isoformat(),
 ) -> MatrixResult:
-    """Execute an immutable, fully validated run plan; all artifacts land in layout.run_dir."""
+    """Execute runner + deterministic check; persist filtered artifacts in layout.run_dir."""
     if layout.run_id != plan.run_id:
         raise OrchestratorError(
             f"layout.run_id 与 plan.run_id 不一致: {layout.run_id} != {plan.run_id}"

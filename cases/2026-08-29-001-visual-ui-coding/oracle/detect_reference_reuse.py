@@ -13,7 +13,9 @@ _MAX_SCAN_BYTES = 25 * 1024 * 1024
 
 def _is_within(path: Path, root: Path) -> bool:
     try:
-        path.resolve().relative_to(root.resolve())
+        # Compare lexical locations, not symlink targets. A public/ symlink that
+        # points back into the allowed input directory is still contestant reuse.
+        path.absolute().relative_to(root.absolute())
     except ValueError:
         return False
     return True

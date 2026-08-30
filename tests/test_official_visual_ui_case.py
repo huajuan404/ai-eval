@@ -175,6 +175,48 @@ def test_visual_ui_checker_rejects_copied_reference_image(tmp_path: Path) -> Non
     assert "reference screenshot reuse" in report["errors"][0]
 
 
+def test_visual_ui_checker_rejects_symlink_to_reference_image(tmp_path: Path) -> None:
+    (tmp_path / "public").mkdir()
+    (tmp_path / "reference").mkdir()
+    visible_reference = tmp_path / "reference" / "01-overview-desktop.png"
+    shutil.copyfile(
+        CASE / "input" / "reference" / "01-overview-desktop.png",
+        visible_reference,
+    )
+    (tmp_path / "public" / "dashboard.png").symlink_to(visible_reference)
+    (tmp_path / "package.json").write_text(
+        json.dumps(
+            {
+                "scripts": {"build": "next build", "start": "next start"},
+                "dependencies": {
+                    "next": "16.3.3",
+                    "react": "19.2.8",
+                    "react-dom": "19.2.8",
+                },
+                "devDependencies": {"typescript": "7.0.2"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    env = {
+        **os.environ,
+        "AI_EVAL_WORKDIR": str(tmp_path),
+        "AI_EVAL_CASE_DIR": str(CASE),
+    }
+
+    result = subprocess.run(
+        ["bash", str(CASE / "check.sh")],
+        capture_output=True,
+        check=False,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    report = json.loads((tmp_path / "ai_eval_check_report.json").read_text(encoding="utf-8"))
+    assert "reference screenshot reuse" in report["errors"][0]
+
+
 def test_visual_ui_checker_rejects_base64_reference_image(tmp_path: Path) -> None:
     image = (CASE / "input" / "reference" / "04-overview-mobile-menu.png").read_bytes()
     encoded = base64.b64encode(image).decode("ascii")
