@@ -43,15 +43,16 @@
 |------|--------------------------|
 | 0 | `minimax-m3` |
 | 1 | `deepseek-v4-flash-vision-exp` |
-| 2 | `glm-5.3` |
+| 2 | `glm-5.3-official` |
 | 3 | `kimi-k3` |
 | 4 | `glm-5.2` |
-| 5 | `glm-5.3-ai-keeping` |
+| 5 | `glm-5.3` |
 | 6 | `glm-5.3-flash` |
 | 7 | `deepseek-v4.1-flash` |
-| 8 | `qwen-0.5b-weak`（本机暂缺 CONFIG_8）|
+| 8 | `deepseek-v4-pro` |
 | 9 | `deepseek-v4-flash`（本机暂缺 CONFIG_9）|
 
+编号 2/4/6 走智谱官方直连，账号额度耗尽（429），暂停使用；`glm-5.3` 走 ai-keeping 中转（背后同为官方 glm-5.3）。
 档案标签 = 该编号当前实际启动的模型，本机 config.env 换模型时两边同步改名（旧标签重跑会静默落到别的模型上）。
 `runners.yaml` 用 `c` 类档案引用这些编号（如 `glm-5.3-flash → config: 6`）。`minimax-m3-c0-direct`
 是复用 lane 0 配置的 `command` runner，不改变 `minimax-m3` 的 Agent 路径语义。各编号对应的端点、凭证和
