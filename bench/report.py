@@ -82,12 +82,6 @@ _CSS = """
 --na:#6f7d91;--na-bg:#f0f3f7;--na-line:#d5dce6;--accent:#175cd3;
 --diff-add:#116329;--diff-add-bg:#dafbe1;--diff-del:#82071e;--diff-del-bg:#ffebe9;
 --diff-hunk:#0550ae;--diff-hunk-bg:#ddf4ff;}
-@media (prefers-color-scheme: dark){:root{--bg:#101418;--fg:#e6e9ee;--muted:#98a2b3;
---line:#2b3440;--card:#171d24;--ok:#72c7aa;--ok-bg:#173128;--ok-line:#285c4b;
---bad:#e99aa3;--bad-bg:#381f24;--bad-line:#69404a;--warn:#dfb469;--warn-bg:#332a19;
---warn-line:#65512d;--na:#9aa8ba;--na-bg:#202833;--na-line:#364252;--accent:#7ab3ff;
---diff-add:#7ee787;--diff-add-bg:#12261e;--diff-del:#ffa198;--diff-del-bg:#31171b;
---diff-hunk:#79c0ff;--diff-hunk-bg:#121d2f;}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);
 font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",
