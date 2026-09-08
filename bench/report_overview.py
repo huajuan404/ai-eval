@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import html
+from math import isfinite
 from pathlib import Path
 from statistics import mean
 from urllib.parse import quote
@@ -60,6 +61,22 @@ def score(records: list[RunRecord]) -> str:
     return result
 
 
+def _complete_score(records: list[RunRecord]) -> tuple[float, float] | None:
+    """Only draw quantitative comparisons with complete, valid, same-scale evidence."""
+    if not records:
+        return None
+    judges = [r.judge for r in records if not r.is_error and r.judge and r.judge.ran]
+    if len(judges) != len(records):
+        return None
+    if any(not isinstance(j.score, (int, float)) or not isinstance(j.max, (int, float))
+           or not isfinite(j.score) or not isfinite(j.max)
+           or j.max <= 0 or not 0 <= j.score <= j.max for j in judges):
+        return None
+    if len({j.max for j in judges}) != 1:
+        return None
+    return mean(j.score for j in judges), judges[0].max
+
+
 def output_href(record: RunRecord, case: Case) -> str | None:
     """Only expose the declared HTML deliverable, contained in this cell's artifacts."""
     declared = (case.expected or {}).get("output_file")
@@ -92,7 +109,7 @@ def _status(records: list[RunRecord], case: Case) -> tuple[str, str]:
     return "warn", f"{comp.passes} PASS · {comp.evaluated - comp.passes} FAIL"
 
 
-def _cell(records: list[RunRecord], case: Case, fastest: bool) -> str:
+def _cell(records: list[RunRecord], case: Case, fastest: bool, highest: bool = False) -> str:
     ordered = sorted(records, key=lambda r: r.repeat_index)
     klass, label = _status(ordered, case)
     ids = " ".join(detail_id(r) for r in ordered)
@@ -102,12 +119,22 @@ def _cell(records: list[RunRecord], case: Case, fastest: bool) -> str:
         f'{"passed" if verdict is True else "failed" if verdict is False else "not evaluated"}"></span>'
         for r in ordered for verdict in [repeat_pass(r, case)]
     )
+    result = _complete_score(ordered)
+    meter = (
+        f'<span class="score-track" role="meter" aria-label="参考分占满分比例" '
+        f'aria-valuemin="0" aria-valuemax="{result[1]:g}" aria-valuenow="{result[0]:g}">'
+        f'<span style="width:{100 * result[0] / result[1]:.2f}%"></span></span>'
+        if result else ''
+    )
+    repeat_marks = f'<span class="repeat-strip" aria-hidden="true">{tiles}</span>' if len(ordered) > 1 else ''
+    badge = '<span class="score-leader">参考分最高</span>' if highest else ''
     return (
-        f'<td class="result-cell {klass}"><a class="matrix-link" href="#{detail_id(ordered[0])}" '
+        f'<td class="result-cell {klass}"><a class="matrix-link{" score-best" if highest else ""}" href="#{detail_id(ordered[0])}" '
         f'data-records="{ids}" data-title="{esc(ordered[0].runner_label)} · {esc(task_title(case))}">'
-        f'<span class="verdict">{esc(label)}</span><span class="cell-score">{esc(score(ordered))}</span>'
-        f'<span class="cell-time">{esc(elapsed(ordered))}'
-        f'{" · 最快" if fastest else ""}</span><span class="repeat-strip" aria-hidden="true">{tiles}</span>'
+        f'<span class="cell-status"><span class="verdict">{esc(label)}</span>{badge}</span>'
+        f'<span class="cell-score">{esc(score(ordered))}</span>{meter}'
+        f'<span class="cell-time{" fastest" if fastest else ""}">{esc(elapsed(ordered))}'
+        f'{" · 最快" if fastest else ""}</span>{repeat_marks}'
         '</a></td>'
     )
 
@@ -122,6 +149,7 @@ def render_overview(records: list[RunRecord], cases: dict[str, Case], run_id: st
     unknown = len(verdicts) - passes - failures
     all_passed = bool(verdicts) and passes == len(verdicts)
     title = "全部通过判据，差异藏在完成方式里。" if all_passed else "哪些任务做成了，一眼看清。"
+    lead = "比较能否完成，也比较参考评分与耗时。点击任意结果，查看判定证据。"
     heads = "".join(
         f'<th scope="col"><span class="runner-name">{esc(r)}</span>'
         f'<small>{esc(v) if len(variants) > 1 or v != "default" else "Runner + Model"}</small></th>'
@@ -140,19 +168,42 @@ def render_overview(records: list[RunRecord], cases: dict[str, Case], run_id: st
                           if rs[0].variant_label == variant), default=None)
             for variant in variants
         }
+        scores = {pair: _complete_score(rs) for pair, rs in groups.items()}
+        leaders = set()
+        for variant in variants:
+            comparable = {p: scores[p] for p in pairs if p[1] == variant}
+            if len(comparable) < 2 or any(s is None for s in comparable.values()):
+                continue
+            if len({s[1] for s in comparable.values()}) != 1:
+                continue
+            best = max(s[0] for s in comparable.values())
+            lowest = min(s[0] for s in comparable.values())
+            top = {p for p, s in comparable.items() if s[0] == best}
+            if best > lowest and len(top) <= 2 and case.evaluation.generalizes is not False:
+                leaders.update(p for p in top if groups[p] in eligible)
+        is_visual = Path(str((case.expected or {}).get("output_file", ""))).suffix.lower() in (".html", ".htm")
+        if is_visual and len(variants) == 1 and len(groups) >= 2 and all(
+            rs in eligible and scores[p] for p, rs in groups.items()
+        ) and len({s[1] for s in scores.values()}) == 1 and case.evaluation.generalizes is not False:
+            values = [s[0] for s in scores.values()]
+            times = [mean(r.duration_ms for r in rs) for rs in groups.values()]
+            if max(values) > min(values) and min(times) > 0:
+                title = f"网页参考分相差 {max(values) - min(values):g} 分，最长用时是最短的 {max(times) / min(times):.1f} 倍。"
+                lead = (f"同一任务：参考分 {min(values):g}–{max(values):g} / {next(iter(scores.values()))[1]:g}；"
+                        f"耗时 {min(times) / 60000:.1f}–{max(times) / 60000:.1f} 分钟。参考评分不代表视觉实测。")
         cells = []
         for pair in pairs:
             rs = groups[pair]
             cells.append(_cell(rs, case, bool(
                 case.evaluation.generalizes is not False and rs in eligible
                 and mean(r.duration_ms for r in rs) == fastest[pair[1]]
-            )) if rs else '<td class="result-cell na"><span class="missing-cell">— 未运行</span></td>')
+            ), pair in leaders) if rs else '<td class="result-cell na"><span class="missing-cell">— 未运行</span></td>')
         core = (case.expected or {}).get("completion", {}).get("core_dimensions")
         criterion = "核心维度 / 检查判据" if core else (
             "基础检查 · 参考分独立展示" if case.check.type == "script" else "裁判阈值判据"
         )
         rows.append(
-            f'<tr><th scope="row"><a href="#{case_id(name)}" data-case-link>{esc(task_title(case))}</a>'
+            f'<tr{" class=focus-row" if is_visual else ""}><th scope="row"><a href="#{case_id(name)}" data-case-link>{esc(task_title(case))}</a>'
             f'<small>{criterion}</small></th>{"".join(cells)}</tr>'
         )
         if any(output_href(r, case) for r in records if r.case == name):
@@ -187,7 +238,7 @@ def render_overview(records: list[RunRecord], cases: dict[str, Case], run_id: st
         '<a class="wordmark" href="#">AI<span>EVAL</span><i> / FIELD REPORT</i></a>'
         f'<span class="run-stamp">{esc(run_id)} · {len(pairs)} 组启动器 · {len(names)} 个任务</span></header>'
         '<div class="report-lead"><div><span class="eyebrow">REAL TASKS. VISIBLE DIFFERENCES.</span>'
-        f'<h1>{title}</h1><p>比较能否完成，也比较参考评分与耗时。点击任意结果，查看判定证据。</p></div>'
+        f'<h1>{esc(title)}</h1><p>{esc(lead)}</p></div>'
         f'<div class="run-total"><strong>{passes}<span> / {len(verdicts)}</span></strong><span>次运行通过'
         f' · {failures} 失败 · {unknown} 未评</span></div></div>'
         '<div class="matrix-heading"><h2>用例通过矩阵</h2><div class="matrix-legend">'
@@ -196,7 +247,8 @@ def render_overview(records: list[RunRecord], cases: dict[str, Case], run_id: st
         f'<div class="overview-table"><table class="result-grid case-matrix" style="--runner-count:{len(pairs)}">'
         f'<thead><tr><th scope="col">真实任务<small>状态 / 参考分 / 耗时</small></th>{heads}</tr></thead>'
         f'<tbody>{"".join(rows)}</tbody></table></div>'
-        '<p class="matrix-footnote">每格保留逐轮结果；多轮时分数与耗时为均值。参考分不参与着色，不跨任务合成总分。'
+        '<p class="matrix-footnote">横条 = 参考分 / 满分；✓ = 通过判据。多轮时分数与耗时为均值，另显示逐轮状态点。'
+        '分数不同不改变通过状态，不跨任务合成总分。'
         '“最快”仅比较该任务所有轮次均通过的组合；单次运行不代表稳定性。</p>'
         f'{"".join(galleries)}</section>'
     )
@@ -218,7 +270,7 @@ outline:2px solid var(--ok);outline-offset:4px}button{font:inherit;cursor:pointe
 .eyebrow{font:10px ui-monospace,SFMono-Regular,monospace;letter-spacing:1.8px;color:var(--muted)}
 .report-lead h1{font-size:clamp(23px,2.2vw,32px);line-height:1.25;letter-spacing:-1px;margin:9px 0 10px;font-weight:650}
 .report-lead p{margin:0;color:var(--muted);font-size:13px}.run-total{display:flex;flex-direction:column;flex-shrink:0;text-align:right}
-.run-total>strong{font-size:44px;font-weight:550;line-height:1.2;font-variant-numeric:tabular-nums}
+.run-total>strong{font-size:28px;font-weight:500;line-height:1.2;font-variant-numeric:tabular-nums}
 .run-total strong span{font-size:25px;color:var(--muted)}.run-total>span{color:var(--muted);font-size:11px;margin-top:6px}
 .matrix-heading,.section-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}
 .matrix-heading h2,.section-heading h2{border:0;padding:0;margin:0;font-size:16px;font-weight:550}
@@ -232,11 +284,22 @@ outline:2px solid var(--ok);outline-offset:4px}button{font:inherit;cursor:pointe
 .overview-table th[scope=row]{min-width:0;max-width:none;position:static;width:205px;padding:13px 16px;background:#181e20;font-size:12px;font-weight:500;vertical-align:middle}
 .overview-table th[scope=row] a{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .overview-table td.result-cell{min-width:0;border-left:1px solid var(--line);border-right:0;box-shadow:none}
+.overview-table td.result-cell.ok{background:#181e20;color:var(--ok)}
+.overview-table .focus-row td.result-cell.ok{background:#202729}
+.overview-table .focus-row th[scope=row]{background:#252e30;box-shadow:inset 3px 0 #92aaa9}
+.cell-status{display:flex;align-items:center;flex-wrap:wrap;gap:5px;width:100%;min-height:17px}
+.cell-status .verdict{font-size:10px;font-weight:400;opacity:.8}
+.score-leader{font-size:9px;color:#e8ce96;margin-left:auto}
+.score-track{display:block;height:5px;width:100%;background:#354043;margin:2px 0 4px}
+.score-track>span{display:block;height:100%;background:#84999b}
+.matrix-link.score-best{background:#dabe7710;box-shadow:inset 0 2px #cdb680}
+.score-best .cell-score{color:#f1dbad}.score-best .score-track>span{background:#d8c08a}
+.matrix-link .cell-time.fastest{color:#b9d8d2;font-weight:600}
 .matrix-link{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:8px 12px;color:inherit;min-height:86px;transition:background .15s}
 .matrix-link:hover{background:#ffffff08;text-decoration:none}.verdict{font-size:11px;font-weight:600}
 .cell-score{font-size:19px;font-weight:550;line-height:1.3;color:var(--fg);font-variant-numeric:tabular-nums}
-.cell-time{font-size:11px;color:var(--muted)}.matrix-link .repeat-strip{max-width:88px;gap:3px;margin-top:3px}
-.matrix-link .repeat-tile{height:3px;border:0;box-shadow:none}.missing-cell{display:block;padding:25px 12px;font-size:12px}
+.cell-time{font-size:11px;color:var(--muted)}.matrix-link .repeat-strip{display:flex;width:auto;max-width:none;flex-wrap:wrap;gap:3px;margin-top:3px}
+.matrix-link .repeat-tile{width:5px;height:5px;border-radius:50%;border:0;box-shadow:none}.missing-cell{display:block;padding:25px 12px;font-size:12px}
 .matrix-footnote{font-size:11px;color:var(--muted);margin:9px 0 0}.work-section{margin-top:18px}
 .section-heading .eyebrow{font-size:9px;display:block;margin-bottom:5px}.section-heading>a{font-size:11px;color:var(--muted)}
 .gallery-note{font-size:11px;color:var(--muted);margin:8px 0 12px}

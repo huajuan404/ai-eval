@@ -363,6 +363,40 @@ def test_overview_does_not_average_incompatible_judge_scales(tmp_path: Path) -> 
     assert "评分量纲不同" in rendered
 
 
+def test_overview_uses_actual_score_bars_and_specific_visual_findings(tmp_path: Path) -> None:
+    case = replace(load_case(_case(tmp_path)), expected={"output_file": "article.html"})
+    records = [
+        replace(_record("high-score"), duration_ms=60000, judge=JudgeResult(ran=True, score=20, max=25)),
+        replace(_record("low-score"), duration_ms=400000, judge=JudgeResult(ran=True, score=14, max=25)),
+    ]
+    rendered = build_report_html(run_id="x", records=records, cases={case.name: case}, comparisons={})
+    assert 'width:80.00%' in rendered and 'width:56.00%' in rendered
+    assert '参考分相差 6 分，最长用时是最短的 6.7 倍' in rendered
+    assert rendered.count('class="score-leader"') == 1
+    assert 'class="repeat-tile ok"' not in rendered  # a single pass is not a full score bar
+    assert rendered.count('class="result-cell ok"') == 2  # score never changes completion
+
+
+def test_overview_does_not_manufacture_winners_for_ties_or_incomplete_scores(tmp_path: Path) -> None:
+    case = replace(load_case(_case(tmp_path)), expected={"output_file": "article.html"})
+    high = replace(_record("a"), judge=JudgeResult(ran=True, score=20, max=25))
+    tied = replace(high, runner_label="b")
+    missing = replace(tied, judge=None)
+    for second in (tied, missing):
+        rendered = build_report_html(run_id="x", records=[high, second], cases={case.name: case}, comparisons={})
+        assert 'class="score-leader"' not in rendered
+        assert '网页参考分相差' not in rendered
+
+
+@pytest.mark.parametrize("value,maximum", [(30, 25), (float('nan'), 25), (10, 0), (-1, 25)])
+def test_overview_invalid_scores_do_not_create_meter_or_winner(tmp_path: Path, value: float, maximum: float) -> None:
+    case = load_case(_case(tmp_path))
+    record = replace(_record("a"), judge=JudgeResult(ran=True, score=value, max=maximum))
+    rendered = build_report_html(run_id="x", records=[record], cases={case.name: case}, comparisons={})
+    assert 'role="meter"' not in rendered
+    assert 'class="score-leader"' not in rendered
+
+
 def test_report_renders_compared_prompt_templates_and_actual_inputs(
     tmp_path: Path,
 ) -> None:
