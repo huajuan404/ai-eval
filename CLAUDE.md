@@ -98,4 +98,5 @@
 ./run.sh -c <case> -r <runner> --variants a,b # 固定 runner 比较 prompt variant
 ./run.sh -c <case> -r codex --write-profiles  # 表现写入 models/<label>.md
 ./run.sh --report <run_id>                    # 对已完成 run 重建 runs/<run_id>/report.html
+./run.sh --rejudge <run_id> -j <judge>        # 换裁判重判（只跑 judge，不重跑评测与 check）
 ```

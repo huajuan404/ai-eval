@@ -188,6 +188,12 @@ runner 使用统一注册表，不区分公开或私有；私有性只属于 cas
 ./run.sh --report <run_id>
 ```
 
+换裁判重判（只重跑 judge，不重跑评测与 check；结果写回各格 run.json 并重建计分卡/报告）：
+
+```bash
+./run.sh --rejudge <run_id> -j codex-astra-max
+```
+
 ## 目录地图：什么在哪
 
 拨乱反正的两条铁律：**case 目录 = 纯定义**（评什么、喂什么、怎么判，永不写入运行产物）；

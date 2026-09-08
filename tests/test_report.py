@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from bench.__main__ import rebuild_report, run_benchmark
+from bench.__main__ import rebuild_report, rejudge_run, run_benchmark
 from bench.case import RunContract, load_case
 from bench.comparison import ItemComparison, RunnerComparison
 from bench.config import RunConfig
@@ -1059,6 +1059,51 @@ def test_run_benchmark_writes_report_and_rebuild(tmp_path: Path) -> None:
     assert rebound[0].artifacts_dir == str(run_json.parent / "artifacts")
     with pytest.raises(ReportError, match="找不到 run"):
         find_run_layout("nope-123", [root])
+
+
+def test_rejudge_only_reruns_judge_and_keeps_check(tmp_path: Path) -> None:
+    """换裁判重判：只跑 judge，不重跑 runner / check，计分卡与报告重建。"""
+    root = tmp_path / "repo"
+    case_dir = _case(root, "rejudge-case")
+    (case_dir / "prompts" / "rubric.md").write_text("rubric", encoding="utf-8")
+    with (case_dir / "case.yaml").open("a", encoding="utf-8") as f:
+        f.write("judge:\n  rubric: prompts/rubric.md\n  dimensions: [correctness]\n")
+    registry = {"fake": RunnerProfile("fake", "command", template="echo hi")}
+    cfg = RunConfig(runners=("fake",), cases=("rejudge-case",), judge="fake", workers=1)
+
+    def fake_run(cmd, cwd, env):
+        Path(cwd, "answer.txt").write_text("hi", encoding="utf-8")
+        return "final", "", 0
+
+    def judge_returning(score: int):
+        def _run(cmd, cwd, env):
+            return (
+                '{"score": %d, "max": 5, "dimensions": {"correctness": %d}, "reasoning": "ok"}'
+                % (score, score),
+                "",
+                0,
+            )
+
+        return _run
+
+    run_benchmark(cfg, registry, root, run_fn=fake_run, judge_run_fn=judge_returning(3))
+    run_id = next((root / "runs").iterdir()).name
+    layout = find_run_layout(run_id, [root])
+    first = load_run_records(layout)[0]
+    assert first.judge is not None and first.judge.score == 3
+    check_before = first.check
+
+    rejudge_run(
+        run_id, root, "fake", registry=registry, judge_run_fn=judge_returning(5)
+    )
+
+    after = load_run_records(layout)[0]
+    assert after.judge is not None and after.judge.score == 5
+    assert after.check == check_before  # check 结果原样保留，未重跑
+    assert layout.scorecard_path.is_file()
+    assert layout.report_path.is_file()
+    manifest = json.loads(layout.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["judge"] == "fake"
 
 
 def test_run_benchmark_does_not_resolve_judge_when_all_runs_fail(tmp_path: Path) -> None:
