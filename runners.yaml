@@ -32,6 +32,11 @@ runners:
     launcher: codex
     sandbox: workspace-write
     model: gpt-6-astra        # codex 侧当前旗舰（GPT-6-Astra）
+  codex-astra-max:
+    launcher: codex
+    sandbox: workspace-write
+    model: gpt-6-astra
+    args: ["-c", "model_reasoning_effort=max"]   # 裁判档：最高推理档
 
   # ── 经 c 切换器的模型（config 指向 config.env 索引）──
   # 标签 = 该编号当前实际启动的模型；本机在 config.env 换模型后同步改名，
