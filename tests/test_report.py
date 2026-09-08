@@ -16,7 +16,13 @@ from bench.comparison import ItemComparison, RunnerComparison
 from bench.config import RunConfig
 from bench.record import CheckResult, JudgeResult, RunRecord, Usage
 from bench.registry import RunnerProfile
-from bench.report import ReportError, build_report_html, find_run_layout, load_run_records
+from bench.report import (
+    ReportError,
+    build_report_html,
+    find_run_layout,
+    load_run_records,
+)
+from bench.report_overview import detail_id, output_href
 
 
 def _case(tmp_path: Path, name: str = "report-case") -> Path:
@@ -210,12 +216,15 @@ def test_report_html_renders_summary_and_cells(tmp_path: Path) -> None:
     assert 'class="result-cell ok"' in html
     assert 'class="result-cell bad"' in html
     assert 'class="result-grid case-matrix"' in html
-    assert '<th scope="row"><code>report-case</code></th>' in html
-    assert ">PASS</span>" in html and ">FAIL</span>" in html
+    assert 'data-case-link>报告任务</a>' in html
+    assert "✓ PASS</span>" in html and "× FAIL</span>" in html
+    assert 'data-records="cell-' in html
+    assert 'id="result-dialog"' in html
     # cell 相对链接指向 runs 目录内部
     assert "cells/report-case/default/fast/repeat-0/raw.txt" in html
-    # 外部依赖为零：无 script 标签、无 http 资源引用
-    assert "<script" not in html
+    # 外部依赖为零：仅一份固定的内联交互脚本，无 http 资源引用
+    assert html.count('<script id="report-interactions">') == 1
+    assert html.count("<script") == 1
     assert 'src="http' not in html and 'href="http' not in html
 
 
@@ -258,6 +267,100 @@ def test_report_escapes_untrusted_judge_reasoning(tmp_path: Path) -> None:
     assert "model-secret" not in html
     assert "judge-secret" not in html
     assert "***REDACTED***" in html
+
+
+def test_overview_keeps_unevaluated_repeats_visible(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    records = [_record("mixed"), replace(_record("mixed"), repeat_index=1, check=CheckResult())]
+    rendered = build_report_html(run_id="x", records=records, cases={case.name: case}, comparisons={})
+    overview = rendered.split('class="evidence-heading"')[0]
+    assert 'class="result-cell na"' in overview
+    assert "1/1 通过 · 1 未评" in overview
+    assert "全部通过判据" not in overview
+    assert 'class="result-cell ok"' not in overview
+    assert f'{detail_id(records[0])} {detail_id(records[1])}' in overview
+    assert all(f'id="{detail_id(r)}"' in rendered for r in records)
+
+
+def test_overview_fast_failure_is_not_fastest_and_scores_do_not_change_status(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    records = [
+        replace(_record("quick-failure", passed=False, reasoning="advisory"), duration_ms=1),
+        replace(_record("complete", reasoning="advisory"), duration_ms=1000,
+                judge=JudgeResult(ran=True, score=1, max=10)),
+    ]
+    rendered = build_report_html(run_id="x", records=records, cases={case.name: case}, comparisons={})
+    overview = rendered.split('class="evidence-heading"')[0]
+    assert "1.0 秒 · 最快" in overview
+    assert "0.0 秒 · 最快" not in overview
+    assert 'class="result-cell ok"' in overview
+    assert 'class="cell-score">1 / 10</span>' in overview
+
+
+def test_overview_keeps_variants_separate_and_marks_missing_combinations(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    other = replace(case, name="other-case")
+    records = [
+        replace(_record("runner"), variant_label="a"),
+        replace(_record("runner", passed=False), variant_label="b"),
+        replace(_record("runner"), variant_label="a", case=other.name),
+    ]
+    rendered = build_report_html(
+        run_id="x", records=records, cases={case.name: case, other.name: other}, comparisons={}
+    )
+    overview = rendered.split('class="evidence-heading"')[0]
+    assert "<small>a</small>" in overview and "<small>b</small>" in overview
+    assert "— 未运行" in overview
+    assert len({detail_id(r) for r in records}) == 3
+    assert "全部通过判据" not in overview
+
+
+def test_overview_output_links_stay_within_declared_artifacts(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+    output = artifacts / "article demo.html"
+    output.write_text("<!doctype html><h1>result</h1>")
+    record = replace(_record("runner"), artifacts_dir=str(artifacts))
+    case = replace(case, expected={"output_file": output.name})
+    href = output_href(record, case)
+    assert href == "cells/report-case/default/runner/repeat-0/artifacts/article%20demo.html"
+    rendered = build_report_html(run_id="x", records=[record], cases={case.name: case}, comparisons={})
+    assert '首屏尚未采集' in rendered
+    assert f'href="{href}"' in rendered
+    assert "<iframe" not in rendered
+    assert '<img' not in rendered
+    outside = tmp_path / "outside.html"
+    outside.write_text("private")
+    (artifacts / "escape.html").symlink_to(outside)
+    for unsafe in (str(outside), "../outside.html", "escape.html", "missing.html"):
+        assert output_href(record, replace(case, expected={"output_file": unsafe})) is None
+
+
+def test_overview_does_not_cherry_pick_html_from_later_repeat(tmp_path: Path) -> None:
+    case = replace(load_case(_case(tmp_path)), expected={"output_file": "article.html"})
+    artifacts = tmp_path / "later"
+    artifacts.mkdir()
+    (artifacts / "article.html").write_text("later success")
+    records = [
+        _record("runner", passed=False),
+        replace(_record("runner"), repeat_index=1, artifacts_dir=str(artifacts)),
+    ]
+    rendered = build_report_html(run_id="x", records=records, cases={case.name: case}, comparisons={})
+    overview = rendered.split('class="evidence-heading"')[0]
+    assert "本轮无 HTML 产物" in overview
+    assert "repeat-1/artifacts/article.html" not in overview
+    assert "repeat-1/artifacts/article.html" in rendered  # still available in repeat evidence
+
+
+def test_overview_does_not_average_incompatible_judge_scales(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    records = [
+        replace(_record("runner"), judge=JudgeResult(ran=True, score=8, max=10)),
+        replace(_record("runner"), repeat_index=1, judge=JudgeResult(ran=True, score=80, max=100)),
+    ]
+    rendered = build_report_html(run_id="x", records=records, cases={case.name: case}, comparisons={})
+    assert "评分量纲不同" in rendered
 
 
 def test_report_renders_compared_prompt_templates_and_actual_inputs(
