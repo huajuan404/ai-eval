@@ -42,17 +42,18 @@
 | 编号 | 当前 `runners.yaml` 档案 |
 |------|--------------------------|
 | 0 | `minimax-m3` |
-| 1 | `deepseek-v4` |
-| 2 | `glm-5.2` |
+| 1 | `deepseek-v4-flash-vision-exp` |
+| 2 | `glm-5.3` |
 | 3 | `kimi-k3` |
-| 4 | `agnes-2.0-flash` |
-| 5 | `minimax-m2.7` |
-| 6 | `glm-5.1` |
+| 4 | `glm-5.2` |
+| 5 | `glm-5.3-ai-keeping` |
+| 6 | `glm-5.3-flash` |
 | 7 | `deepseek-v4.1-flash` |
-| 8 | `qwen-0.5b-weak` |
-| 9 | `deepseek-v4-flash` |
+| 8 | `qwen-0.5b-weak`（本机暂缺 CONFIG_8）|
+| 9 | `deepseek-v4-flash`（本机暂缺 CONFIG_9）|
 
-`runners.yaml` 用 `c` 类档案引用这些编号（如 `glm-5.1 → config: 6`）。`minimax-m3-c0-direct`
+档案标签 = 该编号当前实际启动的模型，本机 config.env 换模型时两边同步改名（旧标签重跑会静默落到别的模型上）。
+`runners.yaml` 用 `c` 类档案引用这些编号（如 `glm-5.3-flash → config: 6`）。`minimax-m3-c0-direct`
 是复用 lane 0 配置的 `command` runner，不改变 `minimax-m3` 的 Agent 路径语义。各编号对应的端点、凭证和
 本机搭建都在 `c` 切换器的 config.env 里，属本机环境，不在本仓库记录（编号 8 还需本机额外服务，跨机不可移植）。
 
