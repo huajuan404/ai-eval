@@ -53,6 +53,9 @@ runners:
   deepseek-v4-flash:
     launcher: c
     config: 9   # 与 deepseek-v4(pro/config 1) 同 endpoint+token，仅 MODEL 不同（flash）
+  deepseek-v4.1-flash:
+    launcher: c
+    config: 7   # 本机 CONFIG_7 = api.deepseek.com/anthropic, MODEL=deepseek-v4.1-flash-expires-on-0910[1m]
   glm-5.1:
     launcher: c
     config: 6   # 本机 CONFIG_6 = open.bigmodel.cn/anthropic, MODEL=glm-5.1

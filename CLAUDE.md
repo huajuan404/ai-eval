@@ -48,6 +48,7 @@
 | 4 | `agnes-2.0-flash` |
 | 5 | `minimax-m2.7` |
 | 6 | `glm-5.1` |
+| 7 | `deepseek-v4.1-flash` |
 | 8 | `qwen-0.5b-weak` |
 | 9 | `deepseek-v4-flash` |
 
