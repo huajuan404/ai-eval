@@ -556,6 +556,74 @@ def test_report_front_cards_keep_variant_identity(tmp_path: Path) -> None:
     assert '组全部轮次通过 · a' in rendered and '组全部轮次通过 · b' in rendered
 
 
+def _report_view_fixture(tmp_path: Path):
+    root = tmp_path / "repo"
+    for name in ("keep-case", "drop-case", "replacement-case"):
+        directory = _case(root, name)
+        if name == "replacement-case":
+            with (directory / "case.yaml").open("a") as stream:
+                stream.write("expected:\n  output_file: drawing.svg\n")
+    registry = {"fake": RunnerProfile("fake", "command", template="echo hi")}
+
+    def execute(cmd, cwd, env):
+        Path(cwd, "drawing.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"><circle r="10"/></svg>')
+        return "done", "", 0
+
+    run_benchmark(RunConfig(runners=("fake",), cases=("keep-case", "drop-case"), workers=1), registry, root, run_fn=execute)
+    host_id = next((root / "runs").iterdir()).name
+    run_benchmark(RunConfig(runners=("fake",), cases=("replacement-case",), workers=1), registry, root, run_fn=execute)
+    child_id = next(p.name for p in (root / "runs").iterdir() if p.name != host_id)
+    host = find_run_layout(host_id, [root])
+    child = find_run_layout(child_id, [root])
+    recipe = host.run_dir / "report_view.json"
+    recipe.write_text(json.dumps({"schema_version": 1, "cases": [
+        {"case": "keep-case", "run_id": host_id},
+        {"case": "replacement-case", "run_id": child_id},
+    ]}))
+    return root, host, child, recipe
+
+
+def test_report_view_replaces_case_and_preserves_source_runs(tmp_path: Path):
+    root, host, child, recipe = _report_view_fixture(tmp_path)
+    protected = [p for p in (root / "runs").rglob("*.json") if p != recipe]
+    before = {p: p.read_bytes() for p in protected}
+    original_card = host.scorecard_path.read_bytes()
+    path = rebuild_report(host.run_id, root)
+    rendered = path.read_text()
+    assert "keep-case" in rendered and "replacement-case" in rendered
+    assert "drop-case" not in rendered
+    assert rendered.count('class="front-chart"') == 2
+    assert f'../{child.run_id}/cells/replacement-case/default/fake/repeat-0/raw.txt' in rendered
+    assert f'../{child.run_id}/cells/replacement-case/default/fake/repeat-0/artifacts/drawing.svg' in rendered
+    assert len(_html_nodes(rendered, "iframe")) == 1
+    assert "组合展示" not in rendered and "来源运行：" not in rendered
+    assert before == {p: p.read_bytes() for p in protected}
+    assert original_card == host.scorecard_path.read_bytes()
+    assert rebuild_report(host.run_id, root).read_text() == rendered
+
+
+@pytest.mark.parametrize("failure", ["traversal", "duplicate", "private", "running", "definition-drift"])
+def test_report_view_rejects_invalid_sources_without_overwriting_report(tmp_path: Path, failure: str):
+    root, host, child, recipe = _report_view_fixture(tmp_path)
+    before = host.report_path.read_bytes()
+    view = json.loads(recipe.read_text())
+    if failure == "traversal":
+        view["cases"][1]["run_id"] = "../outside"
+    elif failure == "duplicate":
+        view["cases"].append(view["cases"][0])
+    elif failure in {"private", "running"}:
+        manifest = json.loads(child.manifest_path.read_text())
+        manifest.update({"private": True} if failure == "private" else {"status": "running"})
+        child.manifest_path.write_text(json.dumps(manifest))
+    else:
+        with (root / "cases/replacement-case/check.sh").open("a") as stream:
+            stream.write("\n# changed scoring definition\n")
+    recipe.write_text(json.dumps(view))
+    with pytest.raises(ReportError):
+        rebuild_report(host.run_id, root)
+    assert host.report_path.read_bytes() == before
+
+
 def test_report_renders_compared_prompt_templates_and_actual_inputs(
     tmp_path: Path,
 ) -> None:

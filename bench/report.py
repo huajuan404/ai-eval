@@ -73,9 +73,9 @@ def _completion_class(comp: CellCompletion) -> str:
     return "warn"
 
 
-def _cell_href(record: RunRecord) -> str:
+def _cell_href(record: RunRecord, prefix: str = "") -> str:
     return (
-        f"cells/{record.case}/{record.variant_label}/"
+        f"{prefix}cells/{record.case}/{record.variant_label}/"
         f"{record.runner_label}/repeat-{record.repeat_index}/"
     )
 
@@ -1244,7 +1244,10 @@ def _render_check_axes(case_records: dict[tuple[str, str], list[RunRecord]]) -> 
     )
 
 
-def _render_cell_details(records: list[RunRecord], case: Case | None = None) -> str:
+def _render_cell_details(
+    records: list[RunRecord], case: Case | None = None, asset_prefixes: dict[str, str] | None = None,
+) -> str:
+    asset_prefixes = asset_prefixes or {}
     parts = ["<h3>逐格明细</h3>"]
     for record in sorted(
         records, key=lambda r: (r.runner_label, r.variant_label, r.repeat_index)
@@ -1270,7 +1273,8 @@ def _render_cell_details(records: list[RunRecord], case: Case | None = None) -> 
             and record.judge.score is not None
             else ""
         )
-        href = _cell_href(record)
+        prefix = asset_prefixes.get(record.run_id, "")
+        href = _cell_href(record, prefix)
         summary = (
             f"<code>{_e(record.runner_label)}</code> · "
             f"<code>{_e(record.variant_label)}</code> · repeat-{record.repeat_index} "
@@ -1286,7 +1290,7 @@ def _render_cell_details(records: list[RunRecord], case: Case | None = None) -> 
             )
             + f' · <a href="{_e(href)}raw.txt">脱敏 raw.txt</a></p>'
         ]
-        artifact = output_href(record, case) if case else None
+        artifact = output_href(record, case, prefix=prefix) if case else None
         if artifact:
             body.insert(0, f'<p><a href="{_e(artifact)}" target="_blank" '
                         'rel="noopener noreferrer">打开本轮原始作品 ↗</a></p>')
@@ -1321,6 +1325,7 @@ def build_report_html(
     comparisons: dict[str, list[RunnerComparison]],
     judge_label: str = _DASH,
     skipped: list | None = None,
+    report_sources: dict[str, str] | None = None,
 ) -> str:
     """从与计分卡相同的数据源渲染单文件 HTML 报告。"""
     by_case: dict[str, dict[tuple[str, str], list[RunRecord]]] = defaultdict(
@@ -1332,9 +1337,13 @@ def build_report_html(
     runner_set = sorted({r.runner_label for r in records})
     variant_set = sorted({r.variant_label for r in records})
 
+    asset_prefixes = {
+        source: f"../{source}/" for source in (report_sources or {}).values() if source != run_id
+    }
     sections: list[str] = []
     sections.append(render_overview(
-        records, cases, run_id, front_charts=render_front_charts(records, cases)
+        records, cases, run_id, front_charts=render_front_charts(records, cases),
+        asset_prefixes=asset_prefixes,
     ))
     sections.append('<h2 class="evidence-heading">从结论到证据</h2>')
 
@@ -1382,7 +1391,7 @@ def build_report_html(
         sections.append(_render_check_axes(case_records))
         sections.append(_render_items_grid(case_records))
         sections.append(_render_cell_details(
-            [r for recs in case_records.values() for r in recs], case_obj
+            [r for recs in case_records.values() for r in recs], case_obj, asset_prefixes
         ))
         sections.append('</div></details>')
 

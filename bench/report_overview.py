@@ -96,7 +96,7 @@ def _complete_score(records: list[RunRecord]) -> tuple[float, float] | None:
     return mean(j.score for j in judges), judges[0].max
 
 
-def output_href(record: RunRecord, case: Case) -> str | None:
+def output_href(record: RunRecord, case: Case, *, prefix: str = "") -> str | None:
     """Only expose a declared HTML/SVG deliverable contained in this cell's artifacts."""
     declared = (case.expected or {}).get("output_file")
     if not isinstance(declared, str) or not record.artifacts_dir:
@@ -112,7 +112,7 @@ def output_href(record: RunRecord, case: Case) -> str | None:
              f"repeat-{record.repeat_index}", "artifacts", *relative.parts)
     if any(p in ("", ".", "..") for p in parts):
         return None
-    return "/".join(quote(p, safe="") for p in parts)
+    return prefix + "/".join(quote(p, safe="") for p in parts)
 
 
 def _status(records: list[RunRecord], case: Case) -> tuple[str, str]:
@@ -158,7 +158,11 @@ def _cell(records: list[RunRecord], case: Case, fastest: bool, highest: bool = F
     )
 
 
-def render_overview(records: list[RunRecord], cases: dict[str, Case], run_id: str, *, front_charts: str = "") -> str:
+def render_overview(
+    records: list[RunRecord], cases: dict[str, Case], run_id: str, *,
+    front_charts: str = "", asset_prefixes: dict[str, str] | None = None,
+) -> str:
+    asset_prefixes = asset_prefixes or {}
     pairs = sorted({(r.runner_label, r.variant_label) for r in records})
     names = sorted({r.case for r in records if r.case in cases})
     variants = {v for _, v in pairs}
@@ -235,7 +239,7 @@ def render_overview(records: list[RunRecord], cases: dict[str, Case], run_id: st
                 # Same first planned/observed repeat for all runners; never cherry-pick a later success.
                 first_index = min(r.repeat_index for r in records if r.case == name)
                 first = next((r for r in rs if r.repeat_index == first_index), None)
-                href = output_href(first, case) if first else None
+                href = output_href(first, case, prefix=asset_prefixes.get(first.run_id, "")) if first else None
                 kind = "SVG" if str(case.expected.get("output_file", "")).lower().endswith(".svg") else "HTML"
                 action = (f'<a class="work-open" href="{esc(href)}" target="_blank" rel="noopener noreferrer">'
                           '打开原始作品 ↗</a>') if href else f'<span class="work-unavailable">本轮无 {kind} 产物</span>'

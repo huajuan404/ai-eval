@@ -38,6 +38,11 @@ from .report import (
     find_run_layout,
     load_run_records,
 )
+from .run_manifest import (
+    RunManifestError,
+    snapshot_case_integrity,
+    validate_provider_invariants,
+)
 from .scorecard import (
     build_scorecard,
     scorecard_filename,
@@ -45,11 +50,6 @@ from .scorecard import (
     write_model_profile,
 )
 from .scoring import _default_script_runner, score_record
-from .run_manifest import (
-    RunManifestError,
-    snapshot_case_integrity,
-    validate_provider_invariants,
-)
 from .scrub import scrub_text
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -477,6 +477,12 @@ def _candidate_report_roots(root: Path) -> list[Path]:
 def rebuild_report(run_id: str, root: Path) -> Path:
     """对已完成的 run 从磁盘重建 HTML 报告（不重跑、不重判分）。"""
     layout = find_run_layout(run_id, _candidate_report_roots(root))
+    if (layout.run_dir / "report_view.json").is_file():
+        from .report_view import build_report_view
+
+        html = build_report_view(layout, {c.name: c for c in discover_cases(root)})
+        layout.report_path.write_text(html, encoding="utf-8")
+        return layout.report_path
     manifest = json.loads(layout.manifest_path.read_text(encoding="utf-8"))
     records = load_run_records(layout)
     cases = {c.name: c for c in discover_cases(root)}

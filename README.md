@@ -200,6 +200,17 @@ runner 使用统一注册表，不区分公开或私有；私有性只属于 cas
 ./run.sh --report <run_id>
 ```
 
+若只想调整报告展示哪些用例，可在该运行目录写入 `report_view.json`，再执行上述重建命令。
+它只改变 HTML 视图，不改原运行计划、记录或计分卡；来源保留在配置与产物链接中，页面只展示选定结果。
+每个 case 只选一个已完成的来源 run，且来源须位于同一产物根、匹配当前 case 完整性锁；公开报告不能引用私有运行。
+
+```json
+{"schema_version":1,"cases":[
+  {"case":"case-a","run_id":"original-run-id"},
+  {"case":"case-b","run_id":"another-run-id"}
+]}
+```
+
 ## 目录地图：什么在哪
 
 拨乱反正的两条铁律：**case 目录 = 纯定义**（评什么、喂什么、怎么判，永不写入运行产物）；
