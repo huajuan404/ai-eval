@@ -1,11 +1,14 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["CairoSVG==2.8.2"]
+# ///
 """Validate standalone SVG and rasterize it; never infer drawing quality from XML."""
 
 from __future__ import annotations
 
 import math
+import os
 import re
-import shutil
-import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -43,7 +46,7 @@ def validate(source: str) -> None:
         css = " ".join(element.attrib.values()) + (element.text or "")
         if "\\" in css or "@import" in css.lower():
             raise ValueError("external or escaped CSS is not allowed")
-        for ref in re.findall(r"url\s*\((.*?)\)", css, re.I):
+        for ref in re.findall(r"url\s*\((.*?)\)", css, re.IGNORECASE):
             if not ref.strip(" \t\r\n\"'").startswith("#"):
                 raise ValueError("CSS resources must be internal SVG fragments")
     if not shapes:
@@ -54,25 +57,29 @@ def main() -> int:
     source = Path("pelican.svg")
     output = Path("render.png")
     try:
+        # Never let a failed check leave stale or contestant-supplied visual evidence.
+        if output.is_symlink() or output.is_file():
+            output.unlink()
         if source.is_symlink() or not source.is_file() or source.stat().st_size > 512000:
             raise ValueError("pelican.svg must be a local file no larger than 512 KB")
-        if output.is_symlink():
-            raise ValueError("render.png must not be a symlink")
-        validate(source.read_text(encoding="utf-8"))
-        renderer = shutil.which("magick")
-        if renderer is None:
-            raise ValueError("ImageMagick is required to render SVG evidence")
-        result = subprocess.run(
-            [renderer, "-background", "white", "MSVG:pelican.svg", "-resize", "1024x768",
-             "-gravity", "center", "-extent", "1024x768", "PNG32:render.png"],
-            capture_output=True, text=True, timeout=60,
+        source_text = source.read_text(encoding="utf-8")
+        validate(source_text)
+        if sys.platform == "darwin":
+            # Scoped to this checker process; no shell/profile/system configuration changes.
+            libraries = [p for p in ("/opt/homebrew/lib", "/usr/local/lib") if Path(p, "libcairo.dylib").exists()]
+            if libraries:
+                os.environ["DYLD_FALLBACK_LIBRARY_PATH"] = os.pathsep.join(libraries)
+        import cairosvg
+
+        png = cairosvg.svg2png(
+            bytestring=source_text.encode("utf-8"), output_width=1024, output_height=768,
+            background_color="white",
         )
-        if result.returncode != 0 or not output.is_file():
-            raise ValueError("SVG rasterization failed: " + result.stderr[:400])
-        print("PASS: standalone SVG parsed and render.png generated (1024x768, ImageMagick MSVG).")
+        output.write_bytes(png)
+        print("PASS: standalone SVG parsed and render.png generated (1024x768, CairoSVG 2.8.2).")
         print("This is a format/render gate, not a visual-quality verdict.")
         return 0
-    except (OSError, UnicodeError, ValueError, ET.ParseError, subprocess.TimeoutExpired) as exc:
+    except (OSError, UnicodeError, ValueError, ET.ParseError, ImportError) as exc:
         print(f"FAIL: {exc}")
         return 1
 

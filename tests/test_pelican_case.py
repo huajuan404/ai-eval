@@ -48,3 +48,16 @@ def test_svg_gate_rejects_active_external_or_invalid_content(content):
 
 def test_svg_internal_gradients_are_allowed():
     _checker().validate('<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="a"/></defs><rect width="10" height="10" fill="url(#a)"/></svg>')
+
+
+def test_failed_check_removes_stale_png_without_following_symlinks(tmp_path, monkeypatch):
+    outside = tmp_path / "outside.png"
+    outside.write_bytes(b"must remain")
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "render.png").symlink_to(outside)
+    (work / "pelican.svg").write_text("not SVG")
+    monkeypatch.chdir(work)
+    assert _checker().main() == 1
+    assert not (work / "render.png").exists()
+    assert outside.read_bytes() == b"must remain"
