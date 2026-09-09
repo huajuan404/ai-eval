@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import textwrap
 from dataclasses import replace
 from pathlib import Path
@@ -22,6 +23,7 @@ from bench.report import (
     find_run_layout,
     load_run_records,
 )
+from bench.report_charts import render_case_charts
 from bench.report_overview import detail_id, output_href
 
 
@@ -395,6 +397,64 @@ def test_overview_invalid_scores_do_not_create_meter_or_winner(tmp_path: Path, v
     rendered = build_report_html(run_id="x", records=[record], cases={case.name: case}, comparisons={})
     assert 'role="meter"' not in rendered
     assert 'class="score-leader"' not in rendered
+
+
+def test_case_charts_sort_each_metric_on_a_shared_axis(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    records = [
+        replace(_record("slow-high"), duration_ms=180000, judge=JudgeResult(ran=True, score=20, max=25)),
+        replace(_record("fast-low"), duration_ms=60000, judge=JudgeResult(ran=True, score=14, max=25)),
+        replace(_record("crash", passed=False), duration_ms=1, is_error=True),
+    ]
+    charts = render_case_charts(records, case)
+    score_panel, time_panel = re.findall(r'<section class="comparison-panel[^>]+>(.*?)</section>', charts, re.DOTALL)
+    assert re.findall(r'data-runner="([^"]+)"', score_panel) == ["slow-high", "fast-low", "crash"]
+    assert re.findall(r'data-runner="([^"]+)"', time_panel) == ["fast-low", "slow-high", "crash"]
+    assert "width:80.000%" in score_panel and "width:56.000%" in score_panel
+    assert "width:33.333%" in time_panel and "width:100.000%" in time_panel
+    assert "未全部通过，不参加耗时排序" in time_panel
+    assert charts.count('class="comparison-bar"') == 4
+
+
+def test_case_charts_do_not_compare_different_score_scales(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    records = [
+        replace(_record("a"), judge=JudgeResult(ran=True, score=8, max=10)),
+        replace(_record("b"), judge=JudgeResult(ran=True, score=80, max=100)),
+    ]
+    charts = render_case_charts(records, case)
+    score_panel = re.findall(r'<section class="comparison-panel[^>]+>(.*?)</section>', charts, re.DOTALL)[0]
+    assert 'class="comparison-bar"' not in score_panel
+    assert "评分量纲不同" in score_panel
+    assert "8 / 10" in score_panel and "80 / 100" in score_panel
+
+
+def test_case_charts_separate_variants_and_do_not_hide_partial_judging(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    records = [
+        replace(_record("a"), variant_label="one", judge=JudgeResult(ran=True, score=8, max=10)),
+        replace(_record("a"), variant_label="one", repeat_index=1),
+        replace(_record("b"), variant_label="one", judge=JudgeResult(ran=True, score=9, max=10)),
+        replace(_record("a"), variant_label="two", judge=JudgeResult(ran=True, score=7, max=10)),
+        replace(_record("b"), variant_label="two", judge=JudgeResult(ran=True, score=6, max=10)),
+    ]
+    charts = render_case_charts(records, case)
+    assert charts.count('<fieldset') == 2
+    names = re.findall(r'name="([^"]+)-metric"', charts)
+    assert len(set(names)) == 2 and len(names) == 4
+    panels = re.findall(r'<section class="comparison-panel[^>]+>(.*?)</section>', charts, re.DOTALL)
+    assert "缺少完整评分" in panels[0] and "1/2 已评" in panels[0]
+    assert "缺少完整评分" not in panels[2]
+
+
+def test_case_chart_labels_cannot_inject_markup(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    malicious = 'runner"><script>alert(1)</script>'
+    records = [_record(malicious), _record("normal")]
+    charts = render_case_charts(records, case)
+    assert "<script>" not in charts
+    assert "&lt;script&gt;" in charts
+    assert detail_id(records[0]) in charts
 
 
 def test_report_renders_compared_prompt_templates_and_actual_inputs(
