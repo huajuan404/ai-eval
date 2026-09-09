@@ -7,6 +7,7 @@ import json
 import re
 import textwrap
 from dataclasses import replace
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,19 @@ from bench.report import (
 )
 from bench.report_charts import render_case_charts
 from bench.report_overview import detail_id, output_href
+from bench.scrub import scrub_text
+
+
+def _html_nodes(markup: str, tag: str) -> list[dict[str, str]]:
+    nodes = []
+
+    class Parser(HTMLParser):
+        def handle_starttag(self, name, attrs):
+            if name == tag:
+                nodes.append(dict(attrs))
+
+    Parser().feed(markup)
+    return nodes
 
 
 def _case(tmp_path: Path, name: str = "report-case") -> Path:
@@ -224,9 +238,10 @@ def test_report_html_renders_summary_and_cells(tmp_path: Path) -> None:
     assert 'id="result-dialog"' in html
     # cell 相对链接指向 runs 目录内部
     assert "cells/report-case/default/fast/repeat-0/raw.txt" in html
-    # 外部依赖为零：仅一份固定的内联交互脚本，无 http 资源引用
+    # 报告自身仅有固定的内联交互脚本，无 http 资源引用
     assert html.count('<script id="report-interactions">') == 1
-    assert html.count("<script") == 1
+    assert html.count('<script id="report-previews">') == 1
+    assert html.count("<script") == 2
     assert 'src="http' not in html and 'href="http' not in html
 
 
@@ -328,15 +343,56 @@ def test_overview_output_links_stay_within_declared_artifacts(tmp_path: Path) ->
     href = output_href(record, case)
     assert href == "cells/report-case/default/runner/repeat-0/artifacts/article%20demo.html"
     rendered = build_report_html(run_id="x", records=[record], cases={case.name: case}, comparisons={})
-    assert '首屏尚未采集' in rendered
+    assert '真实 HTML 内嵌预览' in rendered
     assert f'href="{href}"' in rendered
-    assert "<iframe" not in rendered
+    frames = _html_nodes(rendered, "iframe")
+    assert len(frames) == 1
+    assert frames[0]["srcdoc"] == output.read_text()
+    assert frames[0]["sandbox"] == "allow-scripts"
     assert '<img' not in rendered
     outside = tmp_path / "outside.html"
     outside.write_text("private")
     (artifacts / "escape.html").symlink_to(outside)
     for unsafe in (str(outside), "../outside.html", "escape.html", "missing.html"):
         assert output_href(record, replace(case, expected={"output_file": unsafe})) is None
+        unsafe_html = build_report_html(
+            run_id="x", records=[record], cases={case.name: replace(case, expected={"output_file": unsafe})}, comparisons={}
+        )
+        assert _html_nodes(unsafe_html, "iframe") == []
+
+
+def test_embedded_html_cannot_escape_srcdoc_and_is_scrubbed(tmp_path: Path) -> None:
+    case = replace(load_case(_case(tmp_path)), expected={"output_file": "article.html"})
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+    source = ('<!doctype html><h1 title="&quot;">hello</h1></iframe>'
+              '<script id="host-injection">parent.document.body.textContent="bad";</script>'
+              '<p>api_key=embedded-secret</p>')
+    output = artifacts / "article.html"
+    output.write_text(source)
+    record = replace(_record('evil"><img src=x onerror=alert(1)>'), artifacts_dir=str(artifacts))
+    rendered = build_report_html(run_id="x", records=[record], cases={case.name: case}, comparisons={})
+    frames = _html_nodes(rendered, "iframe")
+    assert len(frames) == 1 and frames[0]["sandbox"] == "allow-scripts"
+    assert frames[0]["referrerpolicy"] == "no-referrer"
+    assert frames[0]["srcdoc"] == scrub_text(source)
+    assert frames[0]["loading"] == "lazy"
+    assert 'embedded-secret' not in rendered
+    assert _html_nodes(rendered, "img") == []
+    assert {s["id"] for s in _html_nodes(rendered, "script")} == {"report-interactions", "report-previews"}
+    assert output.read_text() == source
+
+
+def test_unreadable_html_preview_falls_back_without_breaking_report(tmp_path: Path) -> None:
+    case = replace(load_case(_case(tmp_path)), expected={"output_file": "article.html"})
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+    (artifacts / "article.html").write_bytes(b'\xff\xfe')
+    record = replace(_record("runner"), artifacts_dir=str(artifacts))
+    rendered = build_report_html(run_id="x", records=[record], cases={case.name: case}, comparisons={})
+    assert '无法读取 HTML 预览' in rendered
+    assert _html_nodes(rendered, "iframe") == []
+    assert 'repeat-0/artifacts/article.html' in rendered
 
 
 def test_overview_does_not_cherry_pick_html_from_later_repeat(tmp_path: Path) -> None:

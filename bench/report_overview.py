@@ -12,6 +12,7 @@ from urllib.parse import quote
 from .case import Case
 from .completion import cell_completion, repeat_pass
 from .record import RunRecord
+from .report_previews import render_html_preview
 from .scorecard import _task_brief
 from .scrub import scrub_text
 
@@ -238,17 +239,20 @@ def render_overview(records: list[RunRecord], cases: dict[str, Case], run_id: st
                 action = (f'<a class="work-open" href="{esc(href)}" target="_blank" rel="noopener noreferrer">'
                           '打开原始作品 ↗</a>') if href else '<span class="work-unavailable">本轮无 HTML 产物</span>'
                 label = f"{runner} · {variant}" if len(variants) > 1 or variant != "default" else runner
+                preview = render_html_preview(
+                    Path(first.artifacts_dir) / case.expected["output_file"],
+                    "preview-" + detail_id(first), label,
+                ) if href else '<div class="preview-empty">本轮无 HTML 产物</div>'
                 cards.append(
-                    f'<article class="work"><h4>{runner_marker(runner)}{esc(label)}</h4><div class="preview-empty">'
-                    '<span class="preview-symbol" aria-hidden="true">&lt;/&gt;</span>'
-                    f'<span>{"HTML 已生成" if href else "作品缺失"}</span><small>首屏尚未采集</small></div>'
+                    f'<article class="work"><h4>{runner_marker(runner)}{esc(label)}</h4>{preview}'
                     f'<div class="work-measures"><strong>{esc(score(rs))}</strong><span>{esc(elapsed(rs))}</span></div>'
                     f'{action}<small class="work-repeat">展示 repeat-{first_index} · 参考评分，详见裁判说明</small></article>'
                 )
             galleries.append(
                 f'<section class="work-section"><div class="section-heading"><div><span class="eyebrow">OUTPUTS</span>'
                 f'<h2>{esc(task_title(case))}</h2></div><a href="#{case_id(name)}" data-case-link>要求与评分依据 ↗</a></div>'
-                '<p class="gallery-note">真实 HTML 产物入口 · 本次未保存首屏截图，视觉与交互表现请打开作品查看。</p>'
+                '<p class="gallery-note">真实 HTML 内嵌预览 · 首屏统一按 1440 × 900 缩放。点击放大，可滚动、交互和切换 Runner；放大后按窗口宽度布局。'
+                '预览内容已脱敏，外部资源仍可能需要网络，完整效果可打开原始作品查看。</p>'
                 f'<div class="work-grid" style="--runner-count:{len(pairs)}">{"".join(cards)}</div></section>'
             )
     return (

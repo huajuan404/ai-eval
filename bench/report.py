@@ -37,6 +37,9 @@ from .report_overview import (
     render_overview,
     task_title,
 )
+from .report_previews import CSS as PREVIEW_CSS
+from .report_previews import DIALOG as PREVIEW_DIALOG
+from .report_previews import SCRIPT as PREVIEW_SCRIPT
 from .run_manifest import RunManifestError, load_request_manifest
 from .scorecard import (
     CellAgg,
@@ -1410,7 +1413,7 @@ def build_report_html(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:,">
 <title>评测报告 {_e(run_id)}</title>
-<style>{_CSS}{OVERVIEW_CSS}{CHART_CSS}</style>
+<style>{_CSS}{OVERVIEW_CSS}{CHART_CSS}{PREVIEW_CSS}</style>
 </head>
 <body><main>
 {"".join(sections)}
@@ -1423,7 +1426,7 @@ def build_report_html(
 	必须按 case 的保密级别保存；仅 scorecard.md 是默认可分享摘要。
 	cells/、run.json 与 artifacts/ 同样不可直接外发。</p>
 </div></details>
-</main>{DIALOG}{SCRIPT}</body>
+</main>{DIALOG}{PREVIEW_DIALOG}{SCRIPT}{PREVIEW_SCRIPT}</body>
 </html>
 """
 
