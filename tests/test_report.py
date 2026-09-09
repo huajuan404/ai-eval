@@ -457,6 +457,31 @@ def test_case_chart_labels_cannot_inject_markup(tmp_path: Path) -> None:
     assert detail_id(records[0]) in charts
 
 
+def test_report_front_charts_precede_collapsed_matrix_with_shared_controls(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    other = replace(case, name="other-case")
+    records = [_record("a"), _record("b"), replace(_record("a"), case=other.name)]
+    rendered = build_report_html(
+        run_id="x", records=records, cases={case.name: case, other.name: other}, comparisons={}
+    )
+    assert rendered.index('class="front-grid"') < rendered.index('<details class="matrix-secondary">')
+    assert rendered.count('name="front-metric"') == 2
+    assert rendered.count('class="front-chart"') == 2  # single-runner cases stay visible
+    assert rendered.count('class="comparison-panel panel-score"') == 2
+    assert rendered.count('class="comparison-panel panel-time"') == 2
+    assert '<details class="matrix-secondary" open' not in rendered
+    assert '.metric-score:checked~.front-grid .panel-score' in rendered
+    assert '.metric-time:checked~.front-grid .panel-time' in rendered
+
+
+def test_report_front_cards_keep_variant_identity(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    records = [replace(_record("runner"), variant_label=v) for v in ("a", "b")]
+    rendered = build_report_html(run_id="x", records=records, cases={case.name: case}, comparisons={})
+    assert rendered.count('class="front-chart"') == 2
+    assert '组全部轮次通过 · a' in rendered and '组全部轮次通过 · b' in rendered
+
+
 def test_report_renders_compared_prompt_templates_and_actual_inputs(
     tmp_path: Path,
 ) -> None:

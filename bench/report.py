@@ -26,7 +26,7 @@ from .completion import CellCompletion, cell_completion
 from .layout import RunLayout
 from .record import RunRecord
 from .report_charts import CSS as CHART_CSS
-from .report_charts import render_case_charts
+from .report_charts import render_front_charts
 from .report_overview import CSS as OVERVIEW_CSS
 from .report_overview import (
     DIALOG,
@@ -1330,7 +1330,9 @@ def build_report_html(
     variant_set = sorted({r.variant_label for r in records})
 
     sections: list[str] = []
-    sections.append(render_overview(records, cases, run_id))
+    sections.append(render_overview(
+        records, cases, run_id, front_charts=render_front_charts(records, cases)
+    ))
     sections.append('<h2 class="evidence-heading">从结论到证据</h2>')
 
     for case_name in case_names:
@@ -1352,9 +1354,6 @@ def build_report_html(
                 f'<p class="note">类型 <code>{_e(case_obj.class_)}</code> · '
                 f"判分：{_e(_judging_summary(case_obj))}</p>{note_html}</div>"
             )
-            sections.append(render_case_charts(
-                [r for recs in case_records.values() for r in recs], case_obj
-            ))
             sections.append(_render_prompt_comparison(case_obj, case_records))
         cells = [_aggregate(recs) for recs in case_records.values()]
         cells.sort(key=lambda c: (c.runner_label, c.variant_label))

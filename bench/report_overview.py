@@ -157,7 +157,7 @@ def _cell(records: list[RunRecord], case: Case, fastest: bool, highest: bool = F
     )
 
 
-def render_overview(records: list[RunRecord], cases: dict[str, Case], run_id: str) -> str:
+def render_overview(records: list[RunRecord], cases: dict[str, Case], run_id: str, *, front_charts: str = "") -> str:
     pairs = sorted({(r.runner_label, r.variant_label) for r in records})
     names = sorted({r.case for r in records if r.case in cases})
     variants = {v for _, v in pairs}
@@ -259,6 +259,8 @@ def render_overview(records: list[RunRecord], cases: dict[str, Case], run_id: st
         f'<h1>{esc(title)}</h1><p>{esc(lead)}</p></div>'
         f'<div class="run-total"><strong>{passes}<span> / {len(verdicts)}</span></strong><span>次运行通过'
         f' · {failures} 失败 · {unknown} 未评</span></div></div>'
+        f'{front_charts}<details class="matrix-secondary"><summary>查看完整通过矩阵 · '
+        f'{len(names)} 个任务 × {len(pairs)} 组启动器</summary><div class="matrix-body">'
         '<div class="matrix-heading"><h2>用例通过矩阵</h2><div class="matrix-legend">'
         '<span class="legend-ok">✓ 通过</span><span class="legend-warn">◐ 部分轮次通过</span>'
         '<span class="legend-bad">× 失败</span><span>— 未评 / 缺失</span></div></div>'
@@ -268,6 +270,7 @@ def render_overview(records: list[RunRecord], cases: dict[str, Case], run_id: st
         '<p class="matrix-footnote">横条 = 参考分 / 满分；✓ = 通过判据。多轮时分数与耗时为均值，另显示逐轮状态点。'
         '分数不同不改变通过状态，不跨任务合成总分。'
         '“最快”仅比较该任务所有轮次均通过的组合；单次运行不代表稳定性。</p>'
+        '</div></details>'
         f'{"".join(galleries)}</section>'
     )
 
