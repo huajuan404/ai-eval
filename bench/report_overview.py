@@ -97,12 +97,12 @@ def _complete_score(records: list[RunRecord]) -> tuple[float, float] | None:
 
 
 def output_href(record: RunRecord, case: Case) -> str | None:
-    """Only expose the declared HTML deliverable, contained in this cell's artifacts."""
+    """Only expose a declared HTML/SVG deliverable contained in this cell's artifacts."""
     declared = (case.expected or {}).get("output_file")
     if not isinstance(declared, str) or not record.artifacts_dir:
         return None
     relative = Path(declared)
-    if relative.is_absolute() or ".." in relative.parts or relative.suffix.lower() not in (".html", ".htm"):
+    if relative.is_absolute() or ".." in relative.parts or relative.suffix.lower() not in (".html", ".htm", ".svg"):
         return None
     root = Path(record.artifacts_dir).resolve()
     target = (root / relative).resolve()
@@ -236,13 +236,14 @@ def render_overview(records: list[RunRecord], cases: dict[str, Case], run_id: st
                 first_index = min(r.repeat_index for r in records if r.case == name)
                 first = next((r for r in rs if r.repeat_index == first_index), None)
                 href = output_href(first, case) if first else None
+                kind = "SVG" if str(case.expected.get("output_file", "")).lower().endswith(".svg") else "HTML"
                 action = (f'<a class="work-open" href="{esc(href)}" target="_blank" rel="noopener noreferrer">'
-                          '打开原始作品 ↗</a>') if href else '<span class="work-unavailable">本轮无 HTML 产物</span>'
+                          '打开原始作品 ↗</a>') if href else f'<span class="work-unavailable">本轮无 {kind} 产物</span>'
                 label = f"{runner} · {variant}" if len(variants) > 1 or variant != "default" else runner
                 preview = render_html_preview(
                     Path(first.artifacts_dir) / case.expected["output_file"],
                     "preview-" + detail_id(first), label,
-                ) if href else '<div class="preview-empty">本轮无 HTML 产物</div>'
+                ) if href else f'<div class="preview-empty">本轮无 {kind} 产物</div>'
                 cards.append(
                     f'<article class="work"><h4>{runner_marker(runner)}{esc(label)}</h4>{preview}'
                     f'<div class="work-measures"><strong>{esc(score(rs))}</strong><span>{esc(elapsed(rs))}</span></div>'
@@ -251,7 +252,7 @@ def render_overview(records: list[RunRecord], cases: dict[str, Case], run_id: st
             galleries.append(
                 f'<section class="work-section"><div class="section-heading"><div><span class="eyebrow">OUTPUTS</span>'
                 f'<h2>{esc(task_title(case))}</h2></div><a href="#{case_id(name)}" data-case-link>要求与评分依据 ↗</a></div>'
-                '<p class="gallery-note">真实 HTML 内嵌预览 · 首屏统一按 1440 × 900 缩放。点击放大，可滚动、交互和切换 Runner；放大后按窗口宽度布局。'
+                f'<p class="gallery-note">真实 {kind} 内嵌预览 · 首屏统一按 1440 × 900 缩放。点击放大，可滚动、交互和切换 Runner；放大后按窗口宽度布局。'
                 '预览内容已脱敏，外部资源仍可能需要网络，完整效果可打开原始作品查看。</p>'
                 f'<div class="work-grid" style="--runner-count:{len(pairs)}">{"".join(cards)}</div></section>'
             )

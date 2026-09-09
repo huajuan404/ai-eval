@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import html
 from pathlib import Path
 
@@ -14,13 +15,26 @@ def render_html_preview(path: Path, frame_id: str, label: str) -> str:
         source = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError):
         return '<div class="preview-empty">无法读取 HTML 预览，请打开原始作品</div>'
-    source = html.escape(scrub_text(source), quote=True)
+    source = scrub_text(source)
+    sandbox = "allow-scripts"
+    if path.suffix.lower() == ".svg":
+        # SVG is displayed as an image: no active SVG scripting or foreign DOM content.
+        encoded = base64.b64encode(source.encode("utf-8")).decode("ascii")
+        source = (
+            '<!doctype html><html><head><meta charset="utf-8"><style>'
+            'html,body{margin:0;width:100%;height:100%;background:white}'
+            'img{display:block;width:100%;height:100%;object-fit:contain}'
+            '</style></head><body><img alt="SVG 作品" src="data:image/svg+xml;base64,'
+            + encoded + '"></body></html>'
+        )
+        sandbox = ""
+    source = html.escape(source, quote=True)
     title = html.escape(scrub_text(label), quote=True)
     identity = html.escape(frame_id, quote=True)
     return (
         '<div class="html-preview-stage">'
         f'<iframe id="{identity}" class="html-preview" title="{title} · 桌面预览" '
-        f'sandbox="allow-scripts" referrerpolicy="no-referrer" loading="lazy" '
+        f'sandbox="{sandbox}" referrerpolicy="no-referrer" loading="lazy" '
         f'tabindex="-1" aria-hidden="true" srcdoc="{source}"></iframe>'
         f'<button type="button" class="preview-open" data-preview="{identity}" '
         f'data-title="{title}" aria-label="放大查看 {title}"><span>放大查看 ↗</span></button>'
@@ -56,7 +70,7 @@ CSS = """
 
 DIALOG = """
 <dialog id="html-preview-dialog" class="preview-dialog" aria-labelledby="html-preview-title">
-<header class="preview-toolbar"><h2 id="html-preview-title">HTML 作品预览</h2>
+<header class="preview-toolbar"><h2 id="html-preview-title">作品预览</h2>
 <label>Runner <select id="html-preview-picker"></select></label>
 <button type="button" id="html-preview-prev">上一份</button>
 <button type="button" id="html-preview-next">下一份</button>
@@ -94,7 +108,7 @@ SCRIPT = """
     picker.value = String(index);
     const frame = document.createElement('iframe');
     frame.className = 'expanded-preview';
-    frame.setAttribute('sandbox', 'allow-scripts');
+    frame.setAttribute('sandbox', source.getAttribute('sandbox') || '');
     frame.referrerPolicy = 'no-referrer';
     frame.title = button.dataset.title + ' · 交互预览';
     frame.srcdoc = source.getAttribute('srcdoc');

@@ -1289,7 +1289,7 @@ def _render_cell_details(records: list[RunRecord], case: Case | None = None) -> 
         artifact = output_href(record, case) if case else None
         if artifact:
             body.insert(0, f'<p><a href="{_e(artifact)}" target="_blank" '
-                        'rel="noopener noreferrer">打开本轮原始 HTML 作品 ↗</a></p>')
+                        'rel="noopener noreferrer">打开本轮原始作品 ↗</a></p>')
         if record.is_error:
             body.append('<p class="note">runner 执行失败，未进入 check / judge。</p>')
         elif record.check.detail:

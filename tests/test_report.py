@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import re
@@ -393,6 +394,23 @@ def test_unreadable_html_preview_falls_back_without_breaking_report(tmp_path: Pa
     assert '无法读取 HTML 预览' in rendered
     assert _html_nodes(rendered, "iframe") == []
     assert 'repeat-0/artifacts/article.html' in rendered
+
+
+def test_svg_preview_is_an_inactive_image_and_preserves_the_vector(tmp_path: Path) -> None:
+    case = replace(load_case(_case(tmp_path)), expected={"output_file": "pelican.svg"})
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+    source = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle r="20"/></svg>'
+    (artifacts / "pelican.svg").write_text(source)
+    record = replace(_record("runner"), artifacts_dir=str(artifacts))
+    rendered = build_report_html(run_id="x", records=[record], cases={case.name: case}, comparisons={})
+    frames = _html_nodes(rendered, "iframe")
+    assert len(frames) == 1 and frames[0]["sandbox"] == ""
+    images = _html_nodes(frames[0]["srcdoc"], "img")
+    assert len(images) == 1
+    assert base64.b64decode(images[0]["src"].split(",", 1)[1]).decode() == source
+    assert '真实 SVG 内嵌预览' in rendered
+    assert 'repeat-0/artifacts/pelican.svg' in rendered
 
 
 def test_overview_does_not_cherry_pick_html_from_later_repeat(tmp_path: Path) -> None:

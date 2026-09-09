@@ -1,0 +1,15 @@
+schema_version: 2
+name: 2026-09-09-001-pelican-bicycle
+class: coding
+task: prompts/task.md
+check: check.sh
+judge:
+  rubric: prompts/rubric.md
+  dimensions: [pelican, bicycle, riding_pose, visual_coherence]
+expected:
+  output_file: pelican.svg
+  max_score: 20
+evaluation:
+  role: visual_diagnostic
+  scope: SVG drawing of a pelican riding a bicycle; not general model intelligence
+  generalizes: false
