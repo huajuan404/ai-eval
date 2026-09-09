@@ -2,21 +2,44 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
+import re
 import textwrap
 from dataclasses import replace
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
 
-from bench.__main__ import rebuild_report, run_benchmark
+from bench.__main__ import rebuild_report, rejudge_run, run_benchmark
 from bench.case import RunContract, load_case
 from bench.comparison import ItemComparison, RunnerComparison
 from bench.config import RunConfig
 from bench.record import CheckResult, JudgeResult, RunRecord, Usage
 from bench.registry import RunnerProfile
-from bench.report import ReportError, build_report_html, find_run_layout, load_run_records
+from bench.report import (
+    ReportError,
+    build_report_html,
+    find_run_layout,
+    load_run_records,
+)
+from bench.report_charts import render_case_charts
+from bench.report_overview import detail_id, output_href
+from bench.scrub import scrub_text
+
+
+def _html_nodes(markup: str, tag: str) -> list[dict[str, str]]:
+    nodes = []
+
+    class Parser(HTMLParser):
+        def handle_starttag(self, name, attrs):
+            if name == tag:
+                nodes.append(dict(attrs))
+
+    Parser().feed(markup)
+    return nodes
 
 
 def _case(tmp_path: Path, name: str = "report-case") -> Path:
@@ -210,12 +233,16 @@ def test_report_html_renders_summary_and_cells(tmp_path: Path) -> None:
     assert 'class="result-cell ok"' in html
     assert 'class="result-cell bad"' in html
     assert 'class="result-grid case-matrix"' in html
-    assert '<th scope="row"><code>report-case</code></th>' in html
-    assert ">PASS</span>" in html and ">FAIL</span>" in html
+    assert 'data-case-link>报告任务</a>' in html
+    assert "✓ PASS</span>" in html and "× FAIL</span>" in html
+    assert 'data-records="cell-' in html
+    assert 'id="result-dialog"' in html
     # cell 相对链接指向 runs 目录内部
     assert "cells/report-case/default/fast/repeat-0/raw.txt" in html
-    # 外部依赖为零：无 script 标签、无 http 资源引用
-    assert "<script" not in html
+    # 报告自身仅有固定的内联交互脚本，无 http 资源引用
+    assert html.count('<script id="report-interactions">') == 1
+    assert html.count('<script id="report-previews">') == 1
+    assert html.count("<script") == 2
     assert 'src="http' not in html and 'href="http' not in html
 
 
@@ -258,6 +285,355 @@ def test_report_escapes_untrusted_judge_reasoning(tmp_path: Path) -> None:
     assert "model-secret" not in html
     assert "judge-secret" not in html
     assert "***REDACTED***" in html
+
+
+def test_overview_keeps_unevaluated_repeats_visible(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    records = [_record("mixed"), replace(_record("mixed"), repeat_index=1, check=CheckResult())]
+    rendered = build_report_html(run_id="x", records=records, cases={case.name: case}, comparisons={})
+    overview = rendered.split('class="evidence-heading"')[0]
+    assert 'class="result-cell na"' in overview
+    assert "1/1 通过 · 1 未评" in overview
+    assert "全部通过判据" not in overview
+    assert 'class="result-cell ok"' not in overview
+    assert f'{detail_id(records[0])} {detail_id(records[1])}' in overview
+    assert all(f'id="{detail_id(r)}"' in rendered for r in records)
+
+
+def test_overview_fast_failure_is_not_fastest_and_scores_do_not_change_status(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    records = [
+        replace(_record("quick-failure", passed=False, reasoning="advisory"), duration_ms=1),
+        replace(_record("complete", reasoning="advisory"), duration_ms=1000,
+                judge=JudgeResult(ran=True, score=1, max=10)),
+    ]
+    rendered = build_report_html(run_id="x", records=records, cases={case.name: case}, comparisons={})
+    overview = rendered.split('class="evidence-heading"')[0]
+    assert "1.0 秒 · 最快" in overview
+    assert "0.0 秒 · 最快" not in overview
+    assert 'class="result-cell ok"' in overview
+    assert 'class="cell-score">1 / 10</span>' in overview
+
+
+def test_overview_keeps_variants_separate_and_marks_missing_combinations(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    other = replace(case, name="other-case")
+    records = [
+        replace(_record("runner"), variant_label="a"),
+        replace(_record("runner", passed=False), variant_label="b"),
+        replace(_record("runner"), variant_label="a", case=other.name),
+    ]
+    rendered = build_report_html(
+        run_id="x", records=records, cases={case.name: case, other.name: other}, comparisons={}
+    )
+    overview = rendered.split('class="evidence-heading"')[0]
+    assert "<small>a</small>" in overview and "<small>b</small>" in overview
+    assert "— 未运行" in overview
+    assert len({detail_id(r) for r in records}) == 3
+    assert "全部通过判据" not in overview
+
+
+def test_overview_output_links_stay_within_declared_artifacts(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+    output = artifacts / "article demo.html"
+    output.write_text("<!doctype html><h1>result</h1>")
+    record = replace(_record("runner"), artifacts_dir=str(artifacts))
+    case = replace(case, expected={"output_file": output.name})
+    href = output_href(record, case)
+    assert href == "cells/report-case/default/runner/repeat-0/artifacts/article%20demo.html"
+    rendered = build_report_html(run_id="x", records=[record], cases={case.name: case}, comparisons={})
+    assert '真实 HTML 内嵌预览' in rendered
+    assert f'href="{href}"' in rendered
+    frames = _html_nodes(rendered, "iframe")
+    assert len(frames) == 1
+    assert frames[0]["srcdoc"] == output.read_text()
+    assert frames[0]["sandbox"] == "allow-scripts"
+    assert '<img' not in rendered
+    outside = tmp_path / "outside.html"
+    outside.write_text("private")
+    (artifacts / "escape.html").symlink_to(outside)
+    for unsafe in (str(outside), "../outside.html", "escape.html", "missing.html"):
+        assert output_href(record, replace(case, expected={"output_file": unsafe})) is None
+        unsafe_html = build_report_html(
+            run_id="x", records=[record], cases={case.name: replace(case, expected={"output_file": unsafe})}, comparisons={}
+        )
+        assert _html_nodes(unsafe_html, "iframe") == []
+
+
+def test_embedded_html_cannot_escape_srcdoc_and_is_scrubbed(tmp_path: Path) -> None:
+    case = replace(load_case(_case(tmp_path)), expected={"output_file": "article.html"})
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+    source = ('<!doctype html><h1 title="&quot;">hello</h1></iframe>'
+              '<script id="host-injection">parent.document.body.textContent="bad";</script>'
+              '<p>api_key=embedded-secret</p>')
+    output = artifacts / "article.html"
+    output.write_text(source)
+    record = replace(_record('evil"><img src=x onerror=alert(1)>'), artifacts_dir=str(artifacts))
+    rendered = build_report_html(run_id="x", records=[record], cases={case.name: case}, comparisons={})
+    frames = _html_nodes(rendered, "iframe")
+    assert len(frames) == 1 and frames[0]["sandbox"] == "allow-scripts"
+    assert frames[0]["referrerpolicy"] == "no-referrer"
+    assert frames[0]["srcdoc"] == scrub_text(source)
+    assert frames[0]["loading"] == "lazy"
+    assert 'embedded-secret' not in rendered
+    assert _html_nodes(rendered, "img") == []
+    assert {s["id"] for s in _html_nodes(rendered, "script")} == {"report-interactions", "report-previews"}
+    assert output.read_text() == source
+
+
+def test_unreadable_html_preview_falls_back_without_breaking_report(tmp_path: Path) -> None:
+    case = replace(load_case(_case(tmp_path)), expected={"output_file": "article.html"})
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+    (artifacts / "article.html").write_bytes(b'\xff\xfe')
+    record = replace(_record("runner"), artifacts_dir=str(artifacts))
+    rendered = build_report_html(run_id="x", records=[record], cases={case.name: case}, comparisons={})
+    assert '无法读取 HTML 预览' in rendered
+    assert _html_nodes(rendered, "iframe") == []
+    assert 'repeat-0/artifacts/article.html' in rendered
+
+
+def test_svg_preview_is_an_inactive_image_and_preserves_the_vector(tmp_path: Path) -> None:
+    case = replace(load_case(_case(tmp_path)), expected={"output_file": "pelican.svg"})
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+    source = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle r="20"/></svg>'
+    (artifacts / "pelican.svg").write_text(source)
+    record = replace(_record("runner"), artifacts_dir=str(artifacts))
+    rendered = build_report_html(run_id="x", records=[record], cases={case.name: case}, comparisons={})
+    frames = _html_nodes(rendered, "iframe")
+    assert len(frames) == 1 and frames[0]["sandbox"] == ""
+    images = _html_nodes(frames[0]["srcdoc"], "img")
+    assert len(images) == 1
+    assert base64.b64decode(images[0]["src"].split(",", 1)[1]).decode() == source
+    assert '真实 SVG 内嵌预览' in rendered
+    assert 'repeat-0/artifacts/pelican.svg' in rendered
+
+
+def test_overview_does_not_cherry_pick_html_from_later_repeat(tmp_path: Path) -> None:
+    case = replace(load_case(_case(tmp_path)), expected={"output_file": "article.html"})
+    artifacts = tmp_path / "later"
+    artifacts.mkdir()
+    (artifacts / "article.html").write_text("later success")
+    records = [
+        _record("runner", passed=False),
+        replace(_record("runner"), repeat_index=1, artifacts_dir=str(artifacts)),
+    ]
+    rendered = build_report_html(run_id="x", records=records, cases={case.name: case}, comparisons={})
+    overview = rendered.split('class="evidence-heading"')[0]
+    assert "本轮无 HTML 产物" in overview
+    assert "repeat-1/artifacts/article.html" not in overview
+    assert "repeat-1/artifacts/article.html" in rendered  # still available in repeat evidence
+
+
+def test_overview_does_not_average_incompatible_judge_scales(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    records = [
+        replace(_record("runner"), judge=JudgeResult(ran=True, score=8, max=10)),
+        replace(_record("runner"), repeat_index=1, judge=JudgeResult(ran=True, score=80, max=100)),
+    ]
+    rendered = build_report_html(run_id="x", records=records, cases={case.name: case}, comparisons={})
+    assert "评分量纲不同" in rendered
+
+
+def test_overview_uses_actual_score_bars_and_specific_visual_findings(tmp_path: Path) -> None:
+    case = replace(load_case(_case(tmp_path)), expected={"output_file": "article.html"})
+    records = [
+        replace(_record("high-score"), duration_ms=60000, judge=JudgeResult(ran=True, score=20, max=25)),
+        replace(_record("low-score"), duration_ms=400000, judge=JudgeResult(ran=True, score=14, max=25)),
+    ]
+    rendered = build_report_html(run_id="x", records=records, cases={case.name: case}, comparisons={})
+    assert 'width:80.00%' in rendered and 'width:56.00%' in rendered
+    assert '参考分相差 6 分，最长用时是最短的 6.7 倍' in rendered
+    assert rendered.count('class="score-leader"') == 1
+    assert 'class="repeat-tile ok"' not in rendered  # a single pass is not a full score bar
+    assert rendered.count('class="result-cell ok"') == 2  # score never changes completion
+
+
+def test_overview_does_not_manufacture_winners_for_ties_or_incomplete_scores(tmp_path: Path) -> None:
+    case = replace(load_case(_case(tmp_path)), expected={"output_file": "article.html"})
+    high = replace(_record("a"), judge=JudgeResult(ran=True, score=20, max=25))
+    tied = replace(high, runner_label="b")
+    missing = replace(tied, judge=None)
+    for second in (tied, missing):
+        rendered = build_report_html(run_id="x", records=[high, second], cases={case.name: case}, comparisons={})
+        assert 'class="score-leader"' not in rendered
+        assert '网页参考分相差' not in rendered
+
+
+@pytest.mark.parametrize("value,maximum", [(30, 25), (float('nan'), 25), (10, 0), (-1, 25)])
+def test_overview_invalid_scores_do_not_create_meter_or_winner(tmp_path: Path, value: float, maximum: float) -> None:
+    case = load_case(_case(tmp_path))
+    record = replace(_record("a"), judge=JudgeResult(ran=True, score=value, max=maximum))
+    rendered = build_report_html(run_id="x", records=[record], cases={case.name: case}, comparisons={})
+    assert 'role="meter"' not in rendered
+    assert 'class="score-leader"' not in rendered
+
+
+def test_case_charts_sort_each_metric_on_a_shared_axis(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    records = [
+        replace(_record("slow-high"), duration_ms=180000, judge=JudgeResult(ran=True, score=20, max=25)),
+        replace(_record("fast-low"), duration_ms=60000, judge=JudgeResult(ran=True, score=14, max=25)),
+        replace(_record("crash", passed=False), duration_ms=1, is_error=True),
+    ]
+    charts = render_case_charts(records, case)
+    score_panel, time_panel = re.findall(r'<section class="comparison-panel[^>]+>(.*?)</section>', charts, re.DOTALL)
+    assert re.findall(r'data-runner="([^"]+)"', score_panel) == ["slow-high", "fast-low", "crash"]
+    assert re.findall(r'data-runner="([^"]+)"', time_panel) == ["fast-low", "slow-high", "crash"]
+    assert "width:80.000%" in score_panel and "width:56.000%" in score_panel
+    assert "width:33.333%" in time_panel and "width:100.000%" in time_panel
+    assert "未全部通过，不参加耗时排序" in time_panel
+    assert charts.count('class="comparison-bar"') == 4
+
+
+def test_case_charts_do_not_compare_different_score_scales(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    records = [
+        replace(_record("a"), judge=JudgeResult(ran=True, score=8, max=10)),
+        replace(_record("b"), judge=JudgeResult(ran=True, score=80, max=100)),
+    ]
+    charts = render_case_charts(records, case)
+    score_panel = re.findall(r'<section class="comparison-panel[^>]+>(.*?)</section>', charts, re.DOTALL)[0]
+    assert 'class="comparison-bar"' not in score_panel
+    assert "评分量纲不同" in score_panel
+    assert "8 / 10" in score_panel and "80 / 100" in score_panel
+
+
+def test_case_charts_separate_variants_and_do_not_hide_partial_judging(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    records = [
+        replace(_record("a"), variant_label="one", judge=JudgeResult(ran=True, score=8, max=10)),
+        replace(_record("a"), variant_label="one", repeat_index=1),
+        replace(_record("b"), variant_label="one", judge=JudgeResult(ran=True, score=9, max=10)),
+        replace(_record("a"), variant_label="two", judge=JudgeResult(ran=True, score=7, max=10)),
+        replace(_record("b"), variant_label="two", judge=JudgeResult(ran=True, score=6, max=10)),
+    ]
+    charts = render_case_charts(records, case)
+    assert charts.count('<fieldset') == 2
+    names = re.findall(r'name="([^"]+)-metric"', charts)
+    assert len(set(names)) == 2 and len(names) == 4
+    panels = re.findall(r'<section class="comparison-panel[^>]+>(.*?)</section>', charts, re.DOTALL)
+    assert "缺少完整评分" in panels[0] and "1/2 已评" in panels[0]
+    assert "缺少完整评分" not in panels[2]
+
+
+def test_case_chart_labels_cannot_inject_markup(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    malicious = 'runner"><script>alert(1)</script>'
+    records = [_record(malicious), _record("normal")]
+    charts = render_case_charts(records, case)
+    assert "<script>" not in charts
+    assert "&lt;script&gt;" in charts
+    assert detail_id(records[0]) in charts
+
+
+def test_report_front_charts_precede_collapsed_matrix_with_shared_controls(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    other = replace(case, name="other-case")
+    records = [_record("a"), _record("b"), replace(_record("a"), case=other.name)]
+    rendered = build_report_html(
+        run_id="x", records=records, cases={case.name: case, other.name: other}, comparisons={}
+    )
+    assert rendered.index('class="front-grid"') < rendered.index('<details class="matrix-secondary">')
+    assert rendered.count('name="front-metric"') == 2
+    assert rendered.count('class="front-chart"') == 2  # single-runner cases stay visible
+    assert rendered.count('class="comparison-panel panel-score"') == 2
+    assert rendered.count('class="comparison-panel panel-time"') == 2
+    assert '<details class="matrix-secondary" open' not in rendered
+    assert '.metric-score:checked~.front-grid .panel-score' in rendered
+    assert '.metric-time:checked~.front-grid .panel-time' in rendered
+
+
+def test_report_front_cards_keep_variant_identity(tmp_path: Path) -> None:
+    case = load_case(_case(tmp_path))
+    records = [replace(_record("runner"), variant_label=v) for v in ("a", "b")]
+    rendered = build_report_html(run_id="x", records=records, cases={case.name: case}, comparisons={})
+    assert rendered.count('class="front-chart"') == 2
+    assert '组全部轮次通过 · a' in rendered and '组全部轮次通过 · b' in rendered
+
+
+def _report_view_fixture(tmp_path: Path):
+    root = tmp_path / "repo"
+    for name in ("keep-case", "drop-case", "replacement-case"):
+        directory = _case(root, name)
+        if name == "replacement-case":
+            with (directory / "case.yaml").open("a") as stream:
+                stream.write("expected:\n  output_file: drawing.svg\n")
+    registry = {"fake": RunnerProfile("fake", "command", template="echo hi")}
+
+    def execute(cmd, cwd, env):
+        Path(cwd, "drawing.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"><circle r="10"/></svg>')
+        return "done", "", 0
+
+    run_benchmark(RunConfig(runners=("fake",), cases=("keep-case", "drop-case"), workers=1), registry, root, run_fn=execute)
+    host_id = next((root / "runs").iterdir()).name
+    run_benchmark(RunConfig(runners=("fake",), cases=("replacement-case",), workers=1), registry, root, run_fn=execute)
+    child_id = next(p.name for p in (root / "runs").iterdir() if p.name != host_id)
+    host = find_run_layout(host_id, [root])
+    child = find_run_layout(child_id, [root])
+    recipe = host.run_dir / "report_view.json"
+    recipe.write_text(json.dumps({"schema_version": 1, "cases": [
+        {"case": "keep-case", "run_id": host_id},
+        {"case": "replacement-case", "run_id": child_id},
+    ]}))
+    return root, host, child, recipe
+
+
+def test_report_view_replaces_case_and_preserves_source_runs(tmp_path: Path):
+    root, host, child, recipe = _report_view_fixture(tmp_path)
+    protected = [p for p in (root / "runs").rglob("*.json") if p != recipe]
+    before = {p: p.read_bytes() for p in protected}
+    original_card = host.scorecard_path.read_bytes()
+    path = rebuild_report(host.run_id, root)
+    rendered = path.read_text()
+    assert "keep-case" in rendered and "replacement-case" in rendered
+    assert "drop-case" not in rendered
+    assert rendered.count('class="front-chart"') == 2
+    assert f'../{child.run_id}/cells/replacement-case/default/fake/repeat-0/raw.txt' in rendered
+    assert f'../{child.run_id}/cells/replacement-case/default/fake/repeat-0/artifacts/drawing.svg' in rendered
+    assert len(_html_nodes(rendered, "iframe")) == 1
+    assert "组合展示" not in rendered and "来源运行：" not in rendered
+    assert before == {p: p.read_bytes() for p in protected}
+    assert original_card == host.scorecard_path.read_bytes()
+    assert rebuild_report(host.run_id, root).read_text() == rendered
+
+
+def test_rejudge_keeps_the_selected_report_view(tmp_path: Path):
+    root, host, child, recipe = _report_view_fixture(tmp_path)
+    registry = {"fake": RunnerProfile("fake", "command", template="echo hi")}
+    rejudge_run(host.run_id, root, "fake", registry=registry)
+    report = host.report_path.read_text()
+    assert "keep-case" in report and "replacement-case" in report
+    assert "drop-case" not in report
+    assert report.count('class="front-chart"') == 2
+    assert f'../{child.run_id}/cells/replacement-case/' in report
+    assert recipe.is_file()
+
+
+@pytest.mark.parametrize("failure", ["traversal", "duplicate", "private", "running", "definition-drift"])
+def test_report_view_rejects_invalid_sources_without_overwriting_report(tmp_path: Path, failure: str):
+    root, host, child, recipe = _report_view_fixture(tmp_path)
+    before = host.report_path.read_bytes()
+    view = json.loads(recipe.read_text())
+    if failure == "traversal":
+        view["cases"][1]["run_id"] = "../outside"
+    elif failure == "duplicate":
+        view["cases"].append(view["cases"][0])
+    elif failure in {"private", "running"}:
+        manifest = json.loads(child.manifest_path.read_text())
+        manifest.update({"private": True} if failure == "private" else {"status": "running"})
+        child.manifest_path.write_text(json.dumps(manifest))
+    else:
+        with (root / "cases/replacement-case/check.sh").open("a") as stream:
+            stream.write("\n# changed scoring definition\n")
+    recipe.write_text(json.dumps(view))
+    with pytest.raises(ReportError):
+        rebuild_report(host.run_id, root)
+    assert host.report_path.read_bytes() == before
 
 
 def test_report_renders_compared_prompt_templates_and_actual_inputs(
@@ -1059,6 +1435,50 @@ def test_run_benchmark_writes_report_and_rebuild(tmp_path: Path) -> None:
     assert rebound[0].artifacts_dir == str(run_json.parent / "artifacts")
     with pytest.raises(ReportError, match="找不到 run"):
         find_run_layout("nope-123", [root])
+
+
+def test_rejudge_only_reruns_judge_and_keeps_check(tmp_path: Path) -> None:
+    """换裁判重判：只跑 judge，不重跑 runner / check，计分卡与报告重建。"""
+    root = tmp_path / "repo"
+    case_dir = _case(root, "rejudge-case")
+    (case_dir / "prompts" / "rubric.md").write_text("rubric", encoding="utf-8")
+    with (case_dir / "case.yaml").open("a", encoding="utf-8") as f:
+        f.write("judge:\n  rubric: prompts/rubric.md\n  dimensions: [correctness]\n")
+    registry = {"fake": RunnerProfile("fake", "command", template="echo hi")}
+    cfg = RunConfig(runners=("fake",), cases=("rejudge-case",), judge="fake", workers=1)
+
+    def fake_run(cmd, cwd, env):
+        Path(cwd, "answer.txt").write_text("hi", encoding="utf-8")
+        return "final", "", 0
+
+    def judge_returning(score: int):
+        def _run(cmd, cwd, env):
+            return (
+                json.dumps({"score": score, "max": 5, "dimensions": {"correctness": score}, "reasoning": "ok"}),
+                "",
+                0,
+            )
+
+        return _run
+
+    run_benchmark(cfg, registry, root, run_fn=fake_run, judge_run_fn=judge_returning(3))
+    run_id = next((root / "runs").iterdir()).name
+    layout = find_run_layout(run_id, [root])
+    first = load_run_records(layout)[0]
+    assert first.judge is not None and first.judge.score == 3
+    check_before = first.check
+
+    rejudge_run(
+        run_id, root, "fake", registry=registry, judge_run_fn=judge_returning(5)
+    )
+
+    after = load_run_records(layout)[0]
+    assert after.judge is not None and after.judge.score == 5
+    assert after.check == check_before  # check 结果原样保留，未重跑
+    assert layout.scorecard_path.is_file()
+    assert layout.report_path.is_file()
+    manifest = json.loads(layout.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["judge"] == "fake"
 
 
 def test_run_benchmark_does_not_resolve_judge_when_all_runs_fail(tmp_path: Path) -> None:

@@ -159,5 +159,5 @@ def test_real_registry_loads() -> None:
     reg = load_registry(root)
     assert "codex" in reg and reg["codex"].launcher == "codex"
     assert "claude" in reg and reg["claude"].launcher == "claude"
-    assert "glm-5.1" in reg and reg["glm-5.1"].launcher == "c"
+    assert "glm-5.3-flash" in reg and reg["glm-5.3-flash"].launcher == "c"
     assert reg["minimax-m3-c0-direct"].launcher == "command"

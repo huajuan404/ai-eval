@@ -1,4 +1,4 @@
-# Runner 档案注册表（独立于 ~/tools/config.env，runner 与 judge 共用）。
+# Runner 档案注册表（独立于 c 切换器的 ~/.config/claude-lanes/config.env，runner 与 judge 共用）。
 #
 # 每个档案 = 标签 → 启动方式。四类 launcher：
 #   claude   : claude -p --output-format json
@@ -25,11 +25,22 @@ runners:
   opus-4.6:
     launcher: claude
     model: claude-opus-4-6
-  claude-fable-5:
+  claude-fable-5.1:
     launcher: claude
-    model: claude-fable-5     # 最新模型；走 claude 启动器直连（如实际 model id 不同请改此值）
+    model: claude-fable-5-1   # 走 claude 启动器直连（如实际 model id 不同请改此值）
+  codex-astra:
+    launcher: codex
+    sandbox: workspace-write
+    model: gpt-6-astra        # codex 侧当前旗舰（GPT-6-Astra）
+  codex-astra-max:
+    launcher: codex
+    sandbox: workspace-write
+    model: gpt-6-astra
+    args: ["-c", "model_reasoning_effort=max"]   # 裁判档：最高推理档
 
   # ── 经 c 切换器的模型（config 指向 config.env 索引）──
+  # 标签 = 该编号当前实际启动的模型；本机在 config.env 换模型后同步改名，
+  # 否则用旧标签重跑会静默落到别的模型上。
   minimax-m3:
     launcher: c
     config: 0
@@ -40,31 +51,37 @@ runners:
     template: "python3 {cwd}/run_provider.py --prompt-file {prompt_file} --workdir {cwd} --lane 0"
     model: MiniMax-M3
     metrics: none
-  minimax-m2.7:
+  deepseek-v4-flash-vision-exp:
+    launcher: c
+    config: 1   # api.deepseek.com/anthropic
+  glm-5.3:
     launcher: c
     config: 5
-  minimax-m2.7-bare:
+    args: ["--setting-sources", "project"]  # 隔离全局 CLAUDE.md；ai-keeping 中转，背后是官方 glm-5.3
+  glm-5.3-official:
     launcher: c
-    config: 5
-    args: ["--setting-sources", "project"]  # 隔离全局 CLAUDE.md，bare/clause 档校准用
-  deepseek-v4:
-    launcher: c
-    config: 1
-  deepseek-v4-flash:
-    launcher: c
-    config: 9   # 与 deepseek-v4(pro/config 1) 同 endpoint+token，仅 MODEL 不同（flash）
-  glm-5.1:
-    launcher: c
-    config: 6   # 本机 CONFIG_6 = open.bigmodel.cn/anthropic, MODEL=glm-5.1
-  glm-5.2:
-    launcher: c
-    config: 2
+    config: 2   # open.bigmodel.cn/api/anthropic（官方直连）
   kimi-k3:
     launcher: c
-    config: 3   # 本机 CONFIG_3 = api.kimi.com/coding, MODEL=k3[1m]
-  agnes-2.0-flash:
+    config: 3   # api.kimi.com/coding
+  glm-5.2:
     launcher: c
-    config: 4   # config.env 的 CONFIG_4：apihub.agnes-ai.com/v1，PROTOCOL=openai（本机 c 脚本做 openai→claude 转换）
+    config: 4   # open.bigmodel.cn/api/anthropic
+  glm-5.3-ai-keeping:
+    launcher: c
+    config: 5   # api.ai-keeping.com/api
+  glm-5.3-flash:
+    launcher: c
+    config: 6   # open.bigmodel.cn/api/anthropic
+  deepseek-v4.1-flash:
+    launcher: c
+    config: 7   # api.deepseek.com/anthropic（模型 id 带 expires-on-0910，2026-09-10 到期）
+  deepseek-v4-pro:
+    launcher: c
+    config: 8   # api.deepseek.com/anthropic
+  deepseek-v4-flash:
+    launcher: c
+    config: 9   # 本机暂无 CONFIG_9，跑会失败（档案先保留）
 
   # ── 通用命令模板示例（sf cli / 自定义编排）──────────
   # 占位符：{prompt} {prompt_file} {cwd} {model} {skill}
@@ -81,6 +98,6 @@ runners:
   # 依赖本机两个常驻服务（ollama + 一个 Anthropic↔ollama 翻译代理）；属本机环境，跨机不可移植。
   qwen-0.5b-weak:
     launcher: c
-    config: 8
+    config: 8   # 本机 CONFIG_8 已改作 deepseek-v4-pro，该档案失效（先保留）
     env:
       MAX_THINKING_TOKENS: "0"   # 小模型不支持 extended thinking，关掉，否则 litellm→ollama 报错

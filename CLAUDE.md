@@ -33,8 +33,11 @@
 - `scoring.py` — check 脚本 + LLM 裁判（抗注入 / advisory / 同源标注）
 - `completion.py` — 任务完成度（check / judge 折成「完成了没」一维：单 cell 通过率 + 跨 case 等权汇总）
 - `scorecard.py` — 任务完成度列 + 跨用例完成率汇总 + 每维赢家 + 权衡摘要（不自动聚合）+ 模型档案写入
-- `report.py` — 自包含 HTML 报告（零外部依赖；三轴视图：完成率矩阵 / variant 配对 / item 网格 /
-  逐格明细；`--report <run_id>` 从磁盘重建，不重跑不重判分）
+- `report.py` / `report_charts.py` / `report_previews.py` — 普通 run 默认生成浅色 HTML 报告：
+  Case 并排条形图、参考分/耗时切换、固定 Runner 识别色、HTML/SVG 内嵌与放大预览；
+  保留辅助矩阵、variant/item 比较与逐格证据。报告界面零外部依赖，内嵌 HTML 可有自身资源依赖。
+- `report_view.py` — 按运行目录的 `report_view.json` 选择展示用例，校验来源和 case 锁；
+  `--report` 重建与 `--rejudge` 重判都保留此视图，不改原始运行选择。
 - `scrub.py` — 密钥脱敏（record 与计分卡共用）
 
 ## 启动器编号（config.env，由 `c` 切换器使用）
@@ -42,16 +45,19 @@
 | 编号 | 当前 `runners.yaml` 档案 |
 |------|--------------------------|
 | 0 | `minimax-m3` |
-| 1 | `deepseek-v4` |
-| 2 | `glm-5.2` |
+| 1 | `deepseek-v4-flash-vision-exp` |
+| 2 | `glm-5.3-official` |
 | 3 | `kimi-k3` |
-| 4 | `agnes-2.0-flash` |
-| 5 | `minimax-m2.7` |
-| 6 | `glm-5.1` |
-| 8 | `qwen-0.5b-weak` |
-| 9 | `deepseek-v4-flash` |
+| 4 | `glm-5.2` |
+| 5 | `glm-5.3` |
+| 6 | `glm-5.3-flash` |
+| 7 | `deepseek-v4.1-flash` |
+| 8 | `deepseek-v4-pro` |
+| 9 | `deepseek-v4-flash`（本机暂缺 CONFIG_9）|
 
-`runners.yaml` 用 `c` 类档案引用这些编号（如 `glm-5.1 → config: 6`）。`minimax-m3-c0-direct`
+编号 2/4/6 走智谱官方直连；`glm-5.3` 走 ai-keeping 中转（背后同为官方 glm-5.3）。
+档案标签 = 该编号当前实际启动的模型，本机 config.env 换模型时两边同步改名（旧标签重跑会静默落到别的模型上）。
+`runners.yaml` 用 `c` 类档案引用这些编号（如 `glm-5.3-flash → config: 6`）。`minimax-m3-c0-direct`
 是复用 lane 0 配置的 `command` runner，不改变 `minimax-m3` 的 Agent 路径语义。各编号对应的端点、凭证和
 本机搭建都在 `c` 切换器的 config.env 里，属本机环境，不在本仓库记录（编号 8 还需本机额外服务，跨机不可移植）。
 
@@ -95,4 +101,5 @@
 ./run.sh -c <case> -r <runner> --variants a,b # 固定 runner 比较 prompt variant
 ./run.sh -c <case> -r codex --write-profiles  # 表现写入 models/<label>.md
 ./run.sh --report <run_id>                    # 对已完成 run 重建 runs/<run_id>/report.html
+./run.sh --rejudge <run_id> -j <judge>        # 换裁判重判（只跑 judge，不重跑评测与 check）
 ```

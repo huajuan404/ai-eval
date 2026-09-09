@@ -38,18 +38,18 @@ from .report import (
     find_run_layout,
     load_run_records,
 )
+from .run_manifest import (
+    RunManifestError,
+    snapshot_case_integrity,
+    validate_provider_invariants,
+)
 from .scorecard import (
     build_scorecard,
     scorecard_filename,
     unique_scorecard_path,
     write_model_profile,
 )
-from .scoring import _default_script_runner, score_record
-from .run_manifest import (
-    RunManifestError,
-    snapshot_case_integrity,
-    validate_provider_invariants,
-)
+from .scoring import _default_script_runner, run_judge, score_record
 from .scrub import scrub_text
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -82,6 +82,12 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="RUN_ID",
         default=None,
         help="不跑评测，对已完成的 run 重新生成 HTML 报告（runs/<run_id>/report.html）",
+    )
+    p.add_argument(
+        "--rejudge",
+        metavar="RUN_ID",
+        default=None,
+        help="不重跑评测与 check，用 -j 指定的裁判对已完成的 run 重新判分并重建计分卡/报告",
     )
     return p
 
@@ -477,6 +483,12 @@ def _candidate_report_roots(root: Path) -> list[Path]:
 def rebuild_report(run_id: str, root: Path) -> Path:
     """对已完成的 run 从磁盘重建 HTML 报告（不重跑、不重判分）。"""
     layout = find_run_layout(run_id, _candidate_report_roots(root))
+    if (layout.run_dir / "report_view.json").is_file():
+        from .report_view import build_report_view
+
+        html = build_report_view(layout, {c.name: c for c in discover_cases(root)})
+        layout.report_path.write_text(html, encoding="utf-8")
+        return layout.report_path
     manifest = json.loads(layout.manifest_path.read_text(encoding="utf-8"))
     records = load_run_records(layout)
     cases = {c.name: c for c in discover_cases(root)}
@@ -494,6 +506,94 @@ def rebuild_report(run_id: str, root: Path) -> Path:
     )
     layout.report_path.write_text(html, encoding="utf-8")
     return layout.report_path
+
+
+def rejudge_run(
+    run_id: str,
+    root: Path,
+    judge_label: str,
+    *,
+    registry: dict | None = None,
+    judge_run_fn=run_subprocess,
+) -> Path:
+    """对已完成的 run 只重跑 judge（不重跑评测与 check），写回 run.json 并重建计分卡/报告。"""
+    layout = find_run_layout(run_id, _candidate_report_roots(root))
+    records = load_run_records(layout)
+    if registry is None:
+        registry = load_registry(root / "runners.yaml")
+    judge_profile = get_profile(registry, judge_label)
+    cases = {c.name: c for c in discover_cases(root)}
+    referenced = {record.case for record in records}
+    missing = sorted(referenced - set(cases))
+    if missing:
+        raise ReportError(f"run 引用的 case 已不存在，无法重判: {', '.join(missing)}")
+    case_by_name = {name: cases[name] for name in referenced}
+
+    log = get_logger()
+    total = len(records)
+    log.info(f"[rejudge] 重判阶段: {total} cells（judge={judge_label}）")
+
+    def _rejudge_one(rec: RunRecord) -> RunRecord:
+        case = case_by_name[rec.case]
+        if rec.is_error or not case.judge.enabled:
+            return rec
+        scored_rec = rec.with_judge(
+            run_judge(case, rec, judge_profile, run_fn=judge_run_fn)
+        )
+        (Path(rec.artifacts_dir).parent / "run.json").write_text(
+            scored_rec.to_json(), encoding="utf-8"
+        )
+        return scored_rec
+
+    scored: list[RunRecord] = []
+    workers = min(total, 6) if total > 1 else 1
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = {ex.submit(_rejudge_one, rec): rec for rec in records}
+        for fut in concurrent.futures.as_completed(futures):
+            srec = fut.result()
+            scored.append(srec)
+            js = srec.judge.score if srec.judge and srec.judge.score is not None else "—"
+            log.info(
+                f"[rejudge] {len(scored)}/{total} done · "
+                f"just finished: {futures[fut].runner_label} judge={js}"
+            )
+
+    manifest = json.loads(layout.manifest_path.read_text(encoding="utf-8"))
+    comparison_results = compare_run_variants(scored, case_by_name)
+    final = MatrixResult(
+        records=scored,
+        skipped=[],
+        run_id=run_id,
+        schedule=manifest.get("schedule") or [],
+    )
+    md = build_scorecard(
+        final,
+        judge_label=judge_label,
+        cases=case_by_name,
+        comparisons=comparison_results,
+    )
+    layout.scorecard_path.write_text(md, encoding="utf-8")
+    manifest.update({"judge": judge_label, "scorecard": str(layout.scorecard_path)})
+
+    if not manifest.get("private"):
+        sc_dir = layout.report_root / "scorecards"
+        sc_dir.mkdir(exist_ok=True)
+        copy_path = unique_scorecard_path(
+            sc_dir,
+            scorecard_filename(
+                date.today().isoformat(),
+                [r.case for r in scored],
+                [r.runner_label for r in scored],
+            ),
+        )
+        copy_path.write_text(md, encoding="utf-8")
+        manifest["scorecard_copy"] = str(copy_path)
+
+    manifest["report"] = str(layout.report_path)
+    _write_json(layout.manifest_path, manifest)
+    rebuild_report(run_id, root)
+    log.info(f"[rejudge] 报告已重建: {layout.report_path}")
+    return layout.scorecard_path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -518,6 +618,23 @@ def main(argv: list[str] | None = None) -> int:
             print(f"错误: {e}", file=sys.stderr)
             return 1
         print(f"HTML 报告已生成: {report_path}")
+        return 0
+
+    if args.rejudge:
+        try:
+            judge_label = args.judge or load_config(ROOT / "config.yaml").judge
+            scorecard_path = rejudge_run(args.rejudge, ROOT, judge_label, registry=registry)
+        except (
+            ReportError,
+            ComparisonError,
+            CaseError,
+            RegistryError,
+            ConfigError,
+            ValueError,
+        ) as e:
+            print(f"错误: {e}", file=sys.stderr)
+            return 1
+        print(f"计分卡已更新: {scorecard_path}")
         return 0
 
     try:

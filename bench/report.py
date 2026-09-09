@@ -1,7 +1,7 @@
 """自包含 HTML 报告 —— 一次评测任务的全部结果，一页看清。
 
 设计约定：
-- 单文件、零外部依赖（内联 CSS，原生 <details> 展开，无 JS/CDN）；
+- 单文件、零外部依赖（内联 CSS/JS，原生 <details> 与渐进增强详情面板，无 CDN）；
   直接 file:// 打开即可，raw.txt / artifacts 用相对链接指向同目录 cells/。
 - 三个比较轴统一呈现：Runner（模型选型）、Prompt variant（方案迭代）、
   Data item（数据集条目，来自 check report 的 items[]）。
@@ -10,21 +10,36 @@
 
 from __future__ import annotations
 
-import html
 import hashlib
+import html
 import json
 from collections import defaultdict
 from dataclasses import replace
-from datetime import date
+from datetime import UTC, datetime
 from difflib import unified_diff
 from pathlib import Path
 from typing import Any
 
 from .case import Case
 from .comparison import RunnerComparison
-from .completion import CellCompletion, cell_completion, repeat_pass
+from .completion import CellCompletion, cell_completion
 from .layout import RunLayout
 from .record import RunRecord
+from .report_charts import CSS as CHART_CSS
+from .report_charts import render_front_charts
+from .report_overview import CSS as OVERVIEW_CSS
+from .report_overview import (
+    DIALOG,
+    SCRIPT,
+    case_id,
+    detail_id,
+    output_href,
+    render_overview,
+    task_title,
+)
+from .report_previews import CSS as PREVIEW_CSS
+from .report_previews import DIALOG as PREVIEW_DIALOG
+from .report_previews import SCRIPT as PREVIEW_SCRIPT
 from .run_manifest import RunManifestError, load_request_manifest
 from .scorecard import (
     CellAgg,
@@ -58,9 +73,9 @@ def _completion_class(comp: CellCompletion) -> str:
     return "warn"
 
 
-def _cell_href(record: RunRecord) -> str:
+def _cell_href(record: RunRecord, prefix: str = "") -> str:
     return (
-        f"cells/{record.case}/{record.variant_label}/"
+        f"{prefix}cells/{record.case}/{record.variant_label}/"
         f"{record.runner_label}/repeat-{record.repeat_index}/"
     )
 
@@ -72,12 +87,6 @@ _CSS = """
 --na:#6f7d91;--na-bg:#f0f3f7;--na-line:#d5dce6;--accent:#175cd3;
 --diff-add:#116329;--diff-add-bg:#dafbe1;--diff-del:#82071e;--diff-del-bg:#ffebe9;
 --diff-hunk:#0550ae;--diff-hunk-bg:#ddf4ff;}
-@media (prefers-color-scheme: dark){:root{--bg:#101418;--fg:#e6e9ee;--muted:#98a2b3;
---line:#2b3440;--card:#171d24;--ok:#72c7aa;--ok-bg:#173128;--ok-line:#285c4b;
---bad:#e99aa3;--bad-bg:#381f24;--bad-line:#69404a;--warn:#dfb469;--warn-bg:#332a19;
---warn-line:#65512d;--na:#9aa8ba;--na-bg:#202833;--na-line:#364252;--accent:#7ab3ff;
---diff-add:#7ee787;--diff-add-bg:#12261e;--diff-del:#ffa198;--diff-del-bg:#31171b;
---diff-hunk:#79c0ff;--diff-hunk-bg:#121d2f;}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);
 font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",
@@ -166,35 +175,6 @@ def _badge(text: str, klass: str) -> str:
 def _result_cell(text: str, klass: str) -> str:
     """W3C implementation-report 式结果格：整格传达状态，文字保留可访问性。"""
     return f'<td class="result-cell {klass}"><span class="signal">{_e(text)}</span></td>'
-
-
-def _completion_result_cell(records: list[RunRecord], case: Case) -> str:
-    """渲染逐 repeat 结果色块；汇总文字不再掩盖具体失败轮次。"""
-    ordered = sorted(records, key=lambda record: record.repeat_index)
-    verdicts = [repeat_pass(record, case) for record in ordered]
-    comp = cell_completion(ordered, case)
-    failed = comp.evaluated - comp.passes
-    if comp.evaluated == 0:
-        label = "NO DATA"
-    elif comp.evaluated == 1:
-        label = "PASS" if comp.passes else "FAIL"
-    elif failed == 0:
-        label = f"{comp.passes}/{comp.evaluated} PASS"
-    elif comp.passes == 0:
-        label = f"0/{comp.evaluated} PASS"
-    else:
-        label = f"{comp.passes} PASS · {failed} FAIL"
-    tiles = "".join(
-        f'<span class="repeat-tile {"ok" if verdict is True else "bad" if verdict is False else "na"}" '
-        f'title="repeat-{record.repeat_index}: '
-        f'{"passed" if verdict is True else "failed" if verdict is False else "not evaluated"}"></span>'
-        for record, verdict in zip(ordered, verdicts, strict=True)
-    )
-    return (
-        f'<td class="result-cell {_completion_class(comp)}" aria-label="{_e(label)}">'
-        f'<span class="signal"><span>{_e(label)}</span>'
-        f'<span class="repeat-strip" aria-hidden="true">{tiles}</span></span></td>'
-    )
 
 
 def _completion_badge(comp: CellCompletion) -> str:
@@ -763,69 +743,6 @@ def _render_prompt_comparison(
     )
 
 
-def _render_summary(
-    by_case: dict[str, dict[tuple[str, str], list[RunRecord]]],
-    cases: dict[str, Case],
-    case_names: list[str],
-) -> str:
-    """W3C 式结果墙：行 = case，列 = runner@variant，每格直接展示 pass/fail。"""
-    labels = sorted(
-        {
-            f"{runner}@{variant}"
-            for case_records in by_case.values()
-            for variant, runner in case_records
-        }
-    )
-    if not labels:
-        return ""
-    outcomes: dict[str, list[CellCompletion]] = defaultdict(list)
-    rows: list[str] = []
-    for case_name in case_names:
-        case_obj = cases.get(case_name)
-        if case_obj is None:
-            continue
-        records_by_label = {
-            f"{runner}@{variant}": records
-            for (variant, runner), records in by_case.get(case_name, {}).items()
-        }
-        cells: list[str] = []
-        for label in labels:
-            records = records_by_label.get(label)
-            if records:
-                outcomes[label].append(cell_completion(records, case_obj))
-                cells.append(_completion_result_cell(records, case_obj))
-            else:
-                cells.append(_result_cell("NO DATA", "na"))
-        rows.append(
-            f'<tr><th scope="row"><code>{_e(case_name)}</code></th>{"".join(cells)}</tr>'
-        )
-    summary_cells: list[str] = []
-    for label in labels:
-        comps = outcomes[label]
-        passed = sum(comp.rate == 1 for comp in comps)
-        failed = sum(comp.rate == 0 for comp in comps)
-        partial = sum(comp.rate not in (None, 0, 1) for comp in comps)
-        no_data = sum(comp.rate is None for comp in comps)
-        parts = [f"{passed} pass", f"{failed} fail"]
-        if partial:
-            parts.append(f"{partial} partial")
-        if no_data:
-            parts.append(f"{no_data} no data")
-        klass = "na" if not comps or no_data == len(comps) else (
-            "ok" if passed == len(comps) else "bad" if failed == len(comps) else "warn"
-        )
-        summary_cells.append(_result_cell(" · ".join(parts), klass))
-    heads = "".join(f"<th>{_e(label)}</th>" for label in labels)
-    return (
-        "<h2>用例通过矩阵</h2>"
-        '<p class="note">完成 = 通过用例权威判据（check 通过 / judge ≥ 阈值 / 核心维达标）；'
-        "每个小条对应一次 repeat，绿色通过、红色失败、灰色未评。</p>"
-        '<div class="tablewrap"><table class="result-grid case-matrix"><thead><tr><th>Case</th>'
-        f'{heads}</tr></thead><tbody><tr class="summary-row"><th scope="row">总计</th>'
-        f'{"".join(summary_cells)}</tr>{"".join(rows)}</tbody></table></div>'
-    )
-
-
 def _render_metrics_table(
     cells: list[CellAgg],
     completion: dict[tuple[str, str], CellCompletion],
@@ -836,7 +753,7 @@ def _render_metrics_table(
         comp = completion.get((c.variant_label, c.runner_label))
         comp_html = _completion_badge(comp) if comp else _DASH
         pass_str = (
-            f"{int(round(c.check_pass_rate * c.check_samples))}/{c.check_samples}"
+            f"{round(c.check_pass_rate * c.check_samples)}/{c.check_samples}"
             if c.check_pass_rate is not None
             else _DASH
         )
@@ -1327,7 +1244,10 @@ def _render_check_axes(case_records: dict[tuple[str, str], list[RunRecord]]) -> 
     )
 
 
-def _render_cell_details(records: list[RunRecord]) -> str:
+def _render_cell_details(
+    records: list[RunRecord], case: Case | None = None, asset_prefixes: dict[str, str] | None = None,
+) -> str:
+    asset_prefixes = asset_prefixes or {}
     parts = ["<h3>逐格明细</h3>"]
     for record in sorted(
         records, key=lambda r: (r.runner_label, r.variant_label, r.repeat_index)
@@ -1353,7 +1273,8 @@ def _render_cell_details(records: list[RunRecord]) -> str:
             and record.judge.score is not None
             else ""
         )
-        href = _cell_href(record)
+        prefix = asset_prefixes.get(record.run_id, "")
+        href = _cell_href(record, prefix)
         summary = (
             f"<code>{_e(record.runner_label)}</code> · "
             f"<code>{_e(record.variant_label)}</code> · repeat-{record.repeat_index} "
@@ -1369,6 +1290,10 @@ def _render_cell_details(records: list[RunRecord]) -> str:
             )
             + f' · <a href="{_e(href)}raw.txt">脱敏 raw.txt</a></p>'
         ]
+        artifact = output_href(record, case, prefix=prefix) if case else None
+        if artifact:
+            body.insert(0, f'<p><a href="{_e(artifact)}" target="_blank" '
+                        'rel="noopener noreferrer">打开本轮原始作品 ↗</a></p>')
         if record.is_error:
             body.append('<p class="note">runner 执行失败，未进入 check / judge。</p>')
         elif record.check.detail:
@@ -1386,7 +1311,7 @@ def _render_cell_details(records: list[RunRecord]) -> str:
                 f"<pre>{_e(scrub_text(record.judge.reasoning))}</pre>"
             )
         parts.append(
-            f"<details><summary>{summary}</summary>"
+            f'<details id="{detail_id(record)}"><summary>{summary}</summary>'
             f'<div class="body">{"".join(body)}</div></details>'
         )
     return "".join(parts)
@@ -1400,6 +1325,7 @@ def build_report_html(
     comparisons: dict[str, list[RunnerComparison]],
     judge_label: str = _DASH,
     skipped: list | None = None,
+    report_sources: dict[str, str] | None = None,
 ) -> str:
     """从与计分卡相同的数据源渲染单文件 HTML 报告。"""
     by_case: dict[str, dict[tuple[str, str], list[RunRecord]]] = defaultdict(
@@ -1411,13 +1337,23 @@ def build_report_html(
     runner_set = sorted({r.runner_label for r in records})
     variant_set = sorted({r.variant_label for r in records})
 
+    asset_prefixes = {
+        source: f"../{source}/" for source in (report_sources or {}).values() if source != run_id
+    }
     sections: list[str] = []
-    sections.append(_render_summary(by_case, cases, case_names))
+    sections.append(render_overview(
+        records, cases, run_id, front_charts=render_front_charts(records, cases),
+        asset_prefixes=asset_prefixes,
+    ))
+    sections.append('<h2 class="evidence-heading">从结论到证据</h2>')
 
     for case_name in case_names:
         case_obj = cases.get(case_name)
         case_records = by_case[case_name]
-        sections.append(f"<h2>用例：{_e(case_name)}</h2>")
+        title = task_title(case_obj) if case_obj else case_name
+        sections.append(f'<details class="case-section" id="{case_id(case_name)}">'
+                        f'<summary>{_e(title)}</summary><div class="case-body">'
+                        f'<p class="note">用例：<code>{_e(case_name)}</code></p>')
         if case_obj is not None:
             title, brief = _task_brief(case_obj)
             head = _e(title) + (f" — {_e(brief)}" if brief else "")
@@ -1454,7 +1390,10 @@ def build_report_html(
         sections.append(_render_comparisons(comparisons.get(case_name, []), case_records))
         sections.append(_render_check_axes(case_records))
         sections.append(_render_items_grid(case_records))
-        sections.append(_render_cell_details([r for recs in case_records.values() for r in recs]))
+        sections.append(_render_cell_details(
+            [r for recs in case_records.values() for r in recs], case_obj, asset_prefixes
+        ))
+        sections.append('</div></details>')
 
     skipped = skipped or []
     if skipped:
@@ -1483,19 +1422,20 @@ def build_report_html(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:,">
 <title>评测报告 {_e(run_id)}</title>
-<style>{_CSS}</style>
+<style>{_CSS}{OVERVIEW_CSS}{CHART_CSS}{PREVIEW_CSS}</style>
 </head>
 <body><main>
-<h1>评测报告</h1>
-<p class="meta">run <code>{_e(run_id)}</code> · 生成于 {date.today().isoformat()}</p>
+{"".join(sections)}
+<details class="report-context"><summary>评测报告 · 比较口径与运行信息</summary><div class="body">
+<p class="meta">run <code>{_e(run_id)}</code> · 生成于 {datetime.now(UTC).date().isoformat()} UTC</p>
 <div class="chips">{chips}</div>
 	<p class="note">比较口径：每行是「启动器 + 模型」捆绑，不是裸模型；
 	harness 是已知混淆变量。裁判分为 advisory，有 check 时以 check 为质量锚。</p>
 	<p class="note">分享边界：本 report.html 可能包含任务输入与模型输出正文，
 	必须按 case 的保密级别保存；仅 scorecard.md 是默认可分享摘要。
 	cells/、run.json 与 artifacts/ 同样不可直接外发。</p>
-{"".join(sections)}
-</main></body>
+</div></details>
+</main>{DIALOG}{PREVIEW_DIALOG}{SCRIPT}{PREVIEW_SCRIPT}</body>
 </html>
 """
 
