@@ -60,7 +60,7 @@ runners:
     args: ["--setting-sources", "project"]  # 隔离全局 CLAUDE.md；ai-keeping 中转，背后是官方 glm-5.3
   glm-5.3-official:
     launcher: c
-    config: 2   # open.bigmodel.cn/api/anthropic（官方直连；账号额度耗尽，暂停使用）
+    config: 2   # open.bigmodel.cn/api/anthropic（官方直连）
   kimi-k3:
     launcher: c
     config: 3   # api.kimi.com/coding
