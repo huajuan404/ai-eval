@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from bench.__main__ import rebuild_report, run_benchmark
+from bench.__main__ import rebuild_report, rejudge_run, run_benchmark
 from bench.case import RunContract, load_case
 from bench.comparison import ItemComparison, RunnerComparison
 from bench.config import RunConfig
@@ -600,6 +600,18 @@ def test_report_view_replaces_case_and_preserves_source_runs(tmp_path: Path):
     assert before == {p: p.read_bytes() for p in protected}
     assert original_card == host.scorecard_path.read_bytes()
     assert rebuild_report(host.run_id, root).read_text() == rendered
+
+
+def test_rejudge_keeps_the_selected_report_view(tmp_path: Path):
+    root, host, child, recipe = _report_view_fixture(tmp_path)
+    registry = {"fake": RunnerProfile("fake", "command", template="echo hi")}
+    rejudge_run(host.run_id, root, "fake", registry=registry)
+    report = host.report_path.read_text()
+    assert "keep-case" in report and "replacement-case" in report
+    assert "drop-case" not in report
+    assert report.count('class="front-chart"') == 2
+    assert f'../{child.run_id}/cells/replacement-case/' in report
+    assert recipe.is_file()
 
 
 @pytest.mark.parametrize("failure", ["traversal", "duplicate", "private", "running", "definition-drift"])
@@ -1423,6 +1435,50 @@ def test_run_benchmark_writes_report_and_rebuild(tmp_path: Path) -> None:
     assert rebound[0].artifacts_dir == str(run_json.parent / "artifacts")
     with pytest.raises(ReportError, match="找不到 run"):
         find_run_layout("nope-123", [root])
+
+
+def test_rejudge_only_reruns_judge_and_keeps_check(tmp_path: Path) -> None:
+    """换裁判重判：只跑 judge，不重跑 runner / check，计分卡与报告重建。"""
+    root = tmp_path / "repo"
+    case_dir = _case(root, "rejudge-case")
+    (case_dir / "prompts" / "rubric.md").write_text("rubric", encoding="utf-8")
+    with (case_dir / "case.yaml").open("a", encoding="utf-8") as f:
+        f.write("judge:\n  rubric: prompts/rubric.md\n  dimensions: [correctness]\n")
+    registry = {"fake": RunnerProfile("fake", "command", template="echo hi")}
+    cfg = RunConfig(runners=("fake",), cases=("rejudge-case",), judge="fake", workers=1)
+
+    def fake_run(cmd, cwd, env):
+        Path(cwd, "answer.txt").write_text("hi", encoding="utf-8")
+        return "final", "", 0
+
+    def judge_returning(score: int):
+        def _run(cmd, cwd, env):
+            return (
+                json.dumps({"score": score, "max": 5, "dimensions": {"correctness": score}, "reasoning": "ok"}),
+                "",
+                0,
+            )
+
+        return _run
+
+    run_benchmark(cfg, registry, root, run_fn=fake_run, judge_run_fn=judge_returning(3))
+    run_id = next((root / "runs").iterdir()).name
+    layout = find_run_layout(run_id, [root])
+    first = load_run_records(layout)[0]
+    assert first.judge is not None and first.judge.score == 3
+    check_before = first.check
+
+    rejudge_run(
+        run_id, root, "fake", registry=registry, judge_run_fn=judge_returning(5)
+    )
+
+    after = load_run_records(layout)[0]
+    assert after.judge is not None and after.judge.score == 5
+    assert after.check == check_before  # check 结果原样保留，未重跑
+    assert layout.scorecard_path.is_file()
+    assert layout.report_path.is_file()
+    manifest = json.loads(layout.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["judge"] == "fake"
 
 
 def test_run_benchmark_does_not_resolve_judge_when_all_runs_fail(tmp_path: Path) -> None:
