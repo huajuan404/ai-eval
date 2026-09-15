@@ -67,7 +67,7 @@ def duration(milliseconds: int) -> str:
 
 
 def render_showcase(data: dict, site: Path, *, mobile: bool = False) -> bytes:
-    width = 560 if mobile else 1200
+    width = 480 if mobile else 1200
     height = 1778 if mobile else 1062
     root = ET.Element(f"{{{NS}}}svg", {
         "viewBox": f"0 0 {width} {height}", "width": str(width), "height": str(height),
@@ -85,13 +85,13 @@ def render_showcase(data: dict, site: Path, *, mobile: bool = False) -> bytes:
     label(root, width - margin, 44, data["date"], 15, fill="#737373", text_anchor="end")
     node(root, "path", d=f"M{margin} 64H{width-margin}", stroke="#e4e4e4")
     label(root, margin, 111, "同一任务，把作品摆在一起。", 30 if mobile else 34, font_weight=650)
-    label(root, margin, 145, "2 个模型 · 2 个任务 · 4 份真实交付", 18, fill="#666666")
+    label(root, margin, 145, "2 个模型 · 2 个任务 · 4 份真实交付", 20 if mobile else 18, fill="#666666")
 
     for ci, case in enumerate(data["cases"]):
         section_y = 198 + ci * (766 if mobile else 399)
         label(root, margin, section_y, f"0{ci+1} / {case['title']}", 23, font_weight=600)
         note = "车轮、踏板与双腿同步" if ci == 0 else "短腿要跟得上，表情还要淡定"
-        label(root, margin, section_y + 28, note, 17, fill="#737373")
+        label(root, margin, section_y + 28, note, 20 if mobile else 17, fill="#737373")
         records = sorted((r for r in data["records"] if r["case"] == case["id"]),
                          key=lambda r: data["runners"].index(r["runner_label"]))
         for ri, record in enumerate(records):
@@ -104,20 +104,21 @@ def render_showcase(data: dict, site: Path, *, mobile: bool = False) -> bytes:
             color = runner_color(record["runner_label"])
             node(card, "rect", x=x+16, y=y+19, width=9, height=9, rx=2, fill=color)
             name = "Kimi K3" if record["runner_label"] == "kimi-k3" else "GLM 5.3"
-            label(card, x+34, y+31, name, 20, font_weight=600)
+            label(card, x+34, y+31, name, 24 if mobile else 20, font_weight=600)
             judge = record["judge"]
             label(card, x+card_w-16, y+31, f"{judge['score']:g} / {judge['max']:g}",
-                  22, font_weight=650, text_anchor="end", fill=color)
-            label(card, x+16, y+58, duration(record["duration_ms"]), 17, fill="#666666")
-            label(card, x+card_w-16, y+58, "裁判参考分", 15, fill="#737373", text_anchor="end")
+                  26 if mobile else 22, font_weight=650, text_anchor="end", fill=color)
+            label(card, x+16, y+58, duration(record["duration_ms"]), 21 if mobile else 17, fill="#666666")
+            label(card, x+card_w-16, y+58, "裁判参考分", 18 if mobile else 15, fill="#737373", text_anchor="end")
             node(card, "path", d=f"M{x+16} {y+73}H{x+card_w-16}", stroke="#eeeeee")
             card.append(scoped_artwork(site / record["svg"], f"c{ci}-r{ri}",
                                        x+10, y+81, card_w-20, 205))
             sync = judge["dimensions"]["leg_pedal_sync"]
-            label(card, x+16, y+309, f"腿脚同步  {sync:g} / 5", 16,
+            label(card, x+16, y+309, f"腿脚同步  {sync:g} / 5", 20 if mobile else 16,
                   fill="#a63f50" if sync < 3 else "#666666")
-            label(card, x+card_w-16, y+309, "原始 SVG · 持续循环", 15,
-                  fill="#737373", text_anchor="end")
+            if not mobile:
+                label(card, x+card_w-16, y+309, "原始 SVG · 持续循环", 15,
+                      fill="#737373", text_anchor="end")
 
     bottom = height - 70
     node(root, "path", d=f"M{margin} {bottom}H{width-margin}", stroke="#e4e4e4")
