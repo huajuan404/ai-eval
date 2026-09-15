@@ -19,399 +19,165 @@
 
 <sub>真实运行快照 · 每格 1 次 · 分数为裁判参考分 · 比较的是启动器与模型的组合。</sub>
 
-<details>
-<summary><strong>为什么需要自己的评测集？</strong></summary>
-
-## 为什么需要 ai-eval
-
-每次新模型发布，铺天盖地的跑分都在回答同一个问题：「这个模型有多强？」
-但你真正想问的是另一个问题：**「我手上有一个具体任务，该用哪个模型？」**
-这两个问题之间隔着一道鸿沟。看清这道鸿沟，先把任务分成两类：
-
-- **探索性任务追求上限。** 目标是提高人的上限：让 AI 助力你做以前做不到的事——
-  后端写前端、前端写后端，加速任务达成、扩展能力范围。这类任务的选型很简单：
-  **智能越强越好**，因为探索追求的是把事情做对，上限就是一切。
-- **重复性任务追求性价比。** SOP 已经跑通、历史上验证过能做对的固定场景——
-  工单分级、代码巡检、报表生成、公司内部各种用 AI 自动化的流程。这时智能不再是瓶颈，
-  **成本和速度才是**。用旗舰模型去跑一个中端模型就能干好的活，是「智能浪费」；
-  而这类任务的量，远大于探索性任务。
-
-ai-eval 为后一类任务而生，回答的就是：**如何用「刚刚好」的智能完成重复性任务？**
-
-### 通用 benchmark 是底座，不是答案
-
-公开榜单是一份通用试卷，是有用的底座：SWE-bench 上一个模型 80 分、另一个 50 分，
-强弱一眼可辨。但 80 分对 75 分呢？如果 80 分的贵、75 分的便宜，75 分的够不够干好
-**你的**任务？通用试卷答不了——每个人、每个业务、每个组织内部的任务千差万别，
-长尾、特异，注定不在任何公开评测集里，却真实存在于企业和个人的日常工作中。
-
-所以 ai-eval 不做（也没必要做）大规模、统计学意义上的 benchmark——那是公开榜单的事。
-它做两件公开榜单做不了的事：
-
-1. **拿你自己的真实任务当试卷**：一手、可复现、贴合你的工作流，直接产出
-   「这个任务上，哪个模型完成了、花了多少 token、多少时间」的并排答案。
-2. **让任何人都能构建属于自己的评测集**：通过 skill 从历史 session 里自动蒸馏任务
-   （见下文 session-to-eval skill），把「建评测」的成本从手写降到一句话——评测能力不再是少数团队的专利。
-
-</details>
-
-## 核心理念
-
-一个用例 = 一个**端到端 agent 任务** + 一个**可换的启动器**。
-benchmark 只替换模型/启动器，重跑同一任务，采集四维指标并产出多模型并排计分卡。
-
-- **用例与模型解耦**：用例只声明「任务 + 校验 + 裁判 rubric + 输入」，不绑定模型。
-- **启动器抽象**：`runner`（跑用例）和 `judge`（裁判）共用同一套档案注册表与配置。
-- **比较口径诚实**：比的是「启动器 + 模型」捆绑，不是裸模型（harness 是已知混淆变量）。
-
-### 一个矩阵、三个比较轴
-
-执行模型是一个 `runner × prompt variant × data item` 三维矩阵。case 永远只是
-「任务 + 数据 + 真值 + 判分」，**在比什么由运行时的选择决定**：
-
-| 比较轴 | 你想回答的问题 | 怎么触发 | 结果看哪里 |
-|---|---|---|---|
-| **Runner 轴**（评模型/provider） | 这个任务该用哪个模型/启动器？ | `-r a,b,c` 传多个 runner | 完成率矩阵、四维每维赢家 |
-| **Prompt 轴**（评方案） | 新 prompt 修复了什么、退化了什么？ | `--variants x,y` 固定 runner | variant 配对表（fixed/regressed） |
-| **数据轴**（评数据） | 哪类输入拖垮了哪个组合？ | case 的 check report 产出 `items[]` | item 级明细网格 |
-
-三个轴可叠加：一次运行既可以多 runner × 多 variant，item 明细自动细分到每格。
-
 ## 快速开始
 
-从使用目的看，case 分为两大类。它们共用同一个 `case.yaml` schema 和执行框架，
-不是两个互不兼容的技术类型：
-
-1. **模型选型 case**：固定任务和判分方式，同时运行多个 runner，回答“这个任务该用哪个模型/启动器”。
-2. **方案迭代 case**：固定 runner 和数据集，同时运行多个 prompt variant，回答“新 prompt 是否修复旧错误、是否引入退化”。
-
-先列出本机实际可用的 case、runner 和 variant：
+准备 Python 3.11+，以及已配置好的模型 CLI。下面用 `codex` 和 `claude` 跑同一份 SVG 任务；
+`runner` 就是 [runners.yaml](runners.yaml) 中一个有名字的启动配置，可换成你本机可用的条目。
 
 ```bash
+git clone https://github.com/huajuan404/ai-eval.git
+cd ai-eval
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install pyyaml
+
 ./run.sh -l
+./run.sh -c 2026-09-15-001-flamingo-bicycle -r codex,claude
 ```
 
-### 第一类：模型选型 case
-
-给 `-r` 传入多个 runner。没有指定 `--variants` 时，框架只运行该 case 的默认 variant：
-
-```bash
-# 同一个端到端任务分别交给 codex 和 claude；每个组合运行 2 次
-./run.sh \
-  -c 2026-06-02-001-fizzbuzz \
-  -r codex,claude \
-  --repeat 2
-```
-
-结果重点看计分卡中的任务完成率、check/judge、耗时和 token。这里比较的是
-“runner + 模型”整体，不是脱离启动器的裸模型。
-
-### 第二类：方案迭代 case
-
-给 `-r` 传入一个固定 runner，用 `--variants` 选择要配对比较的 prompt 版本：
-
-```bash
-# 同一个 runner、同一批数据，比较 baseline 与 candidate
-./run.sh \
-  -c <case名> \
-  -r <runner名> \
-  --variants baseline,candidate \
-  --repeat 5
-```
-
-variant 名以 `./run.sh -l` 显示的 `[variants=...]` 为准；`--variants '*'` 运行该 case
-声明的全部版本。不传 `--variants` 只跑默认版本，**不会产生 variant 配对比较**。
-如果 `case.yaml` 已声明 `repeat`，以 case 的值为准；否则使用命令行的 `--repeat`。
-
-这类 case 的计分卡除常规指标外，还会显示每个条目的 `fixed`（新版本修复）与
-`regressed`（新版本退化）。比较结论只适用于该 case 声明的数据和评测范围，不自动外推。
-
-例如，本仓库配套私有库中的 Step2 prompt variant case 可这样运行：
-
-```bash
-./run.sh \
-  -c 2026-07-13-001-step2-prompt-variant \
-  -r minimax-m3-c0-direct \
-  --variants original,v4
-```
-
-一次运行的全部结果（manifest、每格产物、计分卡、HTML 报告）自包含在
-`runs/<run_id>/`（公开 case → 仓库根，私有 case → 私有根，见下文目录地图）；
-`scorecards/` 另存一份计分卡副本便于浏览历史，同日重复运行不会互相覆盖。
-仅公开模型选型结果可按需写入模型档案：
-
-```bash
-./run.sh -c 2026-06-02-001-fizzbuzz -r codex --write-profiles
-```
-
-依赖：Python 3.11+、PyYAML、`claude` CLI、`codex` CLI、PATH 上的 `c`（模型切换器）。
-
-## 启动器（4 类）
-
-在 `runners.yaml` 注册命名档案，runner 与 judge 共用：
-
-runner 使用统一注册表，不区分公开或私有；私有性只属于 case 数据。本机缺少某个 runner
-依赖或配置时会明确失败，可先用 `./run.sh -l` 查看并通过 `-r` 选择本机可用档案。
-
-| launcher | 说明 | 关键字段 |
-|---|---|---|
-| `claude` | `claude -p --output-format json` | `model?` |
-| `codex` | `codex exec --json`（默认 `-s workspace-write`，否则写不了文件） | `sandbox?`, `model?` |
-| `c` | 复用 PATH 上的 `c <config>`（透传无头参数给 claude） | `config`（config.env 索引） |
-| `command` | 通用模板（sf cli / 自定义斜杠命令 / 任意外部 agent） | `template`, `metrics: none` |
-
-凭证用 `${ENV_VAR}` 插值，**禁止明文密钥写入 runners.yaml**（注册表会拒绝）。
-
-## 四维指标
-
-- **质量/正确性**：用例 `check` 脚本（确定性 pass/fail）+ LLM 裁判（advisory）。
-- **速度/耗时**：编排器墙钟，永远可得。
-- **token**：跨家可比的真实基础——`in` 含缓存读写（`cache_read`/`cache_creation`），不再漏算
-  （旧实现把缓存丢了，sonnet 一次显示 6、实际 13 万）。各字段分存，供未来精确计价。
-- **成本**：仅真 Anthropic 计费的 `claude` 启动器可信；`c` 路由的第三方/本地模型显示「—」
-  （claude 自报 cost 是按 Claude 定价的影子，非真实成本，本地免费模型也会报出钱）；codex 无 cost。
-- **agentic 行为**：轮数、`files_changed`（无方向诊断量，与 check/judge 并读）。
-
-## 判分（三层）
-
-1. **check**：用例自带可验证脚本，退出码 0 = 通过。
-2. **judge**：LLM 裁判按 rubric 打分，作 **advisory**（有 check 时以 check 为质量锚）；
-   选手产物用 `<contestant_output>` 分隔块包裹标注不可信（抗注入）；同源标 `same_source`。
-3. **人工备注**：run record 预留 `human_note`。
-
-## 计分卡
-
-- **任务完成度**（最直观的结果信号）：把 check / judge 折成「任务干成了没」一维——
-  `check 通过` 或 `judge ≥ expected.passing_threshold`（或 `expected.completion.core_dimensions` 核心维达标）= 完成。
-  单用例显示 `✅完成 / ❌未完成`（repeat>1 显示通过率 `2/3`）；多用例顶部出「任务完成率」汇总（各用例等权，如 `8/10 (80%)`）。
-  judge 没跑成 / 无判据 → 标「未评」，**不冤判为未完成**。
-- 多模型并排：runner（启动器+模型）标签 × 四维 + **每维赢家** + **权衡摘要**。
-- **不自动聚合**四维单一分——四维不可通约，结论由你判定（完成度是单独的结果维，不是四维加权）。
-- `repeat>1` → 中位数 + 离散度，check 报 pass 率。
-- 进入可分享 markdown 前对裁判理由/原始输出**脱敏**。
-
-## HTML 报告
-
-每次运行结束自动在 `runs/<run_id>/report.html` 生成**单文件**交互报告，报告界面零外部依赖；
-内嵌作品保留自身的资源依赖。
-浏览器直接打开即可（与计分卡同一数据源，只做渲染）：
-
-> `scorecard.md` 是默认可分享摘要；`report.html` 可能包含任务输入与模型输出正文，
-> 必须按 case 的保密级别保存，不应未经复核直接外发。
-
-- **首屏**：每个 Case 独立的条形对比图，桌面最多三列并排，顶部统一切换参考分降序或耗时升序。
-  中性白底，Runner 识别色在图表、矩阵和作品入口中固定复用；每个 variant 独立比较，共用从 0 开始的刻度，
-  未全部通过的组合不参加耗时排序，缺失或不同量纲的分数不绘制可比条形；
-- **辅助矩阵**：默认收起的 Case × Runner 矩阵，同格展示状态、参考分与耗时；多 variant 分列，
-  部分未评不显示全绿，最快标记只比较同 variant 下所有轮次均通过的组合；
-- **HTML / SVG 作品**：读取本轮声明的 HTML 或 SVG 产物，脱敏后嵌入报告，以统一 1440 × 900 视口缩放展示。
-  点击可放大、滚动交互，并在同一 Case 内切换 Runner；关闭放大窗口时销毁该预览。
-  预览使用 `sandbox="allow-scripts"`，允许作品脚本运行，不授予同源、弹窗或顶层导航权限。
-  SVG 则作为内嵌图片展示，预览框不允许脚本；原始矢量文件保留下载入口。
-  放大后按窗口宽度布局；原始作品链接保留，外部资源仍可能需要网络，相对资源路径在内嵌模式下可能不可用。
-  内嵌预览不等于已经完成浏览器视觉验证，不改变原始产物或评分；
-- **Prompt 轴**：variant 配对表，fixed / regressed 逐 item 列出；
-- **数据轴**：item × runner@variant 通过网格，哪类输入拖垮了哪个组合一目了然；
-- **逐格明细**：点击矩阵格子打开侧边证据面板，展示全部已记录轮次；原有任务详情仍可展开，
-  查看 check 详情、裁判理由（已脱敏）、耗时/token，
-  并有相对链接直达同目录 `cells/` 下的 `run.json` / `raw.txt` / `artifacts/`。
-
-对历史 run 重建（不重跑、不重判分）：
-
-```bash
-./run.sh --report <run_id>
-```
-
-若只想调整报告展示哪些用例，可在该运行目录写入 `report_view.json`，再执行上述重建命令。
-它只改变 HTML 视图，不改原运行计划、记录或计分卡；来源保留在配置与产物链接中，页面只展示选定结果。
-每个 case 只选一个已完成的来源 run，且来源须位于同一产物根、匹配当前 case 完整性锁；公开报告不能引用私有运行。
-
-```json
-{"schema_version":1,"cases":[
-  {"case":"case-a","run_id":"original-run-id"},
-  {"case":"case-b","run_id":"another-run-id"}
-]}
-```
-
-换裁判重判（只重跑 judge，不重跑评测与 check；结果写回各格 run.json 并重建计分卡/报告）：
-
-```bash
-./run.sh --rejudge <run_id> -j codex-astra-max
-```
-
-普通 `./run.sh` 运行结束后默认生成上述可视化报告，无需额外选项。
-新运行、`--report` 重建、`--rejudge` 重判均使用同一套白底任务对比图与 HTML/SVG 作品预览；
-已有 `report_view.json` 的报告在重判后也保留选定的用例组合。
-
-### README 动态展示与公开报告
-
-README 中的原生 SVG 首图与 [完整交互报告](https://huajuan404.github.io/ai-eval/) 共用
-`docs/showcase.json` 的公开数据和四份原始 SVG。首图直接编排原始 SMIL 元素，保留动作、周期与缺陷；
-完整版复用 `bench/report.py`，保留参考分/耗时切换、作品放大和逐格证据。
-GitHub README 会清理脚本和页面样式，因此完整 HTML 由 GitHub Pages 的 `main:/docs` 发布。
-
-```bash
-python3 -m bench.showcase          # 重建 README 首图、手机版和公开 HTML
-python3 -m bench.showcase --check  # 检查展示产物与公开数据、SVG 哈希一致
-
-# 用新的已完成运行更新这组演示，再重建所有展示产物
-python3 -m bench.showcase --import-run runs/<run_id>
-```
-
-此导出限定为火烈鸟、卡皮巴拉两个公开 case × `kimi-k3`、`glm-5.3`，每格一次。
-当前首图支持这组无样式表的 SMIL 作品；记录只公开任务、指标与裁判依据，原始日志、模型最终回复、
-本机配置与任意额外文件不进入导出。包含本机路径、疑似凭证或 SVG 活动内容时拒绝生成。
-公开前仍需复核这次运行是否适合分享；普通 `runs/` 不会自动发布。
-
-## 目录地图：什么在哪
-
-拨乱反正的两条铁律：**case 目录 = 纯定义**（评什么、喂什么、怎么判，永不写入运行产物）；
-**一次运行 = 一个自包含目录** `runs/<run_id>/`（这次评测的一切都在里面）。
-
-| 你想找… | 在哪 |
-|---|---|
-| case 本身（任务 prompt） | `cases/<name>/prompts/`（variants 各一个文件），入口 `case.yaml` |
-| 选手可见的输入/数据集 | `cases/<name>/input/`（运行时拷入隔离 workdir） |
-| 预期结果（真值） | 单一预期值 → `case.yaml` 的 `expected:`；批量标签 → `oracle/`（选手不可见）；可执行基准 → `verify/`（check 前强制还原，防篡改） |
-| 评测标准 | 确定性 → `check.sh`（或 protocol 的 check）；主观 → `prompts/rubric.md`（judge） |
-| 在比 runner / prompt / 数据？ | 由运行选择决定（见「一个矩阵、三个比较轴」），case 不用改 |
-| 一次评测的全部结果 | `runs/<run_id>/`（公开 case → 仓库根；私有 case → 私有根） |
-| 每次 LLM 请求的原始返回 | `runs/<run_id>/cells/<case>/<variant>/<runner>/repeat-<N>/raw.txt`（脱敏启动器流） |
-| 模型最终答案纯文本 | 同上 cell 目录 `artifacts/OUTPUT.txt`（不脱敏，供 check/judge 读） |
-| 单格结构化记录（指标+判分） | 同上 cell 目录 `run.json` |
-| 汇总视图 | `runs/<run_id>/report.html`（交互）与 `scorecard.md`（纯文本，`scorecards/` 有副本） |
-
-```
-ai-eval/
-├── run.sh                 # 薄入口 → python3 -m bench
-├── config.yaml            # 一次运行配置（runners/cases/judge/repeat/dimensions）
-├── runners.yaml           # 命名 runner 档案注册表
-├── bench/                 # Python 编排器包
-│   ├── registry.py        # 档案加载 + 密钥校验
-│   ├── adapters/          # claude / codex / c / command 适配器
-│   ├── case.py            # v1/v2 用例加载 + 隔离 workdir
-│   ├── protocol.py        # 可复用的声明式 case 机制
-│   ├── layout.py          # 一次运行的产物布局（runs/<run_id>/ 唯一出处）
-│   ├── orchestrator.py    # 预校验 RunPlan + 矩阵执行
-│   ├── comparison.py      # variant 配对比较
-│   ├── scoring.py         # check + 裁判
-│   ├── scorecard.py       # markdown 计分卡 + 档案写入
-│   ├── report.py          # 自包含 HTML 报告（--report 可重建）
-│   ├── showcase.py        # 已审核 SVG 演示的公开数据导出与报告重建
-│   ├── showcase_svg.py    # README 原生动画 SVG 编排（桌面/手机）
-│   ├── scrub.py           # 密钥脱敏
-│   └── record.py          # run record schema
-├── cases/<name>/          # 用例纯定义：case.yaml + prompts/ + input/ + oracle/ + verify/
-├── docs/                 # GitHub Pages 公开演示 + README 动画首图
-├── protocols/<name>/      # 多个 case 共用时才需要的运行/check 机制
-├── runs/<run_id>/         # 一次运行的全部结果（gitignored；私有 case 落私有根）
-│   ├── run_manifest.json  #   选择、完整性锁、状态
-│   ├── cells/...          #   每格 run.json + raw.txt + artifacts/
-│   ├── scorecard.md       #   计分卡原件
-│   └── report.html        #   HTML 报告
-├── models/<label>.md      # 模型档案（计分卡沉淀目标）
-├── scorecards/            # 计分卡浏览副本（gitignored，按需分享）
-└── tests/                 # pytest
-```
+完成后打开 `runs/<run_id>/report.html`，就能并排查看作品、分数和耗时。
+同目录的 `scorecard.md` 是文本摘要，`cells/` 保存每格的原始产物与记录。
+上面的示例每组运行一次；追加 `--repeat 3` 可以做多轮对比。
+这道 SVG 题的裁判需要浏览器观察能力；无法完成观察时会保留作品、不给分。
 
 ## 加一个用例
 
-在 `cases/<name>/` 建 `case.yaml`。最小 case v2 只需声明任务和判分入口，`name` 默认取目录名，
-`class` 默认是 `coding`：
+先写清三件事：**模型收到什么、需要交付什么、怎样判断做得好不好。**
+一个 case 固定这份题目与判分方式，运行时再选模型。
+
+```text
+cases/my-svg/
+├── case.yaml
+└── prompts/
+    ├── task.md
+    └── rubric.md
+```
+
+最小配置如下。`task.md` 写任务并约定保存为 `scene.svg`；`rubric.md` 写评分标准，满分与配置一致。
 
 ```yaml
 schema_version: 2
 task: prompts/task.md
-check: check.sh
 judge: prompts/rubric.md
-# requires_engine: claude   # 仅限某引擎时声明，矩阵会跳过不兼容格标 N/A
-# repeat: 3                  # 覆盖全局 repeat
+expected:
+  output_file: scene.svg
+  max_score: 10
 ```
 
-同一数据比较多个 prompt 时只增加 variant，不复制 case：
+需要输入文件就放进 `input/`；有自动校验脚本时增加 `check: check.sh`，校验基准放在不会拷给模型的 `verify/`。
+完整示例可看 [火烈鸟 case](cases/2026-09-15-001-flamingo-bicycle/README.md)。
 
-```yaml
-schema_version: 2
-task:
-  variants:
-    baseline: prompts/baseline.md
-    candidate: prompts/candidate.md
-  default: candidate
-evaluation:
-  role: calibration
-  generalizes: false
-  comparison: {method: item_exact_match, baseline: baseline, candidate: candidate}
-  unit_of_analysis: item
-  independent_unit: batch
-```
+### 已经做过的任务，可以从 session 提取
 
-`item_exact_match` 明确要求 check report 提供 `items[].id/actual/correct`。数值、rubric 或生成式结果
-不能套用这个方法，应先由领域 check 产出指标，再新增有明确定义的比较方法。
+[session-to-eval](.claude/skills/session-to-eval/SKILL.md) 支持从当前对话或历史任务记录生成草稿，例如：
 
-只有当多个 case 反复复制同一运行脚本、check 或 variant 参数时，才在同仓库
-`protocols/<name>/protocol.yaml` 定义一个声明式 protocol，并让 case 增加 `protocol: <name>`。
-protocol 只复用机制；dataset、prompt、oracle 和评测范围仍由 case 明确声明。旧 case v1 保持兼容。
-schema v2 必须至少有一个可用的 check 或 judge；声明 variant comparison 时还必须显式写
-`role`、`generalizes`、比较方法和统计单位，框架不替使用者猜测这些结论边界。
+> 把刚才生成动画 SVG 的任务抽成 case。
+>
+> 把历史里给旅行照片分类的任务抽成 case。
 
-输入资产放 `input/`（运行时拷入隔离 workdir，不污染源）。
-**只读校验资产**（如基准测试）放 `verify/`——它**不进入选手 workdir**，check 前还原到产物目录，
-确保选手无法通过改测试来骗取 check pass。
+生成后补齐真实输入与评分依据，再参与比较；静态校验通过只代表结构可用。
 
-## 私有用例（公司内部 / 不可开源）
-
-公开仓只放可开源的 case；内部 case（真实工单、内部代码、业务规则）放在**仓库之外**，物理隔离杜绝误提交。
+<details>
+<summary>首次安装 session-to-eval</summary>
 
 ```bash
-cp private.env.example private.env        # 改成你的私有 cases 根（仓库外的绝对路径）
-# private.env 里：export AI_EVAL_PRIVATE_CASES="/abs/path/to/private/cases"
-./run.sh -l                                # 公开 + 私有 case 一起列出（私有标 🔒）
-./run.sh -c <私有case名> -r ...            # 公开/私有 case 同样跑
-```
-
-- `run.sh` 自动 source gitignored 的 `private.env`，框架经 `AI_EVAL_PRIVATE_CASES`（`:` 分隔可多个根）
-  发现公开 + 私有 case；私有 case 的 `runs/`（含 report.html）和 `scorecards/` 都落在私有根，产物不外泄。
-- 建议把私有 cases 目录单独做成一个**私有 git 仓**（内部可共享、有版本）。
-- **session-to-eval skill 默认把蒸馏出的 case 写到私有路径**（`config.toml` 的 `private_cases_path`），
-  除非你显式要求"放公开"——蒸馏自真实 session 的 case 天然可能含敏感数据。
-- 安全网：公开仓的 `cases/_private/` 前缀已 gitignore，万一内部 case 误放进公开 `cases/` 也提交不上去。
-
-## 从 session 自动蒸馏用例（session-to-eval skill）
-
-手写用例慢。`.claude/skills/session-to-eval/` 提供一个**可移植 skill**，两种入口：
-
-- **倒出模式**：说"把刚才的任务抽成 eval case"，蒸馏**当前 session**里的 1..N 个任务。
-- **检索模式**：给一句意图描述（如"把判断工单是否线上问题并分级的推理抽成 case"），skill 自动在
-  当前 session 与**本项目历史 session**（Claude Code + Codex 双端）里检索命中任务；缺输入/真值时主动挖
-  项目 CLAUDE.md/README/代码补全；本项目信息不足、线索指向他项目时**主动问你**是否跨项目搜集。
-
-两种入口都兼容 Claude Code 与 Codex，蒸馏成对齐上面契约的**草稿 case** 写进 `cases/`。
-
-```bash
-# 一次性安装（软链进 ~/.claude/skills/、~/.codex/skills/、~/.agents/skills/）
-cp .claude/skills/session-to-eval/config.example.toml .claude/skills/session-to-eval/config.toml   # 填入本仓库绝对路径
+cp .claude/skills/session-to-eval/config.example.toml .claude/skills/session-to-eval/config.toml
+# 编辑 config.toml，填写 ai_eval_path；私有用例另填 private_cases_path
 bash .claude/skills/session-to-eval/install.sh
 ```
 
-诚实边界：transcript 里没有外部验证过的 ground-truth、大型工作集无法完整复原，
-所以产物默认是**草稿级**——能精确复原的精确复原，不能的产出 `setup.sh` 桩 + `ground-truth TODO`
-+ 人工确认点，区分度由人在落地前签字。落盘前 `validate_case.py` 做静态结构校验
-（只证明能被 bench 加载，**不**证明能跑出有意义的分）。详见 `.claude/skills/session-to-eval/SKILL.md`。
+安装会把源码软链到 Claude Code、Codex 和 `.agents` 的 skills 目录。
 
-## 安全
+</details>
 
-- 子进程用最小环境，剔除无关凭证（每个 launcher 只放行自己的 auth）。
-- 凭证类敏感信息进入报告或计分卡前脱敏；`report.html` 仍可能包含业务正文，按 case 保密级别保存。
-- `scorecard.md` 是默认可分享摘要；`report.html`、`cells/`、`run.json` 与 `artifacts/` 不应未经复核直接外发。
-- 运行产物 `runs/` 与计分卡副本 `scorecards/` 已 gitignore（历史遗留的 `cases/*/output/` 同样忽略，仅只读保留）。
+<details>
+<summary>不公开的任务放在哪里？</summary>
 
-## 已知边界
+把 case 放到仓库外，在 `private.env` 中设置 `AI_EVAL_PRIVATE_CASES`：
 
-- **比的是「启动器+模型」捆绑**，非裸模型；harness（system prompt/工具/agent loop）是混淆变量。
-- **单一裁判**存在跨家族偏置；裁判分作 advisory，优先 check 锚。
-- **本机 c/claude 加载大量插件**会抬高 token/耗时基线，跨 launcher 不完全可比。
-- 价值随用例量增长——单个用例只说明该任务上的对比，不代表模型整体优劣。
+```bash
+cp private.env.example private.env
+# 将 private.env 中的路径改成仓库外的 case 目录
+./run.sh -l
+```
 
-## License
+`run.sh` 会同时发现公开和私有 case，私有运行结果也留在私有根目录。
+原始报告可能包含输入和输出正文，分享前需要复核。不要把非公开素材放进公开仓库。
 
-MIT
+</details>
+
+## 继续比较模型或提示词
+
+**比较模型**：在 `-r` 后列出多个 runner，如 `-r codex,claude`。
+新增模型时编辑 [runners.yaml](runners.yaml)；选手和裁判共用这份注册表，凭证通过环境变量引用。
+
+**比较提示词**：在同一个 case 中定义不同版本，再固定一个 runner 运行。
+例如把前面 `case.yaml` 的 `task` 改为：
+
+```yaml
+task:
+  variants:
+    short: prompts/short.md
+    detailed: prompts/detailed.md
+  default: short
+```
+
+写好这两份提示词后运行：
+
+```bash
+./run.sh -c my-svg -r codex --variants short,detailed --repeat 3
+```
+
+两种比较可以组合使用。保持输入素材与判分方式一致，才能解释差异；
+不传 `--variants` 时只运行默认版本。若 case 自己声明了 `repeat`，以它为准。
+
+## 读懂结果，再做选择
+
+先检查交付物，再看判分依据，最后比较满足需求的方案花了多少时间与资源。
+例如 SVG 任务要实际观察车轮、踏板和腿脚的运动关系，不能只看一个总分。
+
+| 你关心什么 | 报告里看哪里 |
+|---|---|
+| 是否满足要求 | `check` 和任务完成度。没有可用判据或评分时显示“未评”，不等于失败。 |
+| 好在哪里、差在哪里 | 原始作品、裁判维度分与理由。裁判分是参考，不能替代实际交付证据。 |
+| 花了多少资源 | 生成耗时、含缓存读写的 token；费用没有可信来源时显示 `—`。 |
+
+单次结果只说明这次任务；多轮运行才能进一步观察稳定性。比较对象是**启动器 + 模型**的组合，
+工具、插件和运行环境都会影响结果，也不把不同任务的参考分加成一个“总冠军”。
+
+<details>
+<summary>重建报告或换裁判</summary>
+
+```bash
+./run.sh --report <run_id>                 # 重建 HTML，不重跑模型
+./run.sh --rejudge <run_id> -j <judge>     # 只重新判分，并更新报告
+```
+
+裁判名称来自 `runners.yaml`。报告展示范围可通过运行目录里的 `report_view.json` 调整，
+它不会修改原始运行选择；约束见 [report_view.py](bench/report_view.py)。
+
+</details>
+
+## 维护与开发
+
+日常配置看 [config.yaml](config.yaml) 和 [runners.yaml](runners.yaml)；
+模块职责、用例约定和测试命令统一放在 [AGENTS.md](AGENTS.md)。
+
+<details>
+<summary>更新 README 动态演示</summary>
+
+公开展示保存在 `docs/`，由 GitHub Pages 的 `main:/docs` 发布。
+它复用已审核的 SVG 与评测数据，保留原始动画和作品缺陷。
+
+```bash
+python3 -m bench.showcase --import-run runs/<run_id>
+python3 -m bench.showcase --check
+```
+
+只调整展示代码时运行 `python3 -m bench.showcase` 即可重建。
+当前导出限定为上面的两个 SVG case × `kimi-k3`、`glm-5.3`，每格一次；
+普通 `runs/` 不会自动发布，原始日志、本机配置和任意额外文件不进入导出。
+
+</details>
+
+[MIT License](LICENSE)

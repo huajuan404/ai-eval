@@ -4,11 +4,11 @@
 而 runner 按设计永远看不到 `expected`。所以"答案∈输入"这件事，只有落盘期/校验门能精确判。0 token。
 
 判据（低误报优先）：
-1. **input 结论字段**：`input/*.json` 里命中结论类字段名（problem_analysis/root_cause/根因…）且**值非空** —— 最强信号。
-2. **task.md 结论标签**：task.md 正文里出现结论类字段名当小节标题（如"问题描述（problem_analysis）"）。
+1. **input 结论字段**：`input/*.json` 里命中结论类字段名（judgment/verdict/判定结果…）且**值非空** —— 最强信号。
+2. **task.md 结论标签**：task.md 正文里出现结论类字段名当小节标题（如"分类说明（judgment）"）。
 3. **长答案回显（advisory）**：`expected` 里承载判定的**整句**真值（≥8 字，跳过 ID/数字/短标签）出现在 `input/` 事实里。
 
-刻意**不**对"用户侧/非问题/P2"这类短分类标签做回显匹配——它们在业务规则/输出 schema 里合法出现，匹配必误报。
+刻意**不**对"室内/室外/清晰"这类短分类标签做回显匹配——它们在分类规则/输出 schema 里合法出现，匹配必误报。
 """
 
 from __future__ import annotations
