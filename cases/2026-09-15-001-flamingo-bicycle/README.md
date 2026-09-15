@@ -7,7 +7,8 @@
 唯一输入为 [`prompts/task.md`](prompts/task.md)：第一段逐字保留用户给定的英文提示词，第二段仅约定保存为 `flamingo.svg`。
 工作目录从空目录开始；不提供参考图、已有 SVG、骨架代码或预设动画周期。模型可自行选择 SMIL 或 SVG 内的 CSS。
 
-这是一个 case。Opus 5 与 Opus 5.2 是同题的两个历史产物来源，不是两个 case，也不是 prompt variant。
+本任务与 [`卡皮巴拉骑自行车`](../2026-09-15-002-capybara-bicycle/README.md) 分别作为独立 case。
+Opus 5 与 Opus 5.2 是本题的两个历史产物来源。
 
 ## 评审边界
 
