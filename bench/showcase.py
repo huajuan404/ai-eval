@@ -10,6 +10,7 @@ import argparse
 import base64
 import hashlib
 import json
+import math
 import re
 import tempfile
 import xml.etree.ElementTree as ET
@@ -65,6 +66,9 @@ def validate_svg(source: bytes) -> None:
     namespace = "{http://www.w3.org/2000/svg}"
     if root.tag != namespace + "svg" or "viewBox" not in root.attrib:
         raise ValueError("展示需要带 viewBox 的独立 SVG")
+    viewport = [float(v) for v in root.attrib["viewBox"].replace(",", " ").split()]
+    if len(viewport) != 4 or not all(math.isfinite(v) for v in viewport) or min(viewport[2:]) <= 0:
+        raise ValueError("SVG viewBox 必须是有效的有限画布")
     for element in root.iter():
         if not element.tag.startswith(namespace) or element.tag.removeprefix(namespace) in {
             "script", "foreignObject", "iframe", "image", "style",

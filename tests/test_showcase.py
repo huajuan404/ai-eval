@@ -137,6 +137,13 @@ def test_composition_preserves_motion_and_resolves_every_fragment(site, mobile):
     for row in data["records"]:
         expected.update(animation_signature(ET.fromstring((site / row["svg"]).read_bytes())))
     assert animation_signature(hero) == expected
+    # Letterboxing must not expose shapes drawn outside an original viewBox.
+    nested = list(hero.iter("{http://www.w3.org/2000/svg}svg"))[1:]
+    assert len(nested) == 4
+    for svg in nested:
+        _, _, width, height = [float(x) for x in svg.attrib["viewBox"].split()]
+        assert svg.get("overflow") == "hidden"
+        assert float(svg.get("width")) / float(svg.get("height")) == pytest.approx(width / height, rel=1e-5)
     ids = [e.get("id") for e in hero.iter() if e.get("id")]
     assert len(ids) == len(set(ids))
     for e in hero.iter():

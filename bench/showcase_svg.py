@@ -48,10 +48,16 @@ def scoped_artwork(path: Path, prefix: str, x: int, y: int, width: int, height: 
                     for old, new in ids.items():
                         value = re.sub(rf"(?<![\w.-]){re.escape(old)}\.(?=begin|end|repeat)", new + ".", value)
             element.set(key, value)
-    source.attrib.update(x=str(x), y=str(y), width=str(width), height=str(height))
+    _, _, view_width, view_height = (float(v) for v in source.attrib["viewBox"].replace(",", " ").split())
+    scale = min(width / view_width, height / view_height)
+    content_width, content_height = view_width * scale, view_height * scale
+    source.attrib.update(
+        x=f"{x + (width - content_width) / 2:g}", y=f"{y + (height - content_height) / 2:g}",
+        width=f"{content_width:g}", height=f"{content_height:g}", overflow="hidden",
+    )
     source.attrib.setdefault("fill", "black")
     source.attrib.setdefault("font-family", "serif")
-    source.set("preserveAspectRatio", "xMidYMid meet")
+    source.attrib.setdefault("preserveAspectRatio", "xMidYMid meet")
     return source
 
 
