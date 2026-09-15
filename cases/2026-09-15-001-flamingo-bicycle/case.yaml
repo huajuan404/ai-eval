@@ -1,0 +1,14 @@
+schema_version: 2
+name: 2026-09-15-001-flamingo-bicycle
+class: coding
+task: prompts/task.md
+judge:
+  rubric: prompts/rubric.md
+  dimensions: [scene, wheel_rotation, pedal_rotation, leg_pedal_sync, seamless_loop]
+expected:
+  output_file: flamingo.svg
+  max_score: 25
+evaluation:
+  role: animation_diagnostic
+  scope: Self-contained animated SVG of a flamingo riding a bicycle, including synchronized pedaling and seamless looping
+  generalizes: false

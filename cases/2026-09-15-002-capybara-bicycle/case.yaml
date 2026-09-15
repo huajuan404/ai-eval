@@ -1,0 +1,14 @@
+schema_version: 2
+name: 2026-09-15-002-capybara-bicycle
+class: coding
+task: prompts/task.md
+judge:
+  rubric: prompts/rubric.md
+  dimensions: [scene, wheel_rotation, pedal_rotation, leg_pedal_sync, calm_expression, seamless_loop]
+expected:
+  output_file: capybara.svg
+  max_score: 30
+evaluation:
+  role: animation_diagnostic
+  scope: Self-contained animated SVG of a capybara riding a bicycle, including synchronized short legs, a consistently calm expression and seamless looping
+  generalizes: false
