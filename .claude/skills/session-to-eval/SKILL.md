@@ -1,6 +1,6 @@
 ---
 name: session-to-eval
-description: 把 session 里执行过的真实任务蒸馏成 ai-eval 可执行的 eval case。两种入口——①倒出模式：用户说"把刚才的任务抽成 eval case""抽成 case""turn this into an eval case"，蒸馏当前 session；②检索模式：用户给一句意图描述（如"把判断工单是否线上问题并分级的推理抽成 case"），自动在当前 session 与本项目历史 session（Claude Code + Codex 双端）中检索命中任务，缺输入/真值时主动挖项目 CLAUDE.md/README/代码补全，本项目信息不足时主动询问是否跨项目。语义识别 1..N 个任务，生成对齐 ai-eval 契约的草稿 case（case.yaml / prompts / check 或 rubric / input / README），落盘前做静态结构校验。
+description: 把 session 里执行过的真实任务蒸馏成 ai-eval 可执行的 eval case。两种入口——①倒出模式：用户说"把刚才的任务抽成 eval case""抽成 case""turn this into an eval case"，蒸馏当前 session；②检索模式：用户给一句意图描述（如"把生成动画 SVG 的任务抽成 case"），自动在当前 session 与本项目历史 session（Claude Code + Codex 双端）中检索命中任务，缺输入/真值时主动挖项目 CLAUDE.md/README/代码补全，本项目信息不足时主动询问是否跨项目。语义识别 1..N 个任务，生成对齐 ai-eval 契约的草稿 case（case.yaml / prompts / check 或 rubric / input / README），落盘前做静态结构校验。
 ---
 
 # session-to-eval
@@ -23,7 +23,7 @@ description: 把 session 里执行过的真实任务蒸馏成 ai-eval 可执行�
 - "turn this into an eval case" / "make a benchmark case from what we just did"
 
 **检索模式**——用户给一句**意图描述**指明想抽什么（目标不一定在当前 session）：
-- "把判断工单是否线上问题并分级的推理过程抽成 case"
+- "把历史里给旅行照片分类的任务抽成 case"
 - "/session-to-eval <对某段任务的描述>"
 - 任何"我想把 <某能力 / 某段推理 / 某次任务> 做成 eval case"且目标可能在历史里。
 
@@ -164,7 +164,7 @@ expected:                    # 可选；YAML **dict 字段**（不是目录！�
 
 ### 🔒 落点：默认私有，除非用户显式要求公开
 
-蒸馏自真实 session 的 case **天然可能含敏感数据**（公司工单、内部代码、业务规则）。所以：
+蒸馏自真实 session 的 case **天然可能含敏感数据**（未公开文档、个人素材、访问凭证）。所以：
 
 - **`config.toml` 配了 `private_cases_path` → 默认写私有路径**（公开仓之外，不进 git）。
 - 用户**显式**说"放公开 / 放 cases / public / 开源 / 这个能开源"时，才写 `ai_eval_path/cases/`。
@@ -320,14 +320,14 @@ python3 scripts/session_index.py --cwd "$PWD" --query "<描述>" --cross
 命中任务的 digest 缺"输入"或"真值"时别直接放弃。**仅涉及当前项目的挖掘不设确认门、直接挖**，只把阶段打给用户：
 
 1. **轻挖**：读本项目 `CLAUDE.md` / `README.md` + 顶层结构，找"输入从哪来、真值在哪记"
-   （例：工单原文在哪张表；`is_online_issue` / `severity` 对应哪些标注字段）。
+   （例：照片元数据在哪张表；`scene_label` / `quality_grade` 对应哪些人工标注字段）。
 2. **挖不到 → 深挖**：grep 进代码找表名 / 字段 / prompt 定义（本项目内直接做，log 显示"[挖掘] 深挖…"）。
 3. 挖到 → 产**取数配方**：
    - `setup.sh`：把取数落成可执行 / 可 dry-run 的脚本（SQL 模板等）。**碰真实库的动作需人工确认后才跑**（守危险操作红线）。
    - `expected`：历史里有样本真值就填；没有就留 **TODO + 精确配方**（不是空 TODO）。
-   - 真值本就是确定性标注（如 DB 的 `is_online`/`severity` 列）→ 这类任务升级为 **check + rubric 并用**，不止 rubric。
+   - 真值本就是确定性标注（如 DB 的 `scene_label`/`quality_grade` 列）→ 这类任务升级为 **check + rubric 并用**，不止 rubric。
 4. **挖不动 → AskUserQuestion 兜底**，且问得具体（带已挖到的表名 / 列名）：
-   > "我在代码里看到工单来自 `t_xxx`、标注列是 `is_online_issue`/`severity`；要我采样 N 行做 input，还是你有现成 fixture？"
+   > "我在代码里看到照片元数据来自 `photo_assets`、标注列是 `scene_label`/`quality_grade`；要我采样 N 行做 input，还是你有现成 fixture？"
 
 ### R6.5 泄漏闸（落盘前必过，所有 class）
 
@@ -414,7 +414,7 @@ python3 scripts/validate_case.py <case_dir>
 **🚫 反向判据警告（务必牢记）**：**"模型答对了" ≠ "case 有区分度"。** 这两者在以下情况是**相反**的：
 
 - **输入含派生结论时**，模型答对是**污染的铁证**，不是区分度——绝不能用"实测一把全对"宣布 case 成立。
-- **答案恰是多数类/默认值时**（如本域大量工单都判 `false`），一个"永远输出默认类"的退化基线也能过——
+- **答案恰是多数类/默认值时**（如样本中的大多数照片都标为“室外”），一个"永远输出默认类"的退化基线也能过——
   这是**平凡性**，不是区分度。
 
 **🎲 概率性任务 → 多输入，不要单输入（最先判这条）**：

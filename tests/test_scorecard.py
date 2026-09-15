@@ -92,10 +92,10 @@ def _mk_reasoning_case(root, name="t-1", *, check_only=False):
     (d / "prompts").mkdir(parents=True)
     (d / "input").mkdir()
     (d / "prompts" / "task.md").write_text(
-        "# 工单线上问题判定\n\n你是工单分析员，给定工单输出结构化判定。\n", encoding="utf-8"
+        "# 照片场景分类\n\n你是照片整理助手，给定照片描述输出场景分类。\n", encoding="utf-8"
     )
     (d / "input" / "rules.txt").write_text("rules", encoding="utf-8")
-    (d / "input" / "ticket.json").write_text("{}", encoding="utf-8")
+    (d / "input" / "photo.json").write_text("{}", encoding="utf-8")
     (d / "prompts" / "rubric.md").write_text("rubric", encoding="utf-8")
     if check_only:
         check = d / "check.sh"
@@ -123,9 +123,9 @@ def test_scorecard_task_card_renders(tmp_path) -> None:
     rec = _rec(case.name, "claude", judge_score=16)
     md = build_scorecard(MatrixResult(records=[rec]), judge_label="claude", cases={case.name: case})
     assert "### 📋 任务说明" in md
-    assert "工单线上问题判定" in md                       # 标题
-    assert "你是工单分析员" in md                          # 一句话简介
-    assert "`rules.txt`" in md and "`ticket.json`" in md   # 输入资产
+    assert "照片场景分类" in md                       # 标题
+    assert "你是照片整理助手" in md                          # 一句话简介
+    assert "`rules.txt`" in md and "`photo.json`" in md   # 输入资产
     assert "| 期望产出 | 任务定义指定的结果 |" in md       # schema 未声明时不臆造产物形态
     assert "judge 4 维" not in md and "judge 2 维" in md    # 判分维度数
     assert "完成度=judge ≥ 14/20" in md                    # 完成度判据
