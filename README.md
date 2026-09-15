@@ -1,6 +1,26 @@
-# ai-eval — 可换模型的端到端 agent benchmark
+# ai-eval
 
-> 回答一个本质问题：**面对我自己的真实任务，该用哪个模型？**
+**用自己的真实任务，找到刚刚好的模型。**
+
+把同一份任务交给不同模型和启动器，直接比较交付的作品、参考评分、耗时与 token。
+代码修复、报告生成、工具调用、SVG 动画，都可以成为你的评测题。
+
+[打开完整交互报告 ↗](https://huajuan404.github.io/ai-eval/) · [快速开始](#快速开始) · [加入自己的任务](#加一个用例)
+
+<a href="https://huajuan404.github.io/ai-eval/">
+  <picture>
+    <source media="(max-width: 760px)" srcset="docs/assets/report-mobile.svg">
+    <img src="docs/assets/report.svg" width="1200" alt="火烈鸟与卡皮巴拉骑自行车：Kimi K3、GLM 5.3 的四份原生 SVG 动画、参考分与生成耗时。点击查看完整交互报告。">
+  </picture>
+</a>
+
+上面四份作品直接保留模型输出中的 **SMIL 动画**，轮子、踏板和腿脚的运动都留在 README 里。
+点击首图，在完整报告里切换参考分与耗时、放大对照作品、展开裁判依据。
+
+<sub>真实运行快照 · 每格 1 次 · 分数为裁判参考分 · 比较的是启动器与模型的组合。</sub>
+
+<details>
+<summary><strong>为什么需要自己的评测集？</strong></summary>
 
 ## 为什么需要 ai-eval
 
@@ -32,6 +52,8 @@ ai-eval 为后一类任务而生，回答的就是：**如何用「刚刚好」�
    「这个任务上，哪个模型完成了、花了多少 token、多少时间」的并排答案。
 2. **让任何人都能构建属于自己的评测集**：通过 skill 从历史 session 里自动蒸馏任务
    （见下文 session-to-eval skill），把「建评测」的成本从手写降到一句话——评测能力不再是少数团队的专利。
+
+</details>
 
 ## 核心理念
 
@@ -221,6 +243,26 @@ runner 使用统一注册表，不区分公开或私有；私有性只属于 cas
 新运行、`--report` 重建、`--rejudge` 重判均使用同一套白底任务对比图与 HTML/SVG 作品预览；
 已有 `report_view.json` 的报告在重判后也保留选定的用例组合。
 
+### README 动态展示与公开报告
+
+README 中的原生 SVG 首图与 [完整交互报告](https://huajuan404.github.io/ai-eval/) 共用
+`docs/showcase.json` 的公开数据和四份原始 SVG。首图直接编排原始 SMIL 元素，保留动作、周期与缺陷；
+完整版复用 `bench/report.py`，保留参考分/耗时切换、作品放大和逐格证据。
+GitHub README 会清理脚本和页面样式，因此完整 HTML 由 GitHub Pages 的 `main:/docs` 发布。
+
+```bash
+python3 -m bench.showcase          # 重建 README 首图、手机版和公开 HTML
+python3 -m bench.showcase --check  # 检查展示产物与公开数据、SVG 哈希一致
+
+# 用新的已完成运行更新这组演示，再重建所有展示产物
+python3 -m bench.showcase --import-run runs/<run_id>
+```
+
+此导出限定为火烈鸟、卡皮巴拉两个公开 case × `kimi-k3`、`glm-5.3`，每格一次。
+当前首图支持这组无样式表的 SMIL 作品；记录只公开任务、指标与裁判依据，原始日志、模型最终回复、
+本机配置与任意额外文件不进入导出。包含本机路径、疑似凭证或 SVG 活动内容时拒绝生成。
+公开前仍需复核这次运行是否适合分享；普通 `runs/` 不会自动发布。
+
 ## 目录地图：什么在哪
 
 拨乱反正的两条铁律：**case 目录 = 纯定义**（评什么、喂什么、怎么判，永不写入运行产物）；
@@ -255,9 +297,12 @@ ai-eval/
 │   ├── scoring.py         # check + 裁判
 │   ├── scorecard.py       # markdown 计分卡 + 档案写入
 │   ├── report.py          # 自包含 HTML 报告（--report 可重建）
+│   ├── showcase.py        # 已审核 SVG 演示的公开数据导出与报告重建
+│   ├── showcase_svg.py    # README 原生动画 SVG 编排（桌面/手机）
 │   ├── scrub.py           # 密钥脱敏
 │   └── record.py          # run record schema
 ├── cases/<name>/          # 用例纯定义：case.yaml + prompts/ + input/ + oracle/ + verify/
+├── docs/                 # GitHub Pages 公开演示 + README 动画首图
 ├── protocols/<name>/      # 多个 case 共用时才需要的运行/check 机制
 ├── runs/<run_id>/         # 一次运行的全部结果（gitignored；私有 case 落私有根）
 │   ├── run_manifest.json  #   选择、完整性锁、状态

@@ -1,0 +1,2 @@
+# Preserve the original model outputs byte-for-byte, including their whitespace.
+docs/cells/**/artifacts/*.svg -whitespace

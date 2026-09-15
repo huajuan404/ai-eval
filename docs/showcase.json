@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "run_id": "20260915T124011-4c12491f",
+  "date": "2026-09-15",
+  "judge": "claude",
+  "runners": [
+    "kimi-k3",
+    "glm-5.3"
+  ],
+  "cases": [
+    {
+      "id": "2026-09-15-001-flamingo-bicycle",
+      "title": "火烈鸟骑自行车"
+    },
+    {
+      "id": "2026-09-15-002-capybara-bicycle",
+      "title": "卡皮巴拉骑自行车"
+    }
+  ],
+  "records": [
+    {
+      "case": "2026-09-15-001-flamingo-bicycle",
+      "runner_label": "glm-5.3",
+      "launcher_type": "c",
+      "runner_model": "",
+      "run_id": "20260915T124011-4c12491f",
+      "variant_label": "default",
+      "prompt_template_sha256": "577bfb299b88ecde776be7ecd85195e5e6db6ee18ee100fb8791fd1e545069fa",
+      "run_context_sha256": "ec560956fef1d023bb57ce40b05e61ec5b193de1a953c8fa31299d67e05ed6c2",
+      "input_manifest_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "repeat_index": 0,
+      "started_at": "2026-09-15T12:45:50.538739+00:00",
+      "duration_ms": 1759807,
+      "exit_code": 0,
+      "is_error": false,
+      "usage": {
+        "input_tokens": 57446,
+        "output_tokens": 67784,
+        "cache_creation_tokens": 0,
+        "cache_read_tokens": 935040,
+        "total_tokens": 1060270,
+        "cost_usd": null
+      },
+      "agentic": {
+        "num_turns": 25,
+        "files_changed": 1,
+        "commands_run": null
+      },
+      "judge": {
+        "ran": true,
+        "model": "claude",
+        "same_source": false,
+        "score": 24,
+        "max": 25,
+        "dimensions": {
+          "scene": 4,
+          "wheel_rotation": 5,
+          "pedal_rotation": 5,
+          "leg_pedal_sync": 5,
+          "seamless_loop": 5
+        },
+        "reasoning": "已观察 flamingo.svg 动画：文件为有效独立 SVG（900×600），仅用 SMIL（animate/animateTransform），无 script、无事件属性、无外部引用。在 Chromium（Playwright + 真实 Chrome）中加载并用 pauseAnimations/setCurrentTime 逐相位取样，覆盖 t=0→3.0s（踏板周期 1.5s，共两个完整周期以上），并用 getScreenCTM/animatedPoints 读取真实动画后几何。证据：(1) 踏板矩形中心在一个周期内依次经过 (361,493)→(330,465)→(328,423)→(357,392)→(399,390)→(430,418)→(432,460)→(403,491) 再回到起点，即绕中轴 (380,442) 半径 55 的完整圆周，两侧曲柄相差 180°，踏板本身有反向旋转始终保持水平，链轮随曲柄同转。(2) 两轮辐条组的端点在 0.75s 内走完整圈（t=0 与 t=0.75 均为 (326,442)/(686,442)，中途 (305,494)、(250,518)/(610,518)），分别绕各自轮轴 (250,442)、(610,442) 旋转，轮圈、轮毂与车架位置全程不动。(3) 腿脚同步精确：每个取样相位（含非关键帧时刻 t=0.09/0.28/1.4）踝点与对应踏板中心误差≤1px，脚掌线段中心恒在踏板上方约 6px（踩在踏板面上）；上(435,439)、下(384,497)、前(432,461)、后(325,445)四个位置均保持接触；大腿/小腿长度恒为 135px，关节连续，两腿相差半周期。仅扣分项在 scene：火烈鸟长颈、喙、翅膀与长腿清晰，骑姿方向与地面/云朵滚动方向一致，但脖子/翅膀未与车把形成接触，身体略浮于车座上方，膝盖摆幅偏大时大腿会越过车座与车架，接触关系稍欠自然。循环边界检查：t=1.4999 与 t=1.5001 的踏板、膝、踝、脚几何完全一致；车轮 0→360、1.5s 恰为 2 个整周期；链条 stroke-dashoffset 0→28（dasharray 7 7，2 个整周期）、路面 0→78（dasharray 44 34，1 个整周期）、云层位移 900 与贴图间距一致、太阳与颈部摆动首尾值相同，各周期边界前后均未见跳变或停顿。"
+      },
+      "svg": "cells/2026-09-15-001-flamingo-bicycle/default/glm-5.3/repeat-0/artifacts/flamingo.svg",
+      "svg_sha256": "6beae3280890142d57dba8afcecd084919cd4c4b9175d3440a346f833cf66ca1",
+      "context": "{\n  \"case\": \"2026-09-15-001-flamingo-bicycle\",\n  \"prompt_template_sha256\": \"577bfb299b88ecde776be7ecd85195e5e6db6ee18ee100fb8791fd1e545069fa\",\n  \"protocol\": null,\n  \"repeat_index\": 0,\n  \"run_id\": \"20260915T124011-4c12491f\",\n  \"schema_version\": 1,\n  \"variant\": {\n    \"label\": \"default\",\n    \"parameters\": {}\n  }\n}"
+    },
+    {
+      "case": "2026-09-15-001-flamingo-bicycle",
+      "runner_label": "kimi-k3",
+      "launcher_type": "c",
+      "runner_model": "",
+      "run_id": "20260915T124011-4c12491f",
+      "variant_label": "default",
+      "prompt_template_sha256": "577bfb299b88ecde776be7ecd85195e5e6db6ee18ee100fb8791fd1e545069fa",
+      "run_context_sha256": "ec560956fef1d023bb57ce40b05e61ec5b193de1a953c8fa31299d67e05ed6c2",
+      "input_manifest_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "repeat_index": 0,
+      "started_at": "2026-09-15T12:40:11.132212+00:00",
+      "duration_ms": 650011,
+      "exit_code": 0,
+      "is_error": false,
+      "usage": {
+        "input_tokens": 54413,
+        "output_tokens": 17497,
+        "cache_creation_tokens": 0,
+        "cache_read_tokens": 817539,
+        "total_tokens": 889449,
+        "cost_usd": null
+      },
+      "agentic": {
+        "num_turns": 18,
+        "files_changed": 1,
+        "commands_run": null
+      },
+      "judge": {
+        "ran": true,
+        "model": "claude",
+        "same_source": false,
+        "score": 25,
+        "max": 25,
+        "dimensions": {
+          "scene": 5,
+          "wheel_rotation": 5,
+          "pedal_rotation": 5,
+          "leg_pedal_sync": 5,
+          "seamless_loop": 5
+        },
+        "reasoning": "已观察 flamingo.svg 动画：文件是有效独立 SVG（viewBox 0 0 400 300），仅用 SMIL animateTransform，无 script/事件处理器/外部引用。用 Chromium（Playwright）加载后 pauseAnimations + setCurrentTime 逐相位取屏并用 getScreenCTM 读取部件真实屏幕坐标，采样 t=0→4.01s（覆盖 4 个车轮周期、2 个踏板周期）另加 7.99/8.0/8.01。周期：车轮与地面 1s，曲柄+双腿 2s，云 8s。证据一：两只车轮的辐条端点分别绕各自轮轴（屏幕 224,424 与 576,424）作半径约 82px 的匀速圆周，t=0/0.25/0.5/0.75 四相位轮辐方位依次相差 90°，轮轴与车架连接点始终不动；地面纹理每秒平移 314.16（=2π·50，与轮周长一致，滚动无打滑）。证据二：踏板两端绕中轴（392,424）作半径 40px 的整圆（t=0.5 上/下点 y=384/464，t=0 与 1.0 前/后点 x=352/432），双脚椭圆在全部采样相位与各自踏板的距离最大仅 0.5 屏幕像素（约 0.25 用户单位），包括上、下、前、后四个位置；放大帧显示大腿-膝-小腿-脚链路连续，近侧腿在上，远侧腿被车架部分遮挡，属正常前后关系。证据三：场景中火烈鸟长颈、喙、翅膀、长腿与自行车（车架、座垫、把手、牙盘）均清晰，骑姿与座垫/踏板/车把三点接触合理。循环边界检查：对比 t=0.99/1.00/1.01 与 1.98/1.99/2.00/2.01 及 3.99/4.01、7.99/8.01，轮辐、踏板、双脚坐标均单调平滑穿过边界，无重置跳变；腿部 25 个关键值首尾相同且等间隔，云组 8s 平移量 314.16 恰为云图案平铺周期，地面平移量 314.16 恰为纹理周期 78.54 的 4 倍，故各周期衔接处均无可察觉跳变。"
+      },
+      "svg": "cells/2026-09-15-001-flamingo-bicycle/default/kimi-k3/repeat-0/artifacts/flamingo.svg",
+      "svg_sha256": "d3f0beac706c1f4132c6d1a861f05900063ee200ca200dd72e27f1eeb61bb86a",
+      "context": "{\n  \"case\": \"2026-09-15-001-flamingo-bicycle\",\n  \"prompt_template_sha256\": \"577bfb299b88ecde776be7ecd85195e5e6db6ee18ee100fb8791fd1e545069fa\",\n  \"protocol\": null,\n  \"repeat_index\": 0,\n  \"run_id\": \"20260915T124011-4c12491f\",\n  \"schema_version\": 1,\n  \"variant\": {\n    \"label\": \"default\",\n    \"parameters\": {}\n  }\n}"
+    },
+    {
+      "case": "2026-09-15-002-capybara-bicycle",
+      "runner_label": "glm-5.3",
+      "launcher_type": "c",
+      "runner_model": "",
+      "run_id": "20260915T124011-4c12491f",
+      "variant_label": "default",
+      "prompt_template_sha256": "4080a2f33def2eee998e39bc7b9ed682e379d33b30470c705b90971d4abd7fa3",
+      "run_context_sha256": "6df3d410993aefb10468e448767e7370d66aea1e4e019545eba200a9cd6f8bb3",
+      "input_manifest_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "repeat_index": 0,
+      "started_at": "2026-09-15T12:51:01.178166+00:00",
+      "duration_ms": 1354821,
+      "exit_code": 0,
+      "is_error": false,
+      "usage": {
+        "input_tokens": 67911,
+        "output_tokens": 44947,
+        "cache_creation_tokens": 0,
+        "cache_read_tokens": 1076032,
+        "total_tokens": 1188890,
+        "cost_usd": null
+      },
+      "agentic": {
+        "num_turns": 16,
+        "files_changed": 1,
+        "commands_run": null
+      },
+      "judge": {
+        "ran": true,
+        "model": "claude",
+        "same_source": false,
+        "score": 29,
+        "max": 30,
+        "dimensions": {
+          "scene": 5,
+          "wheel_rotation": 5,
+          "pedal_rotation": 5,
+          "leg_pedal_sync": 4,
+          "calm_expression": 5,
+          "seamless_loop": 5
+        },
+        "reasoning": "已观察 capybara.svg 动画：文件为有效独立 SVG，纯 SMIL，无 JS/事件处理器/外部依赖。在 Chromium 中打开并以 setCurrentTime 逐相位采样，覆盖 t=0→5.2s（踏板周期 2.6s，即两个以上完整周期）。车轮：前后轮辐条组分别绕各自轮心 (280,410)/(620,410) 以 1.3s/圈持续旋转，两轮 t=0 与 t=0.065 区域像素均明显变化，轮心与车架关系全程稳定；地面虚线速度（120px/0.261s≈460px/s）与轮周速一致。踏板：曲柄绕五通 (435,442) 整圈旋转，齿盘同轴转动，踏板用反向 -360° 嵌套旋转保持水平，链条 dashoffset 速度（18px/0.276s≈65px/s）与齿盘边缘线速度吻合，连接可信。腿脚接触：在下(435,487)、后(390,442)、上(435,397)、前(480,442) 四个位置放大检查，近侧浅棕脚与远侧深棕脚始终骑在各自踏板上，无脱离；双腿相位相差 180°，膝关节折叠连续，脚随 animateMotion 走与曲柄同径的圆。扣分点在比例：髋 (402,276) 到踏板最远约 211px，整条腿约 229px，接近躯干高度，膝盖在多个相位明显前伸越过胸线，短腿感偏弱（非明显拉长脱接，故给 4）。表情：半眯眼、钝圆口鼻，全周期无其他面部动画，仅 4.6s 一次自然眨眼（t≈2.3s 眼变为一条线），始终淡定。循环衔接：在 t=2.57→2.63 以 0.01s 步长逐帧差分，跨 2.6s 边界的差异量（9158 px）与相邻非边界帧（9007/8961/8657）同量级，无跳变；云 36s 位移有 +900 复制补位，路面虚线与链条 dashoffset 位移等于 dasharray 周期，速度线两端 opacity 为 0，各子动画均自洽循环。"
+      },
+      "svg": "cells/2026-09-15-002-capybara-bicycle/default/glm-5.3/repeat-0/artifacts/capybara.svg",
+      "svg_sha256": "ed55b56b648400cb7ef96f8d56a0c3e55298a84d1ace7f0dfce80813a57fd912",
+      "context": "{\n  \"case\": \"2026-09-15-002-capybara-bicycle\",\n  \"prompt_template_sha256\": \"4080a2f33def2eee998e39bc7b9ed682e379d33b30470c705b90971d4abd7fa3\",\n  \"protocol\": null,\n  \"repeat_index\": 0,\n  \"run_id\": \"20260915T124011-4c12491f\",\n  \"schema_version\": 1,\n  \"variant\": {\n    \"label\": \"default\",\n    \"parameters\": {}\n  }\n}"
+    },
+    {
+      "case": "2026-09-15-002-capybara-bicycle",
+      "runner_label": "kimi-k3",
+      "launcher_type": "c",
+      "runner_model": "",
+      "run_id": "20260915T124011-4c12491f",
+      "variant_label": "default",
+      "prompt_template_sha256": "4080a2f33def2eee998e39bc7b9ed682e379d33b30470c705b90971d4abd7fa3",
+      "run_context_sha256": "6df3d410993aefb10468e448767e7370d66aea1e4e019545eba200a9cd6f8bb3",
+      "input_manifest_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "repeat_index": 0,
+      "started_at": "2026-09-15T12:40:11.132119+00:00",
+      "duration_ms": 339375,
+      "exit_code": 0,
+      "is_error": false,
+      "usage": {
+        "input_tokens": 54460,
+        "output_tokens": 14951,
+        "cache_creation_tokens": 0,
+        "cache_read_tokens": 777341,
+        "total_tokens": 846752,
+        "cost_usd": null
+      },
+      "agentic": {
+        "num_turns": 19,
+        "files_changed": 1,
+        "commands_run": null
+      },
+      "judge": {
+        "ran": true,
+        "model": "claude",
+        "same_source": false,
+        "score": 24,
+        "max": 30,
+        "dimensions": {
+          "scene": 3,
+          "wheel_rotation": 5,
+          "pedal_rotation": 4,
+          "leg_pedal_sync": 2,
+          "calm_expression": 5,
+          "seamless_loop": 5
+        },
+        "reasoning": "已观察 capybara.svg 动画；文件是有效独立 SVG（xml 解析通过），无 script/事件属性/外部引用，仅用 SMIL。用 Chrome headless 经 CDP 单会话在真实时间连续抓取 60 帧（约 6.0s，间隔 ~100ms），覆盖 3 个以上完整踏板周期（1.8s）与约 6.6 个车轮周期，并另抓多组 virtual-time 帧交叉验证。观察结果：两轮辐条组绕各自轮轴持续平滑转动（红色标记点在各相位依次移动），轮轴、轮圈与车架关系稳定；踏板板+脚绕中轴公转并反向自旋保持水平，曲柄与中轴连接可信。腿是最大问题：所谓的腿是与曲柄刚性相连、延伸到踏板之外的棕色直杆，绕中轴整圈旋转，与水豚身体完全不相连（腹部与腿之间始终有明显空隙，无髋/大腿结构）；在前相位直杆水平指向前方并压到前轮上，在下相位伸到地面线附近，虽然脚与各自踏板始终贴合、两腿相差半圈，但肢体断开且比例失真，只能给 1–2 档。表情为静止的低垂眼皮+点眼+平直嘴，全部相位（含循环衔接帧）均为平静淡定，无变形。循环检查：相邻帧差像素数在 6.8k–9.7k 之间平滑周期波动，全程无突变尖峰、无静止或提前停止；相隔 18 帧（≈1800ms）的帧对差异仅约 1000 像素（可由 ~50ms 采样抖动与 1.1s 周期路面虚线解释），衔接处无可察觉跳变。场景整体可辨认为圆厚躯干、钝圆口鼻、小耳的水豚骑自行车，但头身一体化、腿部脱节削弱了骑姿与接触关系。"
+      },
+      "svg": "cells/2026-09-15-002-capybara-bicycle/default/kimi-k3/repeat-0/artifacts/capybara.svg",
+      "svg_sha256": "9d53be73c3377cd41b43fd985383374b8fe548e817485d89e19537ec37c08ce9",
+      "context": "{\n  \"case\": \"2026-09-15-002-capybara-bicycle\",\n  \"prompt_template_sha256\": \"4080a2f33def2eee998e39bc7b9ed682e379d33b30470c705b90971d4abd7fa3\",\n  \"protocol\": null,\n  \"repeat_index\": 0,\n  \"run_id\": \"20260915T124011-4c12491f\",\n  \"schema_version\": 1,\n  \"variant\": {\n    \"label\": \"default\",\n    \"parameters\": {}\n  }\n}"
+    }
+  ]
+}
