@@ -1,13 +1,13 @@
-# ai-eval
+# donebench
 
 **用自己的真实任务，找到刚刚好的模型。**
 
 把同一份任务交给不同模型和启动器，直接比较交付的作品、参考评分、耗时与 token。
 代码修复、报告生成、工具调用、SVG 动画，都可以成为你的评测题。
 
-[打开完整交互报告 ↗](https://huajuan404.github.io/ai-eval/) · [快速开始](#快速开始) · [加入自己的任务](#加一个用例)
+[打开完整交互报告 ↗](https://huajuan404.github.io/donebench/) · [快速开始](#快速开始) · [加入自己的任务](#加一个用例)
 
-<a href="https://huajuan404.github.io/ai-eval/">
+<a href="https://huajuan404.github.io/donebench/">
   <picture>
     <source media="(max-width: 760px)" srcset="docs/assets/report-mobile.svg">
     <img src="docs/assets/report.svg" width="1200" alt="火烈鸟与卡皮巴拉骑自行车：Kimi K3、GLM 5.3 的四份原生 SVG 动画、参考分与生成耗时。点击查看完整交互报告。">
@@ -25,8 +25,8 @@
 `runner` 就是 [runners.yaml](runners.yaml) 中一个有名字的启动配置，可换成你本机可用的条目。
 
 ```bash
-git clone https://github.com/huajuan404/ai-eval.git
-cd ai-eval
+git clone https://github.com/huajuan404/donebench.git
+cd donebench
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install pyyaml
