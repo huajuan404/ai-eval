@@ -171,7 +171,14 @@ def render_overview(
     failures = sum(v is False for v in verdicts)
     unknown = len(verdicts) - passes - failures
     all_passed = bool(verdicts) and passes == len(verdicts)
-    title = "全部通过判据，差异藏在完成方式里。" if all_passed else "哪些任务做成了，一眼看清。"
+    # 全部未评时不能写「0 通过」：那不是失败，是用例没配通过判据（completion / passing_threshold / check）。
+    all_unknown = bool(verdicts) and unknown == len(verdicts)
+    if all_passed:
+        title = "全部通过判据，差异藏在完成方式里。"
+    elif all_unknown:
+        title = "参考分与耗时已就绪，用例未设通过判据。"
+    else:
+        title = "哪些任务做成了，一眼看清。"
     lead = "比较能否完成，也比较参考评分与耗时。点击任意结果，查看判定证据。"
     heads = "".join(
         f'<th scope="col"><span class="runner-name">{runner_marker(r)}{esc(r)}</span>'
@@ -260,14 +267,19 @@ def render_overview(
                 '预览内容已脱敏，外部资源仍可能需要网络，完整效果可打开原始作品查看。</p>'
                 f'<div class="work-grid" style="--runner-count:{len(pairs)}">{"".join(cards)}</div></section>'
             )
+    if all_unknown:
+        run_total = (f'<strong>—<span> / {len(verdicts)}</span></strong>'
+                     '<span>未设通过判据 · 参考分不计通过</span>')
+    else:
+        run_total = (f'<strong>{passes}<span> / {len(verdicts)}</span></strong>'
+                     f'<span>次运行通过 · {failures} 失败 · {unknown} 未评</span>')
     return (
         '<section class="overview" aria-label="评测结论总览"><header class="report-masthead">'
         '<a class="wordmark" href="#">AI<span>EVAL</span><i> / FIELD REPORT</i></a>'
         f'<span class="run-stamp">{esc(run_id)} · {len(pairs)} 组启动器 · {len(names)} 个任务</span></header>'
         '<div class="report-lead"><div><span class="eyebrow">评测结果 / RUN SUMMARY</span>'
         f'<h1>{esc(title)}</h1><p>{esc(lead)}</p></div>'
-        f'<div class="run-total"><strong>{passes}<span> / {len(verdicts)}</span></strong><span>次运行通过'
-        f' · {failures} 失败 · {unknown} 未评</span></div></div>'
+        f'<div class="run-total">{run_total}</div></div>'
         f'{front_charts}<details class="matrix-secondary"><summary>查看完整通过矩阵 · '
         f'{len(names)} 个任务 × {len(pairs)} 组启动器</summary><div class="matrix-body">'
         '<div class="matrix-heading"><h2>用例通过矩阵</h2><div class="matrix-legend">'

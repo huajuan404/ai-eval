@@ -1514,3 +1514,19 @@ def test_run_benchmark_does_not_resolve_judge_when_all_runs_fail(tmp_path: Path)
     assert records[0].is_error is True
     assert records[0].check.ran is False
     assert records[0].judge is None
+
+
+def test_overview_all_unevaluated_does_not_claim_zero_passes(tmp_path: Path) -> None:
+    """用例没配通过判据时，首屏不能显示「0 / N 次运行通过」把未评当失败。"""
+    case = load_case(_case(tmp_path))
+    records = [
+        replace(_record("mixed"), check=CheckResult()),
+        replace(_record("mixed"), repeat_index=1, check=CheckResult()),
+    ]
+    rendered = build_report_html(run_id="x", records=records, cases={case.name: case}, comparisons={})
+    overview = rendered.split('class="evidence-heading"')[0]
+    assert "未设通过判据" in overview
+    assert "<strong>—<span> / 2</span></strong>" in overview
+    assert "0<span> / 2</span>" not in overview
+    assert "次运行通过" not in overview
+    assert "哪些任务做成了" not in overview

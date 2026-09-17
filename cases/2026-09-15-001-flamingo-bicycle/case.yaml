@@ -6,6 +6,13 @@ judge:
   rubric: prompts/rubric.md
   dimensions: [scene, wheel_rotation, pedal_rotation, leg_pedal_sync, seamless_loop]
 expected:
+  # 完成判据：机械核心维度达标即视为「做成了」；scene / calm_expression 是观感维度，不参与通过判定。
+  completion:
+    core_dimensions:
+      wheel_rotation: 4
+      pedal_rotation: 4
+      leg_pedal_sync: 3
+      seamless_loop: 4
   output_file: flamingo.svg
   max_score: 25
 evaluation:
