@@ -1,11 +1,11 @@
 ---
 name: session-to-eval
-description: 把 session 里执行过的真实任务蒸馏成 ai-eval 可执行的 eval case。两种入口——①倒出模式：用户说"把刚才的任务抽成 eval case""抽成 case""turn this into an eval case"，蒸馏当前 session；②检索模式：用户给一句意图描述（如"把生成动画 SVG 的任务抽成 case"），自动在当前 session 与本项目历史 session（Claude Code + Codex 双端）中检索命中任务，缺输入/真值时主动挖项目 CLAUDE.md/README/代码补全，本项目信息不足时主动询问是否跨项目。语义识别 1..N 个任务，生成对齐 ai-eval 契约的草稿 case（case.yaml / prompts / check 或 rubric / input / README），落盘前做静态结构校验。
+description: 把 session 里执行过的真实任务蒸馏成 donebench 可执行的 eval case。两种入口——①倒出模式：用户说"把刚才的任务抽成 eval case""抽成 case""turn this into an eval case"，蒸馏当前 session；②检索模式：用户给一句意图描述（如"把生成动画 SVG 的任务抽成 case"），自动在当前 session 与本项目历史 session（Claude Code + Codex 双端）中检索命中任务，缺输入/真值时主动挖项目 CLAUDE.md/README/代码补全，本项目信息不足时主动询问是否跨项目。语义识别 1..N 个任务，生成对齐 donebench 契约的草稿 case（case.yaml / prompts / check 或 rubric / input / README），落盘前做静态结构校验。
 ---
 
 # session-to-eval
 
-把"刚刚在这个 session 里发生过的真实任务"反向蒸馏成 ai-eval 能跑的 eval case。
+把"刚刚在这个 session 里发生过的真实任务"反向蒸馏成 donebench 能跑的 eval case。
 
 **核心诚实边界**：自动蒸馏天然弱在两处——transcript 里没有外部验证过的 ground-truth，
 大型工作集（如既有仓库）无法从 transcript 完整复原。所以产物默认是**草稿级 case**：
@@ -29,7 +29,7 @@ description: 把 session 里执行过的真实任务蒸馏成 ai-eval 可执行�
 
 判定：触发参数 / 描述为空 → 倒出模式；带实质描述 → 检索模式（见"检索模式（描述驱动）"章节）。
 
-不触发：用户在讨论 ai-eval 的代码本身、或要手写一个全新 case 而非从 session 蒸馏。
+不触发：用户在讨论 donebench 的代码本身、或要手写一个全新 case 而非从 session 蒸馏。
 
 ---
 
@@ -51,7 +51,7 @@ description: 把 session 里执行过的真实任务蒸馏成 ai-eval 可执行�
 
 ## Case 契约（生成产物必须严格对齐）
 
-一个 case = `<ai_eval_path>/cases/<YYYY-MM-DD-NNN-name>/` 目录，由 ai-eval 的 `bench.case.load_case` 加载。
+一个 case = `<ai_eval_path>/cases/<YYYY-MM-DD-NNN-name>/` 目录，由 donebench 的 `bench.case.load_case` 加载。
 **生成器必须按此契约产出，否则 case 跑不起来。**
 
 ### 目录命名
@@ -199,7 +199,7 @@ case_dir = f"{cases_root}/{name}"
   - ❌ **评分维度预告 / "评测器会怎么判你"**——把 rubric 维度、及格线、check 项写进 task.md = 教模型应试，
     污染原始任务、抬高所有选手的下限、压扁区分度。判分标准只活在 `prompts/rubric.md` 与 `check.sh`。
   - ❌ **"评测器会自动跑 X"之类元话术**——模型不该知道自己在被评测。
-  判据：把 task.md 给一个不知道 ai-eval 存在的人看，他读到的应该正好是"用户当初要做的事"，多一句框架味的引导都算污染。
+  判据：把 task.md 给一个不知道 donebench 存在的人看，他读到的应该正好是"用户当初要做的事"，多一句框架味的引导都算污染。
   若框架确实需要定位/隔离产物而模型没回显，那是**框架/case 配置侧**的事（确定性路径、env 透传、产物快照），
   不是往 prompt 里加指令。做不到 per-runner 确定性 check 时，宁可让 judge 按 runner 隔离判完成度，也不污染任务。
 - **资产**：调 `reconstruct(...)` 拿 `ReconstructionResult`；`setup_stub` 为真则写 `setup.sh` 桩

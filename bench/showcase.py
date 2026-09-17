@@ -25,7 +25,7 @@ from .showcase_svg import render_showcase
 
 ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "docs"
-REPO_URL = "https://github.com/huajuan404/ai-eval"
+REPO_URL = "https://github.com/huajuan404/donebench"
 CASE_TITLES = {
     "2026-09-15-001-flamingo-bicycle": "火烈鸟骑自行车",
     "2026-09-15-002-capybara-bicycle": "卡皮巴拉骑自行车",
@@ -180,7 +180,7 @@ def load_showcase(site: Path = SITE) -> dict:
 def public_report(data: dict, site: Path) -> str:
     """Reuse the real report, with only public evidence staged for rendering."""
     cases = {name: load_case(ROOT / "cases" / name) for name in CASE_TITLES}
-    with tempfile.TemporaryDirectory(prefix="ai-eval-showcase-") as temp:
+    with tempfile.TemporaryDirectory(prefix="donebench-showcase-") as temp:
         records = []
         for item in data["records"]:
             record = RunRecord.from_dict(item)
@@ -209,7 +209,7 @@ def public_report(data: dict, site: Path) -> str:
         report = report.replace(f">{case}</summary>", f">{title}</summary>")
         report = report.replace(f">{case}</a>", f">{title}</a>")
     report = report.replace('<a class="wordmark" href="#">', f'<a class="wordmark" href="{REPO_URL}">')
-    report = report.replace("<title>评测报告 ", "<title>ai-eval · 公开评测报告 ")
+    report = report.replace("<title>评测报告 ", "<title>donebench · 公开评测报告 ")
     approved = hashes(data["records"]) + tuple(
         base64.b64encode((site / row["svg"]).read_bytes()).decode() for row in data["records"]
     )

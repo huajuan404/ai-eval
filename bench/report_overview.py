@@ -275,7 +275,7 @@ def render_overview(
                      f'<span>次运行通过 · {failures} 失败 · {unknown} 未评</span>')
     return (
         '<section class="overview" aria-label="评测结论总览"><header class="report-masthead">'
-        '<a class="wordmark" href="#">AI<span>EVAL</span><i> / FIELD REPORT</i></a>'
+        '<a class="wordmark" href="#">DONE<span>BENCH</span><i> / FIELD REPORT</i></a>'
         f'<span class="run-stamp">{esc(run_id)} · {len(pairs)} 组启动器 · {len(names)} 个任务</span></header>'
         '<div class="report-lead"><div><span class="eyebrow">评测结果 / RUN SUMMARY</span>'
         f'<h1>{esc(title)}</h1><p>{esc(lead)}</p></div>'

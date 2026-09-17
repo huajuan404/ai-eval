@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 把 session-to-eval skill 软链进本机 skills 目录。
-# 软链而非拷贝：源码随 ai-eval 仓库更新即时生效（单一事实源），config.toml 也随软链生效。
+# 软链而非拷贝：源码随 donebench 仓库更新即时生效（单一事实源），config.toml 也随软链生效。
 #
 # 用法：
 #   bash install.sh                       # 默认装进 Claude Code / Codex / .agents 三端
