@@ -131,6 +131,8 @@ class Case:
     evaluation: EvaluationPolicy = field(default_factory=EvaluationPolicy)
     schema_version: int = 1
     protocol: ProtocolSpec | None = None
+    core: bool = False  # 核心集：每个新模型必跑，公开站点优先展示
+    publish_artifacts: tuple[str, ...] = ()  # 公开发布时随 output_file 一起入库的交付物 glob（相对 artifacts 目录）
 
     def __post_init__(self) -> None:
         # Preserve the small programmatic Case constructor used by integrations
@@ -379,6 +381,8 @@ def _normalize_v2_case(data: dict[str, Any], name: str) -> dict[str, Any]:
             "judge",
             "expected",
             "evaluation",
+            "core",
+            "publish",
         },
         f"用例 '{name}'",
     )
@@ -544,6 +548,23 @@ def _parse_evaluation(
         unit_of_analysis=unit.strip(),
         independent_unit=independent.strip(),
     )
+
+
+def _parse_publish(raw: Any, name: str) -> tuple[str, ...]:
+    """`publish.artifacts`：公开发布时额外入库的交付物 glob，相对 cell 的 artifacts 目录。"""
+    if raw is None:
+        return ()
+    if not isinstance(raw, dict):
+        raise CaseError(f"用例 '{name}' 的 publish 必须是映射。")
+    _assert_keys(raw, {"artifacts"}, f"用例 '{name}' 的 publish")
+    patterns = raw.get("artifacts") or []
+    if not isinstance(patterns, list) or not all(isinstance(p, str) and p.strip() for p in patterns):
+        raise CaseError(f"用例 '{name}' 的 publish.artifacts 必须是非空字符串列表。")
+    for pattern in patterns:
+        parts = Path(pattern).parts
+        if Path(pattern).is_absolute() or ".." in parts or pattern.startswith("~"):
+            raise CaseError(f"用例 '{name}' 的 publish.artifacts 只能是 artifacts 目录内的相对模式: {pattern}")
+    return tuple(patterns)
 
 
 def load_case(case_dir: str | Path) -> Case:
@@ -716,12 +737,18 @@ def load_case(case_dir: str | Path) -> Case:
         raise CaseError(
             f"用例 '{name}' 的 schema v2 必须至少声明一个可用的 check 或 judge。"
         )
+    core = data.get("core", False)
+    if not isinstance(core, bool):
+        raise CaseError(f"用例 '{name}' 的 core 必须是布尔值。")
+    publish_artifacts = _parse_publish(data.get("publish"), name)
     return Case(
         name=name,
         directory=directory,
         task=task,
         check=check,
         judge=judge,
+        core=core,
+        publish_artifacts=publish_artifacts,
         requires_engine=(
             data.get("requires_engine")
             or (protocol.default_requires_engine if protocol else None)

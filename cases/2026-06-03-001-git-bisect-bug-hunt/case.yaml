@@ -25,3 +25,6 @@ expected:
   fix_pr: https://github.com/Textualize/textual/pull/4105
 
 # input/repo 包含 textual 仓库 @ 374478a（浅 clone，全 git 历史）
+
+# 公开站点
+core: true

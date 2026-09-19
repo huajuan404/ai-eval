@@ -25,3 +25,6 @@ expected:
   passing_threshold: 15
   max_score: 25
   output_file: docs/article.html
+
+# 公开站点
+core: true

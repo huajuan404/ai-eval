@@ -1,0 +1,1854 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Running an AI-native engineering org — Fiona Fung</title>
+<meta name="description" content="How the Claude Code team rewrote its processes when agentic coding became the default." />
+<style>
+/* =========================================================
+   Design tokens
+   ========================================================= */
+:root{
+  --bg-0: #08080a;
+  --bg-1: #0d0d11;
+  --bg-2: #131318;
+  --bg-3: #1a1a21;
+  --line: #1f1f27;
+  --line-2: #2a2a33;
+  --ink: #f3f3f5;
+  --ink-2: #c4c4cc;
+  --ink-3: #8b8b95;
+  --ink-4: #5d5d68;
+  --ink-5: #3d3d47;
+  --warm: #d97757;       /* Claude orange */
+  --warm-2: #f59e7a;
+  --warm-soft: #b8613f;
+  --cool: #6b7280;       /* muted slate */
+  --good: #7fc99c;
+  --warn: #e6c178;
+  --danger: #d96c6c;
+
+  --shadow-1: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-2: 0 10px 40px -10px rgba(0,0,0,.6), 0 2px 6px rgba(0,0,0,.4);
+
+  --radius: 14px;
+  --radius-sm: 8px;
+  --radius-lg: 22px;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "SF Pro Text", "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+  --font-display: ui-sans-serif, system-ui, -apple-system, "SF Pro Display", "Segoe UI", Inter, sans-serif;
+
+  --maxw: 1180px;
+  --gutter: clamp(20px, 4vw, 56px);
+}
+
+/* =========================================================
+   Reset & base
+   ========================================================= */
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0}
+html{background:var(--bg-0);color-scheme:dark}
+body{
+  font-family:var(--font-sans);
+  background:var(--bg-0);
+  color:var(--ink);
+  font-size:16px;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  text-rendering:optimizeLegibility;
+  overflow-x:hidden;
+}
+img,svg{display:block;max-width:100%}
+a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line-2);transition:color .2s, border-color .2s}
+a:hover{color:var(--warm-2);border-color:var(--warm-soft)}
+::selection{background:var(--warm);color:#0d0a08}
+
+/* =========================================================
+   Layout
+   ========================================================= */
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 var(--gutter)}
+section{padding:clamp(64px, 9vw, 120px) 0;position:relative}
+section + section{border-top:1px solid var(--line)}
+.eyebrow{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:var(--ink-3);
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+}
+.eyebrow::before{
+  content:"";
+  width:24px;height:1px;
+  background:var(--ink-4);
+  display:inline-block;
+}
+h1,h2,h3,h4{margin:0;font-weight:600;letter-spacing:-.02em;color:var(--ink)}
+h1{font-size:clamp(40px, 7vw, 88px);line-height:.98;font-weight:700;letter-spacing:-.035em}
+h2{font-size:clamp(30px, 4.4vw, 52px);line-height:1.05;letter-spacing:-.025em}
+h3{font-size:clamp(20px, 2.2vw, 26px);line-height:1.2;letter-spacing:-.015em}
+h4{font-size:18px;line-height:1.3}
+p{margin:0;color:var(--ink-2)}
+.lede{font-size:clamp(20px, 2.3vw, 26px);line-height:1.45;color:var(--ink-2);letter-spacing:-.005em}
+
+/* =========================================================
+   Hero
+   ========================================================= */
+.hero{
+  position:relative;
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+  padding-top:120px;
+  padding-bottom:clamp(60px, 8vw, 100px);
+  overflow:hidden;
+  isolation:isolate;
+}
+.hero-bg{
+  position:absolute;
+  inset:0;
+  z-index:-1;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 100%, rgba(217,119,87,.10), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 70% 30%, rgba(120,140,180,.06), transparent 70%),
+    var(--bg-0);
+}
+#heroCanvas{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  z-index:-1;
+  opacity:.55;
+  mix-blend-mode:screen;
+}
+.hero-nav{
+  position:absolute;
+  top:0;left:0;right:0;
+  padding:24px var(--gutter);
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  font-family:var(--font-mono);
+  font-size:12px;
+  letter-spacing:.04em;
+  color:var(--ink-3);
+  z-index:2;
+}
+.hero-nav .brand{
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+  color:var(--ink-2);
+}
+.hero-nav .brand-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:var(--warm);
+  box-shadow:0 0 12px var(--warm);
+}
+.hero-nav .meta{color:var(--ink-4)}
+.hero-eyebrow-row{
+  display:flex;gap:14px;align-items:center;
+  margin-bottom:28px;
+  font-family:var(--font-mono);
+  font-size:12px;
+  color:var(--ink-3);
+  letter-spacing:.08em;
+}
+.hero-eyebrow-row .dot{
+  display:inline-block;width:5px;height:5px;border-radius:50%;
+  background:var(--warm);box-shadow:0 0 8px var(--warm);
+}
+.hero-title{
+  font-family:var(--font-display);
+  background:linear-gradient(180deg, #ffffff 0%, #c4c4cc 100%);
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+  margin-bottom:36px;
+}
+.hero-title .accent{
+  background:linear-gradient(180deg, var(--warm-2) 0%, var(--warm) 100%);
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+  font-style:italic;
+  font-weight:500;
+}
+.hero-byline{
+  display:flex;flex-wrap:wrap;gap:24px;
+  font-size:15px;
+  color:var(--ink-3);
+  border-top:1px solid var(--line);
+  padding-top:24px;
+  margin-top:8px;
+}
+.hero-byline .name{color:var(--ink);font-weight:500}
+.hero-byline .sep{color:var(--ink-5)}
+.scroll-cue{
+  position:absolute;
+  bottom:24px;left:50%;
+  transform:translateX(-50%);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:.2em;
+  text-transform:uppercase;
+  color:var(--ink-4);
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  z-index:3;
+  animation:bob 2.4s ease-in-out infinite;
+}
+.scroll-cue .line{
+  width:1px;height:30px;
+  background:linear-gradient(180deg, var(--ink-4), transparent);
+}
+@keyframes bob{
+  0%,100%{transform:translate(-50%,0)}
+  50%{transform:translate(-50%,6px)}
+}
+
+/* =========================================================
+   Opening
+   ========================================================= */
+.opening .wrap{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:48px;
+}
+.opening .lead-quote{
+  font-family:var(--font-display);
+  font-size:clamp(26px, 3.2vw, 38px);
+  line-height:1.2;
+  letter-spacing:-.02em;
+  color:var(--ink);
+  font-weight:500;
+  max-width:880px;
+}
+.opening .lead-quote em{
+  font-style:normal;
+  background:linear-gradient(90deg, var(--warm-2), var(--warm));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  font-weight:600;
+}
+.opening p{font-size:17px;line-height:1.65}
+
+/* =========================================================
+   Timeline (three shifts in 30 years)
+   ========================================================= */
+.timeline{margin-top:24px}
+.timeline-track{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:0;
+  border-top:1px solid var(--line-2);
+  border-bottom:1px solid var(--line);
+  position:relative;
+  margin-top:36px;
+}
+.timeline-track::before{
+  content:"";
+  position:absolute;
+  left:0;right:0;top:-1px;height:1px;
+  background:linear-gradient(90deg, transparent, var(--ink-5) 10%, var(--ink-5) 90%, transparent);
+}
+.timeline-item{
+  padding:32px 24px 32px 0;
+  border-right:1px solid var(--line);
+  position:relative;
+}
+.timeline-item:last-child{border-right:none}
+.timeline-item .year{
+  font-family:var(--font-mono);
+  font-size:12px;
+  color:var(--ink-4);
+  letter-spacing:.08em;
+  margin-bottom:14px;
+  display:flex;align-items:center;gap:8px;
+}
+.timeline-item .year::before{
+  content:"";width:6px;height:6px;border-radius:50%;
+  background:var(--ink-5);
+}
+.timeline-item.now .year::before{
+  background:var(--warm);
+  box-shadow:0 0 0 4px rgba(217,119,87,.15);
+}
+.timeline-item .label{
+  font-size:22px;
+  font-weight:600;
+  letter-spacing:-.015em;
+  margin-bottom:8px;
+}
+.timeline-item .detail{
+  font-size:14px;
+  color:var(--ink-3);
+  line-height:1.5;
+}
+.timeline-item.now .label{color:var(--warm-2)}
+
+/* =========================================================
+   Bottleneck shift visualization
+   ========================================================= */
+.bottleneck{
+  display:grid;
+  grid-template-columns:1fr 60px 1fr;
+  gap:24px;
+  align-items:stretch;
+  margin-top:40px;
+}
+.bottleneck-col{
+  background:var(--bg-1);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:28px;
+  position:relative;
+  overflow:hidden;
+}
+.bottleneck-col h4{
+  font-family:var(--font-mono);
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.18em;
+  color:var(--ink-3);
+  margin-bottom:24px;
+  display:flex;align-items:center;gap:10px;
+}
+.bottleneck-col h4::after{
+  content:"";flex:1;height:1px;background:var(--line);
+}
+.bottleneck-col.old h4::after{background:var(--ink-5)}
+.bottleneck-col.new h4::after{background:linear-gradient(90deg, var(--warm), transparent)}
+.bottleneck-viz{
+  display:flex;
+  align-items:flex-end;
+  gap:18px;
+  height:180px;
+  padding:8px 0 12px;
+  border-bottom:1px solid var(--line);
+  margin-bottom:18px;
+}
+.bar-col{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+  height:100%;
+  position:relative;
+}
+.bar-col .bar{
+  width:100%;
+  background:var(--ink-5);
+  border-radius:4px 4px 0 0;
+  position:relative;
+  transition:height 1.2s cubic-bezier(.2,.7,.2,1);
+}
+.bottleneck-col.old .bar{
+  background:linear-gradient(180deg, var(--ink-4), var(--ink-5));
+}
+.bottleneck-col.new .bar{
+  background:linear-gradient(180deg, var(--warm-2), var(--warm));
+  box-shadow:0 -4px 16px -4px rgba(217,119,87,.4);
+}
+.bar-col .bar-label{
+  position:absolute;
+  top:-22px;left:50%;
+  transform:translateX(-50%);
+  font-family:var(--font-mono);
+  font-size:10px;
+  color:var(--ink-3);
+  white-space:nowrap;
+}
+.bar-col .bar-name{
+  margin-top:10px;
+  font-size:13px;
+  color:var(--ink-2);
+  text-align:center;
+}
+.bottleneck-col.old .bar-name{color:var(--ink-3)}
+.bottleneck-col .caption{
+  font-size:14px;
+  color:var(--ink-3);
+  line-height:1.5;
+}
+.bottleneck-arrow{
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);
+  color:var(--ink-4);
+  font-size:24px;
+}
+
+/* =========================================================
+   Section header pattern
+   ========================================================= */
+.section-header{
+  margin-bottom:48px;
+  display:grid;
+  grid-template-columns:1fr;
+  gap:20px;
+  max-width:780px;
+}
+.section-header .title-row{
+  display:flex;align-items:center;gap:14px;
+}
+.section-header .index{
+  font-family:var(--font-mono);
+  font-size:12px;
+  color:var(--warm);
+  letter-spacing:.1em;
+}
+
+/* =========================================================
+   Four processes (intro to comparison)
+   ========================================================= */
+.processes{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:0;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  overflow:hidden;
+  background:var(--bg-1);
+}
+.process-card{
+  padding:32px 24px;
+  border-right:1px solid var(--line);
+  position:relative;
+  transition:background .3s;
+}
+.process-card:last-child{border-right:none}
+.process-card:hover{background:var(--bg-2)}
+.process-card .num{
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--ink-4);
+  letter-spacing:.1em;
+  margin-bottom:24px;
+}
+.process-card .name{
+  font-size:18px;
+  font-weight:600;
+  letter-spacing:-.01em;
+  margin-bottom:12px;
+  line-height:1.25;
+}
+.process-card .shift{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  font-size:12px;
+  color:var(--warm-2);
+  font-family:var(--font-mono);
+  margin-bottom:16px;
+}
+.process-card .shift::after{
+  content:"→";
+}
+.process-card p{
+  font-size:14px;
+  color:var(--ink-3);
+  line-height:1.5;
+}
+
+/* =========================================================
+   Process details (expanded prose, preserves source links)
+   ========================================================= */
+.process-details{padding-top:clamp(40px, 6vw, 72px);padding-bottom:clamp(40px, 6vw, 72px)}
+.process-details-list{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:0;
+  border-top:1px solid var(--line);
+}
+.detail-item{
+  display:grid;
+  grid-template-columns:200px 1fr;
+  gap:48px;
+  padding:48px 0;
+  border-bottom:1px solid var(--line);
+  align-items:start;
+}
+.detail-item:hover .detail-marker .num{color:var(--warm-2)}
+.detail-marker{
+  position:sticky;
+  top:32px;
+  display:flex;flex-direction:column;gap:10px;
+}
+.detail-marker .num{
+  font-family:var(--font-mono);
+  font-size:12px;
+  color:var(--ink-4);
+  letter-spacing:.1em;
+  transition:color .25s;
+}
+.detail-marker .dim{
+  font-family:var(--font-display);
+  font-size:clamp(28px, 3vw, 36px);
+  font-weight:600;
+  letter-spacing:-.025em;
+  line-height:1.05;
+  color:var(--ink);
+}
+.detail-body h3{
+  font-family:var(--font-mono);
+  font-size:12px;
+  text-transform:uppercase;
+  letter-spacing:.18em;
+  color:var(--warm);
+  margin-bottom:18px;
+  font-weight:500;
+}
+.detail-body p{
+  font-size:17px;
+  line-height:1.7;
+  color:var(--ink-2);
+  margin-bottom:18px;
+  max-width:760px;
+}
+.detail-body p:last-child{margin-bottom:0}
+.detail-body p em{font-style:italic;color:var(--ink-3)}
+.detail-body a{color:var(--warm-2);border-color:var(--warm-soft)}
+.detail-body a:hover{color:var(--ink);border-color:var(--warm)}
+
+@media (max-width:900px){
+  .detail-item{grid-template-columns:1fr;gap:20px;padding:36px 0}
+  .detail-marker{position:static}
+}
+@media (max-width:560px){
+  .detail-item{padding:28px 0}
+  .detail-body p{font-size:16px}
+}
+
+/* =========================================================
+   THE COMPARISON (the centerpiece)
+   ========================================================= */
+.comparison{
+  margin-top:24px;
+  position:relative;
+}
+.comparison-frame{
+  position:relative;
+  border-radius:var(--radius-lg);
+  overflow:hidden;
+  border:1px solid var(--line);
+  background:var(--bg-1);
+  box-shadow:var(--shadow-2);
+}
+.comparison-side{
+  padding:clamp(28px, 4vw, 56px) clamp(20px, 3.5vw, 48px);
+  position:relative;
+}
+.comparison-side.before{
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(80,80,90,.06), transparent 50%),
+    linear-gradient(180deg, #0e0a08 0%, #08080a 100%);
+  color:var(--ink-3);
+}
+.comparison-side.after{
+  background:
+    radial-gradient(ellipse at 100% 100%, rgba(217,119,87,.10), transparent 60%),
+    radial-gradient(ellipse at 0% 0%, rgba(180,120,90,.06), transparent 50%),
+    linear-gradient(180deg, #18120f 0%, #0d0a08 100%);
+  color:var(--ink);
+}
+.comparison-grid{
+  display:grid;
+  grid-template-columns:1fr 1px 1fr;
+}
+.comparison-divider{
+  background:linear-gradient(180deg,
+    transparent 0%,
+    var(--ink-5) 10%,
+    var(--warm) 50%,
+    var(--ink-5) 90%,
+    transparent 100%);
+  width:1px;
+  position:relative;
+}
+.comparison-divider::before,
+.comparison-divider::after{
+  content:"";
+  position:absolute;
+  left:50%;
+  width:7px;height:7px;
+  border-radius:50%;
+  background:var(--warm);
+  box-shadow:0 0 12px var(--warm), 0 0 0 4px rgba(217,119,87,.15);
+  transform:translateX(-50%);
+}
+.comparison-divider::before{top:25%}
+.comparison-divider::after{bottom:25%;background:var(--ink-4);box-shadow:none}
+.side-label{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:.25em;
+  text-transform:uppercase;
+  margin-bottom:36px;
+  display:flex;align-items:center;gap:12px;
+}
+.comparison-side.before .side-label{color:var(--ink-4)}
+.comparison-side.after .side-label{color:var(--warm)}
+.side-label .num{
+  font-size:14px;
+  letter-spacing:.05em;
+  opacity:.6;
+}
+.row{
+  padding:24px 0;
+  border-top:1px solid var(--line);
+}
+.comparison-side.before .row{border-top-color:rgba(255,255,255,.04)}
+.comparison-side.after .row{border-top-color:rgba(217,119,87,.12)}
+.row:first-of-type{border-top:none;padding-top:8px}
+.row .dim{
+  font-family:var(--font-mono);
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.18em;
+  display:block;
+  margin-bottom:12px;
+}
+.comparison-side.before .row .dim{color:var(--ink-4)}
+.comparison-side.after .row .dim{color:var(--warm)}
+.row .desc{
+  font-size:clamp(15px, 1.6vw, 17px);
+  line-height:1.5;
+  letter-spacing:-.005em;
+}
+.comparison-side.before .row .desc{color:var(--ink-3);font-weight:400}
+.comparison-side.after .row .desc{color:var(--ink);font-weight:500}
+
+.comparison-arrow{
+  display:flex;align-items:center;justify-content:center;
+  height:60px;
+  background:linear-gradient(90deg, var(--bg-1), var(--bg-2) 50%, var(--bg-1));
+  border-top:1px solid var(--line);
+  border-bottom:1px solid var(--line);
+  position:relative;
+}
+.comparison-arrow .flow{
+  display:flex;align-items:center;gap:14px;
+  font-family:var(--font-mono);
+  font-size:12px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:var(--ink-3);
+}
+.comparison-arrow .arrow-line{
+  width:140px;height:1px;
+  background:linear-gradient(90deg, var(--ink-4), var(--warm));
+  position:relative;
+  overflow:hidden;
+}
+.comparison-arrow .arrow-line::after{
+  content:"";
+  position:absolute;left:-20%;top:0;
+  width:30%;height:100%;
+  background:linear-gradient(90deg, transparent, var(--warm-2), transparent);
+  animation:flow 2.4s ease-in-out infinite;
+}
+@keyframes flow{
+  0%{left:-30%}
+  100%{left:130%}
+}
+
+/* =========================================================
+   Principles
+   ========================================================= */
+.principles-viz{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:0;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  overflow:hidden;
+  background:var(--bg-1);
+  margin-top:24px;
+}
+.principles-stack{
+  position:relative;
+}
+.principle{
+  display:grid;
+  grid-template-columns:80px 1fr;
+  gap:24px;
+  padding:32px 32px 32px 0;
+  border-bottom:1px solid var(--line);
+  align-items:start;
+  position:relative;
+  transition:background .3s;
+}
+.principle:last-child{border-bottom:none}
+.principle:hover{background:var(--bg-2)}
+.principle .num{
+  font-family:var(--font-display);
+  font-size:56px;
+  font-weight:600;
+  letter-spacing:-.04em;
+  line-height:1;
+  color:var(--warm);
+  background:linear-gradient(180deg, var(--warm-2), var(--warm-soft));
+  -webkit-background-clip:text;background-clip:text;
+  color:transparent;
+  padding-left:32px;
+}
+.principle h3{
+  margin-bottom:12px;
+  font-size:clamp(20px, 2.2vw, 26px);
+  letter-spacing:-.015em;
+}
+.principle p{font-size:15px;color:var(--ink-2);line-height:1.6;max-width:760px}
+
+.pods-zone{
+  margin-top:0;
+  padding:32px;
+  background:linear-gradient(180deg, rgba(217,119,87,.04), transparent);
+  border-top:1px solid var(--line);
+  display:grid;
+  grid-template-columns:80px 1fr;
+  gap:24px;
+  align-items:center;
+}
+.pods-zone .label{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:var(--warm);
+  padding-left:32px;
+}
+.pods-zone .body{
+  font-size:15px;
+  color:var(--ink-2);
+  line-height:1.6;
+}
+.pods-zone .body strong{color:var(--ink);font-weight:600}
+.pods-zone .chips{
+  display:flex;flex-wrap:wrap;gap:8px;
+  margin-top:14px;
+}
+.pods-zone .chip{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:.04em;
+  padding:6px 12px;
+  border-radius:99px;
+  border:1px solid var(--line-2);
+  color:var(--ink-3);
+  background:var(--bg-1);
+}
+
+/* =========================================================
+   Metrics
+   ========================================================= */
+.metrics-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:0;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  overflow:hidden;
+  background:var(--bg-1);
+  margin-top:24px;
+}
+.metric{
+  padding:36px 28px;
+  border-right:1px solid var(--line);
+  display:flex;flex-direction:column;gap:24px;
+}
+.metric:last-child{border-right:none}
+.metric .label{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:var(--ink-3);
+  display:flex;align-items:center;gap:10px;
+}
+.metric .label::after{
+  content:"";flex:1;height:1px;background:var(--line);
+}
+.metric h4{
+  font-size:18px;
+  letter-spacing:-.01em;
+  margin:0;
+}
+.metric .big-num{
+  font-family:var(--font-display);
+  font-size:56px;
+  font-weight:600;
+  line-height:1;
+  letter-spacing:-.04em;
+  color:var(--ink);
+  display:flex;align-items:baseline;gap:8px;
+}
+.metric .big-num .unit{
+  font-size:18px;
+  color:var(--ink-3);
+  font-weight:400;
+  letter-spacing:0;
+}
+.metric .big-num.big-text .counter{
+  font-size:42px;
+  font-style:italic;
+  font-weight:500;
+  background:linear-gradient(180deg, var(--warm-2), var(--warm));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  font-family:var(--font-display);
+  letter-spacing:-.02em;
+}
+.metric .big-num.big-text .unit{
+  font-size:14px;
+  letter-spacing:.04em;
+  color:var(--ink-3);
+  text-transform:lowercase;
+}
+.metric .big-num.pre-in{opacity:0;transform:translateY(8px)}
+.metric .big-num.in{opacity:1;transform:none;transition:opacity .8s ease, transform .8s ease}
+.metric .big-num .ord{
+  font-size:24px;
+  vertical-align:super;
+  margin-left:2px;
+  color:var(--warm-2);
+  font-weight:500;
+  font-style:italic;
+}
+.metric .delta{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:var(--font-mono);
+  font-size:12px;
+  color:var(--good);
+  margin-top:6px;
+}
+.metric .delta.down{color:var(--good)}
+.metric .delta.up{color:var(--warm-2)}
+
+.metric .viz{
+  height:80px;
+  display:flex;align-items:flex-end;
+  gap:10px;
+  padding-bottom:8px;
+  border-bottom:1px dashed var(--line);
+}
+.metric .viz .vbar{
+  flex:1;
+  background:var(--ink-5);
+  border-radius:2px 2px 0 0;
+  position:relative;
+  transition:height 1.2s cubic-bezier(.2,.7,.2,1);
+}
+.metric .viz .vbar.now{
+  background:linear-gradient(180deg, var(--warm-2), var(--warm));
+  box-shadow:0 -2px 8px -2px rgba(217,119,87,.4);
+}
+.metric .viz .vbar.now::after{
+  content:"now";
+  position:absolute;
+  top:-18px;left:50%;
+  transform:translateX(-50%);
+  font-family:var(--font-mono);
+  font-size:9px;
+  color:var(--warm);
+  letter-spacing:.08em;
+}
+.metric .ring-wrap{
+  position:relative;
+  display:flex;align-items:center;justify-content:center;
+  width:120px;height:120px;
+  margin:0 auto;
+}
+.metric .ring-wrap svg{transform:rotate(-90deg)}
+.metric .ring-center{
+  position:absolute;
+  inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  font-family:var(--font-mono);
+  font-size:24px;
+  font-weight:500;
+  color:var(--ink);
+  letter-spacing:-.02em;
+}
+.metric .ring-center small{
+  font-size:10px;
+  color:var(--ink-4);
+  margin-top:4px;
+  letter-spacing:.1em;
+}
+.metric .line-viz{
+  height:80px;
+  position:relative;
+}
+.metric .line-viz svg{width:100%;height:100%;overflow:visible}
+.metric .desc{
+  font-size:13px;
+  color:var(--ink-3);
+  line-height:1.5;
+}
+
+.warning{
+  margin-top:32px;
+  padding:18px 22px;
+  border:1px solid rgba(230,193,120,.18);
+  background:linear-gradient(90deg, rgba(230,193,120,.06), transparent);
+  border-radius:var(--radius-sm);
+  display:flex;gap:14px;align-items:flex-start;
+  font-size:14px;
+  color:var(--ink-2);
+}
+.warning .icon{
+  font-family:var(--font-mono);
+  color:var(--warn);
+  flex:none;
+  font-weight:600;
+}
+.warning strong{color:var(--ink);font-weight:600}
+
+/* =========================================================
+   Closing
+   ========================================================= */
+.closing-body{
+  display:grid;
+  grid-template-columns:1.2fr 1fr;
+  gap:48px;
+  align-items:start;
+}
+.closing-body .col p{
+  font-size:17px;line-height:1.65;color:var(--ink-2);
+  margin-bottom:18px;
+}
+.closing-checklist{
+  margin-top:24px;
+  padding:32px;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--bg-1);
+}
+.closing-checklist .title{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:var(--ink-3);
+  margin-bottom:20px;
+}
+.check-item{
+  display:flex;align-items:flex-start;gap:14px;
+  padding:14px 0;
+  border-top:1px solid var(--line);
+  font-size:15px;
+  color:var(--ink-2);
+  line-height:1.5;
+}
+.check-item:first-of-type{border-top:none}
+.check-item .mark{
+  flex:none;
+  width:22px;height:22px;
+  border:1px solid var(--line-2);
+  border-radius:6px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);
+  color:var(--ink-4);
+  font-size:12px;
+  margin-top:1px;
+}
+.check-item:hover .mark{
+  border-color:var(--warm);
+  color:var(--warm);
+}
+.closing-question{
+  font-family:var(--font-display);
+  font-size:clamp(22px, 2.6vw, 30px);
+  line-height:1.3;
+  letter-spacing:-.015em;
+  color:var(--ink);
+  font-weight:500;
+  margin-top:40px;
+  max-width:780px;
+  padding-left:24px;
+  border-left:2px solid var(--warm);
+}
+
+/* =========================================================
+   Footer
+   ========================================================= */
+footer{
+  border-top:1px solid var(--line);
+  padding:48px 0 64px;
+  font-size:13px;
+  color:var(--ink-4);
+}
+footer .row{
+  display:flex;justify-content:space-between;align-items:center;
+  gap:20px;flex-wrap:wrap;
+}
+footer a{color:var(--ink-3);border-color:var(--line-2)}
+footer a:hover{color:var(--warm-2)}
+footer .credit{
+  font-family:var(--font-mono);
+  letter-spacing:.04em;
+}
+
+/* =========================================================
+   Reveal animations
+   ========================================================= */
+.reveal{
+  opacity:0;
+  transform:translateY(18px);
+  transition:opacity .9s cubic-bezier(.2,.7,.2,1), transform .9s cubic-bezier(.2,.7,.2,1);
+}
+.reveal.in{opacity:1;transform:none}
+.reveal-1{transition-delay:.05s}
+.reveal-2{transition-delay:.15s}
+.reveal-3{transition-delay:.25s}
+.reveal-4{transition-delay:.35s}
+
+/* =========================================================
+   Responsive
+   ========================================================= */
+@media (max-width:900px){
+  .timeline-track{grid-template-columns:1fr;border-bottom:none}
+  .timeline-item{
+    border-right:none;
+    border-bottom:1px solid var(--line);
+    padding:24px 0;
+  }
+  .timeline-item:last-child{border-bottom:none}
+  .bottleneck{grid-template-columns:1fr;gap:16px}
+  .bottleneck-arrow{transform:rotate(90deg);height:40px}
+  .processes{grid-template-columns:1fr 1fr}
+  .process-card{border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .process-card:nth-child(2n){border-right:none}
+  .process-card:nth-last-child(-n+2){border-bottom:none}
+  .comparison-grid{grid-template-columns:1fr}
+  .comparison-divider{
+    width:100%;height:1px;
+    background:linear-gradient(90deg, transparent, var(--warm), transparent);
+  }
+  .comparison-divider::before,
+  .comparison-divider::after{display:none}
+  .metrics-grid{grid-template-columns:1fr}
+  .metric{border-right:none;border-bottom:1px solid var(--line)}
+  .metric:last-child{border-bottom:none}
+  .closing-body{grid-template-columns:1fr;gap:32px}
+  .principle{grid-template-columns:60px 1fr;padding:24px 24px 24px 0}
+  .principle .num{font-size:42px;padding-left:24px}
+  .pods-zone{grid-template-columns:60px 1fr;padding:24px 24px 24px 0}
+  .pods-zone .label{padding-left:24px}
+}
+@media (max-width:560px){
+  .processes{grid-template-columns:1fr}
+  .process-card{border-right:none}
+  .principle{grid-template-columns:48px 1fr;gap:16px;padding:20px 16px 20px 0}
+  .principle .num{font-size:34px;padding-left:16px}
+  .pods-zone{grid-template-columns:1fr;gap:12px;padding:20px 16px}
+  .pods-zone .label{padding-left:0}
+  section{padding:56px 0}
+  .hero{padding-top:96px}
+  .scroll-cue{display:none}
+  .comparison-side{padding:28px 20px}
+  .row{padding:18px 0}
+  .comparison-arrow .arrow-line{width:60px}
+  .bottleneck-col{padding:20px}
+  .bottleneck-viz{height:140px}
+  .metric{padding:28px 20px}
+  .metric .big-num{font-size:42px}
+}
+
+/* =========================================================
+   Reduced motion
+   ========================================================= */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .reveal{opacity:1;transform:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ============================== HERO ============================== -->
+<header class="hero">
+  <div class="hero-bg"></div>
+  <canvas id="heroCanvas" aria-hidden="true"></canvas>
+
+  <div class="hero-nav">
+    <span class="brand"><span class="brand-dot"></span> Claude Code · Engineering</span>
+    <span class="meta">Code w/ Claude SF · 2026</span>
+  </div>
+
+  <div class="wrap">
+    <div class="hero-eyebrow-row reveal">
+      <span class="dot"></span>
+      <span>A talk on process, not on code</span>
+    </div>
+
+    <h1 class="hero-title reveal reveal-1">
+      Running an <span class="accent">AI-native</span><br/>
+      engineering org
+    </h1>
+
+    <div class="hero-byline reveal reveal-2">
+      <span><span class="name">Fiona Fung</span> · Director of Engineering, Claude Code &amp; Claude Cowork</span>
+      <span class="sep">·</span>
+      <span>Code w/ Claude SF 2026</span>
+      <span class="sep">·</span>
+      <span>June 3, 2026</span>
+      <span class="sep">·</span>
+      <span>5 min read</span>
+    </div>
+  </div>
+
+  <div class="scroll-cue" aria-hidden="true">
+    <span>Scroll</span>
+    <span class="line"></span>
+  </div>
+</header>
+
+<!-- ============================== OPENING ============================== -->
+<section class="opening">
+  <div class="wrap">
+    <p class="eyebrow reveal">Why now</p>
+    <div class="lead-quote reveal reveal-1">
+      For years, engineering bandwidth was the expensive part of building applications. Every process we used to have around software planning and shipping &mdash; first waterfall, then agile &mdash; was built around <em>that cost</em>.
+    </div>
+
+    <p class="reveal reveal-2" style="max-width:780px;font-size:18px;line-height:1.65;color:var(--ink-2)">
+      I started my career in the early 2000s working on Visual Studio. In those days we shipped software on CD-ROMs with hard manufacturing deadlines. Once we could distribute software online, we began increasing to shipping updates continuously. Now we're changing the way we work again, this time around the time and people it takes to write software.
+    </p>
+
+    <p class="reveal reveal-3" style="max-width:780px;font-size:18px;line-height:1.65;color:var(--ink-2);margin-top:18px">
+      On the Claude Code team, writing code, writing tests, and refactoring rarely slows us down anymore. But the bottlenecks didn't go away when agentic coding took away the actual need to type code. Verification, code review, and security took their place.
+    </p>
+
+    <p class="reveal reveal-4" style="max-width:780px;font-size:17px;line-height:1.65;color:var(--ink-3);margin-top:18px">
+      We can all generate a lot of code really fast now, but this also brings up new questions: Is this code correct? How is it maintained? And one of the top questions I get from fellow engineering leaders: <em style="color:var(--ink-2)">"How are humans keeping up with how you're doing code reviews?"</em>
+    </p>
+  </div>
+</section>
+
+<!-- ============================== TIMELINE ============================== -->
+<section class="timeline">
+  <div class="wrap">
+    <div class="section-header">
+      <p class="eyebrow reveal">Three shifts in thirty years</p>
+      <h2 class="reveal reveal-1">Software distribution changed. Now the workflow is changing.</h2>
+    </div>
+
+    <div class="timeline-track reveal reveal-2">
+      <div class="timeline-item">
+        <div class="year">~2000</div>
+        <div class="label">CD-ROMs</div>
+        <div class="detail">Shipped on physical media. Hard manufacturing deadlines. Every release a frozen artifact.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="year">2010s</div>
+        <div class="label">Online updates</div>
+        <div class="detail">Continuous distribution replaced the box. Sprint rituals replaced waterfall milestones.</div>
+      </div>
+      <div class="timeline-item now">
+        <div class="year">2026</div>
+        <div class="label">Agentic coding</div>
+        <div class="detail">Code is no longer the bottleneck. Verification, review, and security are.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== BOTTLENECK SHIFT ============================== -->
+<section class="bottleneck-shift">
+  <div class="wrap">
+    <div class="section-header">
+      <p class="eyebrow reveal">Where the friction moved</p>
+      <h2 class="reveal reveal-1">The bottleneck didn't disappear. It relocated.</h2>
+      <p class="reveal reveal-2" style="font-size:17px;color:var(--ink-3);margin-top:8px">
+        When typing code became cheap, the expensive part moved downstream.
+      </p>
+    </div>
+
+    <div class="bottleneck reveal reveal-1">
+      <div class="bottleneck-col old">
+        <h4>Old bottleneck</h4>
+        <div class="bottleneck-viz" data-viz="old">
+          <div class="bar-col">
+            <div class="bar" data-pct="92" style="height:92%">
+              <span class="bar-label">most of the cost</span>
+            </div>
+            <div class="bar-name">Writing code, tests, refactors</div>
+          </div>
+        </div>
+        <p class="caption">Agile, roadmaps, and review queues were designed around this single constraint. Remove it, and the rituals stop earning their keep.</p>
+      </div>
+
+      <div class="bottleneck-arrow" aria-hidden="true">→</div>
+
+      <div class="bottleneck-col new">
+        <h4>New bottlenecks</h4>
+        <div class="bottleneck-viz" data-viz="new">
+          <div class="bar-col">
+            <div class="bar" data-pct="78" style="height:78%">
+              <span class="bar-label">verification</span>
+            </div>
+            <div class="bar-name">Verification</div>
+          </div>
+          <div class="bar-col">
+            <div class="bar" data-pct="68" style="height:68%">
+              <span class="bar-label">review</span>
+            </div>
+            <div class="bar-name">Code review</div>
+          </div>
+          <div class="bar-col">
+            <div class="bar" data-pct="58" style="height:58%">
+              <span class="bar-label">security</span>
+            </div>
+            <div class="bar-name">Security</div>
+          </div>
+        </div>
+        <p class="caption">The questions now: <em style="color:var(--ink-2)">Is this correct? How is it maintained? How are humans keeping up with how we review?</em></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== FOUR PROCESSES ============================== -->
+<section class="four-processes">
+  <div class="wrap">
+    <div class="section-header">
+      <p class="eyebrow reveal">Section 01</p>
+      <h2 class="reveal reveal-1">The processes that quietly stopped working</h2>
+      <p class="lede reveal reveal-2" style="font-size:18px;color:var(--ink-3);max-width:680px">
+        We all put processes in place for a reason, to close a gap or make something work better. But when that gap no longer exists and those processes become obsolete, they rarely go away on their own.
+      </p>
+    </div>
+
+    <div class="processes reveal reveal-1">
+      <div class="process-card">
+        <div class="num">01</div>
+        <div class="name">Planning</div>
+        <div class="shift">shift roadmaps to just-in-time</div>
+        <p>The six-month roadmap went stale by month three. The new ritual is prototype, ship to internal users, and act on their feedback.</p>
+      </div>
+      <div class="process-card">
+        <div class="num">02</div>
+        <div class="name">Context gathering</div>
+        <div class="shift">ask Claude, not the author</div>
+        <p>"Who made this change?" is no longer sufficient. The new question: what do you actually need to know? Then ask if Claude can answer &mdash; or automate it.</p>
+      </div>
+      <div class="process-card">
+        <div class="num">03</div>
+        <div class="name">Code review</div>
+        <div class="shift">trust but verify</div>
+        <p>Claude handles style, lint, PR feedback, bugs, and tests. Humans review where domain expertise matters &mdash; legal, security, trust boundaries, taste.</p>
+      </div>
+      <div class="process-card">
+        <div class="num">04</div>
+        <div class="name">Team makeup</div>
+        <div class="shift">blur the roles</div>
+        <p>PMs prototype. Engineers do design and content. Hire for creative builders with product sense, and for deep systems expertise.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== PROCESS DETAILS ============================== -->
+<section class="process-details">
+  <div class="wrap">
+    <div class="process-details-list">
+
+      <article class="detail-item reveal">
+        <div class="detail-marker">
+          <span class="num">01</span>
+          <span class="dim">Planning</span>
+        </div>
+        <div class="detail-body">
+          <h3>Shift roadmaps to just in time</h3>
+          <p>The old norm was to spend a lot more time pre-planning because coding time was expensive. When I first joined the Claude Code team, we wrote a pretty good six month roadmap, and then <em>because</em> of Claude Code, so many things changed that it was out of date by month three.</p>
+          <p>Engineering speed and throughput is different now, so the way we plan sprints has changed. I call it just-in-time (JIT) planning, almost like JIT compiling: how do you do just the right amount at the right time? Our planning ritual shifted away from design docs toward discussions in PRs or prototypes. The space moves fast so we don't do a lot of product reviews. Our process now is let's prototype, get a lot of internal users on it, and start acting on their feedback.</p>
+        </div>
+      </article>
+
+      <article class="detail-item reveal reveal-1">
+        <div class="detail-marker">
+          <span class="num">02</span>
+          <span class="dim">Context gathering</span>
+        </div>
+        <div class="detail-body">
+          <h3>Ask Claude, not the author</h3>
+          <p>When engineers wrote code, the first step to getting an answer to most questions was to find the person who wrote the code. Now, since all our PRs are assisted by Claude, "Who made this change?" is no longer sufficient. Our new norm is to go a level deeper: what do you actually need to know? For instance: Are you looking for who caused a regression? An expert to answer a customer question? Or context on a decision? You ask Claude that question, and consider whether Claude can answer it directly, also with more data and context.</p>
+          <p>On the Claude Code team, no matter what that question is, our process is to also ask "Is there a way to automate it?" For example, having Claude summarize customer feedback channels every morning went from a ritual I did manually with my coffee to something I just have running automatically in the background.</p>
+        </div>
+      </article>
+
+      <article class="detail-item reveal reveal-2">
+        <div class="detail-marker">
+          <span class="num">03</span>
+          <span class="dim">Code review</span>
+        </div>
+        <div class="detail-body">
+          <h3>Trust but verify</h3>
+          <p>We use <a href="https://code.claude.com/docs/en/code-review" target="_blank" rel="noopener">Code Review</a> heavily. Claude handles all the style and linting, PR feedback requests, catching bugs and fixing them before a full commit, and adding tests. Where we still definitely want a human is expertise.</p>
+          <p>The new norm is human review where it matters: for legal review, I always want my legal partner involved in risk tolerance. For trust boundaries and security-sensitive code, I want the domain experts. Product managers and designers also need to be involved with product sense and taste.</p>
+          <p>It's important to continually evaluate, though, because the right balance of trust vs. verify will keep changing as the models improve. What you need humans for today might look different with the next model.</p>
+        </div>
+      </article>
+
+      <article class="detail-item reveal reveal-3">
+        <div class="detail-marker">
+          <span class="num">04</span>
+          <span class="dim">Team makeup</span>
+        </div>
+        <div class="detail-body">
+          <h3>Blurring roles</h3>
+          <p>Claude and AI have reshaped roles across the team. Our PMs code a lot now, which is fun to see. With Claude, you have nontraditional coders now being able to do more engineering, and you have engineers who take on things like content and design, work that were traditionally not on the technical side.</p>
+          <p>On the Claude Code engineering team, I've indexed heavily on two profiles. One is creative builders with product sense: the dreamers who are deeply curious and passionate about shipping products that solve problems. The other one is engineers with deep systems expertise. For example, when I joined the team, I noticed we were missing experts with systems backgrounds and we needed that when building <a href="https://www.anthropic.com/news/claude-code-on-the-web" target="_blank" rel="noopener">Claude Code on the Web</a>, to ensure we can run Claude everywhere.</p>
+          <p>What I index on less, on the other hand, is raw throughput; the models handle that. The more important question is where you still need human expertise, and that's where I'd focus.</p>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============================== THE COMPARISON ============================== -->
+<section class="comparison-section">
+  <div class="wrap">
+    <div class="section-header">
+      <p class="eyebrow reveal">The shape of the change</p>
+      <h2 class="reveal reveal-1" style="font-size:clamp(36px, 5vw, 60px)">Before. After.</h2>
+      <p class="lede reveal reveal-2" style="font-size:18px;color:var(--ink-3);max-width:680px">
+        Read across the divide. This is the part of the talk people remember.
+      </p>
+    </div>
+
+    <div class="comparison reveal reveal-1">
+      <div class="comparison-frame">
+        <div class="comparison-grid">
+          <!-- BEFORE -->
+          <div class="comparison-side before">
+            <div class="side-label"><span class="num">01 → 04</span> Before</div>
+
+            <div class="row">
+              <span class="dim">Planning</span>
+              <p class="desc">Six-month product roadmaps.</p>
+            </div>
+            <div class="row">
+              <span class="dim">Context gathering</span>
+              <p class="desc">Find the person who wrote the code and ask them.</p>
+            </div>
+            <div class="row">
+              <span class="dim">Code review</span>
+              <p class="desc">Humans review everything.</p>
+            </div>
+            <div class="row">
+              <span class="dim">Team makeup</span>
+              <p class="desc">Fixed roles: engineers write code, PMs plan, designers design.</p>
+            </div>
+          </div>
+
+          <div class="comparison-divider" aria-hidden="true"></div>
+
+          <!-- AFTER -->
+          <div class="comparison-side after">
+            <div class="side-label"><span class="num">01 → 04</span> After</div>
+
+            <div class="row">
+              <span class="dim">Planning</span>
+              <p class="desc">Just-in-time (JIT) planning: prototype, put internal users on it, and act on their feedback.</p>
+            </div>
+            <div class="row">
+              <span class="dim">Context gathering</span>
+              <p class="desc">Ask Claude first. Then ask whether what you are asking about can be automated.</p>
+            </div>
+            <div class="row">
+              <span class="dim">Code review</span>
+              <p class="desc">Claude handles style, bugs, and tests. Humans review where domain expertise is important.</p>
+            </div>
+            <div class="row">
+              <span class="dim">Team makeup</span>
+              <p class="desc">Roles blur: PMs prototype, engineers take on design and context. Hire for creative builders and deep systems expertise.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="comparison-arrow" aria-hidden="true">
+          <div class="flow">
+            <span>The shift</span>
+            <span class="arrow-line"></span>
+            <span>AI-native</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== PRINCIPLES ============================== -->
+<section class="principles-section">
+  <div class="wrap">
+    <div class="section-header">
+      <p class="eyebrow reveal">Section 02</p>
+      <h2 class="reveal reveal-1">How we rolled out the new norms</h2>
+      <p class="lede reveal reveal-2" style="font-size:18px;color:var(--ink-3);max-width:680px">
+        As these norms changed, some aspects were mandated as team principles and others we let small sub-teams (pods) figure out on their own. There is a set of the Claude Code core team principles that are non-negotiable "must dos":
+      </p>
+    </div>
+
+    <div class="principles-viz reveal reveal-1">
+      <div class="principle">
+        <div class="num">01</div>
+        <div>
+          <h3>Relentlessly dogfood your product.</h3>
+          <p>Every Claude Code team member, including cross-functional partners, uses Claude Code (and also Claude Cowork). We're always thinking of ways to get Claude to help us do our work faster, and more efficiently.</p>
+        </div>
+      </div>
+      <div class="principle">
+        <div class="num">02</div>
+        <div>
+          <h3>Keep the team flat as possible.</h3>
+          <p>When I joined Claude Code I wanted every manager to start out as an IC first, learn how to be an effective engineer on the team by shipping, and really live through and understand what it's like to be an engineer at Anthropic. We have one overall team mission on Claude Code and Claude Cowork. Managers support pods of work while keeping the team agile so people can move to where the work is.</p>
+        </div>
+      </div>
+      <div class="principle">
+        <div class="num">03</div>
+        <div>
+          <h3>Don't hesitate to kill processes that no longer work.</h3>
+          <p>Finally, we relentlessly question why we do things the way we do. When something doesn't make sense anymore, team members have explicit permission to question and kill old processes.</p>
+        </div>
+      </div>
+
+      <div class="pods-zone">
+        <div class="label">Pod autonomy</div>
+        <div class="body">
+          <strong>Within these few rules, each pod has a lot of agency.</strong>
+          They have room to adapt how they use Claude to do triage, how they run any planning rituals or standups, and which workflows get "Claudified" first.
+          <div class="chips">
+            <span class="chip">triage rituals</span>
+            <span class="chip">planning cadence</span>
+            <span class="chip">standup format</span>
+            <span class="chip">workflow ordering</span>
+            <span class="chip">tools &amp; integrations</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== METRICS ============================== -->
+<section class="metrics-section">
+  <div class="wrap">
+    <div class="section-header">
+      <p class="eyebrow reveal">Section 03</p>
+      <h2 class="reveal reveal-1">How to know your new processes are sticking</h2>
+      <p class="lede reveal reveal-2" style="font-size:18px;color:var(--ink-3);max-width:680px">
+        Here are three numbers every engineering leader should start tracking now as they roll out changes.
+      </p>
+    </div>
+
+    <div class="metrics-grid reveal reveal-1">
+      <!-- METRIC 1: Onboarding ramp time -->
+      <div class="metric">
+        <div class="label">01 · Onboarding ramp time goes down</div>
+        <div class="big-num big-text">
+          <span class="counter">1<sup class="ord">st</sup></span><span class="unit">week</span>
+        </div>
+        <div class="delta down">▼ much faster than a year ago</div>
+        <h4>Engineers ship real code in their first week.</h4>
+        <div class="viz" data-viz="onboarding">
+          <div class="vbar" data-pct="90" style="height:90%"></div>
+          <div class="vbar" data-pct="74" style="height:74%"></div>
+          <div class="vbar" data-pct="58" style="height:58%"></div>
+          <div class="vbar" data-pct="42" style="height:42%"></div>
+          <div class="vbar now" data-pct="14" style="height:14%"></div>
+        </div>
+        <p class="desc">How soon can an engineer, a designer, or a PM start being effective? On our team this is much faster than a year ago.</p>
+      </div>
+
+      <!-- METRIC 2: PR cycle time -->
+      <div class="metric">
+        <div class="label">02 · PR cycle time goes down</div>
+        <div class="big-num big-text" data-text="down">
+          <span class="counter">↓</span><span class="unit">going down</span>
+        </div>
+        <div class="delta down">▼ trending down across the team</div>
+        <h4>But watch your CI &mdash; it might be the new ceiling.</h4>
+        <div class="line-viz">
+          <svg viewBox="0 0 240 80" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#5d5d68"/>
+                <stop offset="100%" stop-color="#d97757"/>
+              </linearGradient>
+              <linearGradient id="lineFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="rgba(217,119,87,0.25)"/>
+                <stop offset="100%" stop-color="rgba(217,119,87,0)"/>
+              </linearGradient>
+            </defs>
+            <line x1="0" y1="20" x2="240" y2="20" stroke="#1f1f27" stroke-dasharray="2 4"/>
+            <line x1="0" y1="50" x2="240" y2="50" stroke="#1f1f27" stroke-dasharray="2 4"/>
+            <path id="lineFillPath" d="M0,18 C24,22 40,30 60,32 C90,35 110,42 140,46 C170,52 190,58 220,62 L240,64 L240,80 L0,80 Z" fill="url(#lineFill)"/>
+            <path id="linePath" d="M0,18 C24,22 40,30 60,32 C90,35 110,42 140,46 C170,52 190,58 220,62 L240,64" fill="none" stroke="url(#lineGrad)" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="240" cy="64" r="3" fill="#d97757"/>
+          </svg>
+        </div>
+        <p class="desc">As we're generating so much more code, sometimes build systems and continuous integration (CI) may struggle to keep up. Dig in here to find where your pipeline can't scale.</p>
+      </div>
+
+      <!-- METRIC 3: Claude-assisted commits -->
+      <div class="metric">
+        <div class="label">03 · Claude-assisted commits going up</div>
+        <div class="big-num big-text" data-text="default">
+          <span class="counter">by</span><span class="unit">default</span>
+        </div>
+        <div class="delta up">▲ every commit, last 4 months</div>
+        <h4>Throughput is up. But throughput isn't success.</h4>
+        <div class="ring-wrap">
+          <svg width="120" height="120" viewBox="0 0 120 120" aria-hidden="true">
+            <circle cx="60" cy="60" r="48" fill="none" stroke="#1f1f27" stroke-width="6"/>
+            <circle id="ringProgress" cx="60" cy="60" r="48" fill="none" stroke="url(#ringGrad)" stroke-width="6" stroke-linecap="round"
+              stroke-dasharray="301.59" stroke-dashoffset="301.59"/>
+            <defs>
+              <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#f59e7a"/>
+                <stop offset="100%" stop-color="#d97757"/>
+              </linearGradient>
+            </defs>
+          </svg>
+          <div class="ring-center">
+            <span id="ringPct">↓</span>
+            <small>EVERY ONE</small>
+          </div>
+        </div>
+        <p class="desc">For us, by default, every commit is Claude-assisted. I don't think I've seen a non-Claude-assisted commit in the last four months.</p>
+      </div>
+    </div>
+
+    <div class="warning reveal reveal-2">
+      <span class="icon">⚠</span>
+      <div>
+        <strong>Don't confuse throughput with success.</strong>
+        Throughput is one metric, but the real metric is measuring the thing you're trying to solve. With the right alignment, throughput can help you solve problems faster.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== CLOSING ============================== -->
+<section class="closing-section">
+  <div class="wrap">
+    <div class="section-header">
+      <p class="eyebrow reveal">If I leave you with one thing</p>
+      <h2 class="reveal reveal-1">Pick your noisiest workflow.</h2>
+    </div>
+
+    <div class="closing-body reveal reveal-2">
+      <div class="col">
+        <p>That could be your most expensive workflow, the one you might be dreading, or that your team doesn't look forward to. And ask: <strong style="color:var(--ink)">is it still serving its purpose?</strong> If so, can you automate it?</p>
+        <p>I was once on a team that had an expensive weekly review, with a large number of people in a meeting room. I noticed everybody was on their laptops except when it was their time to give a status report. They would pop their head up, say the status, and go back down to their laptops. I asked one simple question: <em style="color:var(--ink-2)">"Why are we having this meeting again? It seems like an expensive use of our time."</em> And just that one question made everyone realize it wasn't needed. So we canceled it.</p>
+      </div>
+
+      <div class="col">
+        <div class="closing-checklist">
+          <div class="title">Three questions for Monday</div>
+          <div class="check-item">
+            <span class="mark">1</span>
+            <span>Find your most expensive workflow &mdash; or the one your team dreads.</span>
+          </div>
+          <div class="check-item">
+            <span class="mark">2</span>
+            <span>Ask: is it still serving its original purpose?</span>
+          </div>
+          <div class="check-item">
+            <span class="mark">3</span>
+            <span>If yes, automate it. If no, kill it. Either way, do it on purpose.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="closing-question reveal reveal-3">
+      So, what's one piece of your engineering workflow that you might consider automating &mdash; or even dropping altogether?
+    </p>
+  </div>
+</section>
+
+<!-- ============================== FOOTER ============================== -->
+<footer>
+  <div class="wrap">
+    <div class="row">
+      <span class="credit">Source: <a href="https://claude.com/blog/category/claude-code" target="_blank" rel="noopener">claude.com/blog</a> · Category: <a href="https://claude.com/blog/category/claude-code" target="_blank" rel="noopener">Claude Code</a></span>
+      <span class="credit">Fiona Fung · Code w/ Claude SF · June 3, 2026</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+/* =========================================================
+   ?anchor=  jump to a section (for headless screenshots)
+   ========================================================= */
+(function anchorJump(){
+  const p = new URLSearchParams(location.search);
+  const a = p.get('anchor');
+  if(!a) return;
+  addEventListener('load', () => {
+    setTimeout(() => {
+      const el = document.querySelector(a);
+      if(el) el.scrollIntoView({block:'start'});
+    }, 200);
+  });
+})();
+
+/* =========================================================
+   Hero background — character grid decode effect
+   ========================================================= */
+(function heroDecode(){
+  const canvas = document.getElementById('heroCanvas');
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const chars = '01ABCDEFGHIKLMNOPRSTVWXYZ·•─━▒░▓╳<>{}[]/\\+=*#@';
+  let cols = 0, rows = 0, cell = 18, cells = [], t = 0, raf;
+
+  function resize(){
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    canvas.width = w*dpr; canvas.height = h*dpr;
+    ctx.scale(dpr, dpr);
+    cols = Math.ceil(w/cell);
+    rows = Math.ceil(h/cell);
+    cells = new Array(cols*rows).fill(0).map(()=>({
+      ch: chars[Math.floor(Math.random()*chars.length)],
+      seed: Math.random(),
+      phase: Math.random()*Math.PI*2
+    }));
+  }
+  resize();
+  addEventListener('resize', resize);
+
+  function step(){
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    ctx.clearRect(0,0,w,h);
+    ctx.font = '11px ui-monospace, SF Mono, Menlo, monospace';
+    ctx.textBaseline = 'middle';
+    t += 0.012;
+    for(let y=0;y<rows;y++){
+      for(let x=0;x<cols;x++){
+        const i = y*cols+x;
+        const c = cells[i];
+        const flicker = 0.5 + 0.5*Math.sin(t*1.5 + c.phase + x*0.1 + y*0.07);
+        const alpha = Math.pow(flicker, 3) * (reduce ? 0.3 : 1);
+        if(alpha < 0.04) continue;
+        // bottom area warmer
+        const warmth = Math.max(0, (y/rows - 0.5)) * 0.6;
+        const r = Math.floor(120 + 100*warmth + 60*flicker);
+        const g = Math.floor(120 + 40*warmth + 40*flicker);
+        const b = Math.floor(140 - 30*warmth + 30*flicker);
+        ctx.fillStyle = `rgba(${r},${g},${b},${alpha*0.6})`;
+        // refresh character occasionally
+        if(Math.random() < 0.01) c.ch = chars[Math.floor(Math.random()*chars.length)];
+        ctx.fillText(c.ch, x*cell + 2, y*cell + cell/2);
+      }
+    }
+    raf = requestAnimationFrame(step);
+  }
+  if(!reduce) step();
+
+  // pause when out of view
+  document.addEventListener('visibilitychange', () => {
+    if(document.hidden){ cancelAnimationFrame(raf); }
+    else if(!reduce){ step(); }
+  });
+})();
+
+/* =========================================================
+   Reveal on scroll
+   ========================================================= */
+(function reveal(){
+  const items = document.querySelectorAll('.reveal');
+  if(!('IntersectionObserver' in window)){
+    items.forEach(el=>el.classList.add('in'));
+    return;
+  }
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){
+        e.target.classList.add('in');
+        io.unobserve(e.target);
+      }
+    });
+  }, { threshold:0.12, rootMargin:'0px 0px -60px 0px' });
+  items.forEach(el=>io.observe(el));
+})();
+
+/* =========================================================
+   Count-up numbers
+   ========================================================= */
+(function counters(){
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const targets = document.querySelectorAll('[data-count]');
+  if(!targets.length) return;
+  function animate(el){
+    const target = parseFloat(el.dataset.count);
+    const prefix = el.dataset.prefix || '';
+    const suffix = el.dataset.suffix || '';
+    const counter = el.querySelector('.counter');
+    if(!counter) return;
+    if(reduce){ counter.textContent = prefix + target + suffix; return; }
+    const dur = 1400, start = performance.now();
+    const isInt = Number.isInteger(target);
+    function tick(now){
+      const p = Math.min(1, (now-start)/dur);
+      const eased = 1 - Math.pow(1-p, 3);
+      const v = target*eased;
+      counter.textContent = prefix + (isInt ? Math.round(v) : v.toFixed(1)) + suffix;
+      if(p<1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){ animate(e.target); io.unobserve(e.target); }
+    });
+  }, { threshold:0.4 });
+  targets.forEach(el=>io.observe(el));
+})();
+
+/* =========================================================
+   Reveal big-text metrics (no count-up)
+   ========================================================= */
+(function bigTextFade(){
+  const els = document.querySelectorAll('.big-num.big-text');
+  if(!els.length) return;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(reduce){ els.forEach(el=>el.classList.add('in')); return; }
+  els.forEach(el=>el.classList.add('pre-in'));
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){
+        e.target.classList.add('in');
+        io.unobserve(e.target);
+      }
+    });
+  }, { threshold:0.4 });
+  els.forEach(el=>io.observe(el));
+})();
+
+/* =========================================================
+   Ring progress — animates a stroke + reveals text label
+   ========================================================= */
+(function ring(){
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ring = document.getElementById('ringProgress');
+  const pct = document.getElementById('ringPct');
+  if(!ring || !pct) return;
+  const total = parseFloat(ring.getAttribute('stroke-dasharray'));
+  function run(){
+    if(reduce){
+      ring.style.strokeDashoffset = 0;
+      return;
+    }
+    const dur = 1600, start = performance.now();
+    function tick(now){
+      const p = Math.min(1,(now-start)/dur);
+      const eased = 1 - Math.pow(1-p, 3);
+      ring.style.strokeDashoffset = total * (1 - eased);
+      if(p<1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){ run(); io.unobserve(e.target); }
+    });
+  }, { threshold:0.4 });
+  io.observe(ring);
+})();
+
+/* =========================================================
+   Line path draw
+   ========================================================= */
+(function lineDraw(){
+  const path = document.getElementById('linePath');
+  const fill = document.getElementById('lineFillPath');
+  if(!path) return;
+  const len = path.getTotalLength();
+  path.style.strokeDasharray = len;
+  path.style.strokeDashoffset = len;
+  if(fill){
+    fill.style.opacity = 0;
+  }
+  function run(){
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(reduce){ path.style.strokeDashoffset = 0; if(fill) fill.style.opacity = 1; return; }
+    const dur = 1800, start = performance.now();
+    function tick(now){
+      const p = Math.min(1,(now-start)/dur);
+      const eased = 1 - Math.pow(1-p, 3);
+      path.style.strokeDashoffset = len*(1-eased);
+      if(fill) fill.style.opacity = eased;
+      if(p<1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){ run(); io.unobserve(e.target); }
+    });
+  }, { threshold:0.3 });
+  io.observe(path);
+})();
+
+/* =========================================================
+   Bar viz on scroll (bottleneck + onboarding)
+   ========================================================= */
+(function bars(){
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const vizes = document.querySelectorAll('[data-viz]');
+  vizes.forEach(v=>{
+    const bars = v.querySelectorAll('.bar, .vbar');
+    bars.forEach(b=>{
+      const pct = b.getAttribute('data-pct') || '0';
+      b.dataset.targetHeight = pct + '%';
+      b.style.height = '0%';
+    });
+  });
+  function run(v){
+    const bars = v.querySelectorAll('.bar, .vbar');
+    bars.forEach((b, i)=>{
+      if(reduce){ b.style.height = b.dataset.targetHeight; return; }
+      setTimeout(()=>{ b.style.height = b.dataset.targetHeight; }, i*120);
+    });
+  }
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){ run(e.target); io.unobserve(e.target); }
+    });
+  }, { threshold:0.25 });
+  vizes.forEach(v=>io.observe(v));
+})();
+
+/* =========================================================
+   Subtle parallax on hero title
+   ========================================================= */
+(function parallax(){
+  const title = document.querySelector('.hero-title');
+  if(!title) return;
+  let raf;
+  function onScroll(){
+    const y = Math.min(120, window.scrollY);
+    title.style.transform = `translateY(${y*0.08}px)`;
+    title.style.opacity = Math.max(0.2, 1 - y/400);
+    raf = null;
+  }
+  addEventListener('scroll', ()=>{ if(!raf) raf = requestAnimationFrame(onScroll); }, { passive:true });
+})();
+</script>
+</body>
+</html>

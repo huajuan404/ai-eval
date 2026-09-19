@@ -1,0 +1,118 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>找出引入 stdin hang regression 的 commit · DoneBench</title><meta name="description" content="`textual` 项目（Python TUI 库）出现了一个回归 bug："><style>
+:root{--bg:#fff;--fg:#1b1f24;--muted:#667085;--line:#e4e7ec;--card:#f8fafc;--ok:#176a51;--ok-bg:#ddf2e9;--bad:#a63f50;--bad-bg:#f8e1e5;--warn:#885c16;--warn-bg:#f8edcf;--na:#6f7d91;--na-bg:#f0f3f7;--accent:#175cd3}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;padding:0 24px 64px}
+main{max-width:1180px;margin:0 auto}a{color:inherit}a:hover{color:var(--accent)}
+.masthead{display:flex;justify-content:space-between;align-items:center;padding:18px 0;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}
+.wordmark{font-weight:750;font-size:18px;letter-spacing:-.5px;color:var(--fg);text-decoration:none}.wordmark span{font-weight:400}.wordmark i{font-style:normal;font-size:11px;letter-spacing:2px;margin-left:8px;color:var(--muted)}
+.crumbs a{text-decoration:none;margin-right:6px}.eyebrow{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+h1{font-size:26px;margin:26px 0 6px}h2{font-size:18px;margin:38px 0 12px;padding-top:14px;border-top:1px solid var(--line)}h3{font-size:15px;margin:22px 0 8px}
+.lead{color:var(--muted);margin:0 0 8px;font-size:14px}.meta{color:var(--muted);font-size:12px;margin:0}
+table{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0 4px}th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{font-weight:550;color:var(--muted);font-size:12px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr:hover td{background:#fafafa}
+.badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600;white-space:nowrap}
+.badge.ok{color:var(--ok);background:var(--ok-bg)}.badge.bad{color:var(--bad);background:var(--bad-bg)}.badge.warn{color:var(--warn);background:var(--warn-bg)}.badge.na{color:var(--na);background:var(--na-bg)}
+.tag{display:inline-block;padding:1px 7px;border:1px solid var(--line);border-radius:3px;font-size:11px;color:var(--muted);margin-left:6px}.tag.core{border-color:#222;color:#222}
+.runner-marker{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:7px;vertical-align:baseline}
+.work-section{margin:12px 0 4px}.work-grid{display:grid;gap:22px}.work{border:1px solid var(--line);border-radius:6px;padding:14px;background:#fff}
+.work h4{margin:0 0 8px;font-size:14px;display:flex;justify-content:space-between;align-items:center}.work-measures{display:flex;flex-wrap:wrap;gap:6px 14px;margin:10px 0 6px;font-size:12px;color:var(--muted)}.work-measures strong{font-size:16px;color:var(--fg);font-variant-numeric:tabular-nums}
+.work-open{display:block;margin:8px 0 4px;text-align:center;padding:8px;border:1px solid var(--line);border-radius:4px;text-decoration:none;font-size:12px}.work-open:hover{border-color:#222}
+.files{font-size:12px;color:var(--muted);margin:6px 0 0}.files a{text-decoration:none;margin-right:10px}
+details{margin:8px 0}summary{cursor:pointer;font-size:12px;color:var(--muted)}pre{white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.55;background:var(--card);padding:12px;border-radius:4px;border:1px solid var(--line);margin:8px 0 0}
+.dims{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11px;color:var(--muted);margin:4px 0}.dims b{color:var(--fg);font-weight:600}
+.spark{display:block;width:100%;max-width:520px;height:120px}.spark text{font-size:10px;fill:var(--muted)}.spark .axis{stroke:var(--line)}
+.note{font-size:12px;color:var(--muted)}.preview-empty{display:flex;align-items:center;justify-content:center;background:var(--card);border:1px dashed var(--line);border-radius:5px;color:var(--muted);font-size:12px;height:160px}
+footer{margin-top:60px;padding-top:16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+@media(max-width:760px){body{padding:0 12px 40px}.work-grid{grid-template-columns:1fr!important}h1{font-size:22px}table{display:block;overflow-x:auto}}
+
+.work-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:24px 22px}
+.work h4{font-size:13px;min-height:0;margin-bottom:10px}
+.html-preview-stage{position:relative;width:100%;aspect-ratio:16/10;overflow:hidden;background:white;border:1px solid var(--line);border-radius:5px}
+.html-preview{position:absolute;top:0;left:0;width:1440px;height:900px;max-width:none;border:0;transform-origin:top left;transform:scale(var(--preview-scale,.25));pointer-events:none;background:white}
+.preview-open{position:absolute;inset:0;width:100%;border:0;background:transparent;color:#222;cursor:zoom-in}
+.preview-open span{position:absolute;bottom:10px;right:10px;padding:6px 9px;border:1px solid #ddd;border-radius:3px;background:#fffffff2;font-size:11px;box-shadow:0 1px 5px #0001}
+.preview-open:hover span{background:#222;color:white;border-color:#222}
+.preview-open:focus-visible{outline:3px solid #555;outline-offset:-3px}
+.work-open{font-size:12px}.work-measures strong{font-size:16px}.work-measures span{font-size:12px}
+.work-repeat{font-size:11px}.work .preview-empty{height:auto;aspect-ratio:16/10}
+.preview-dialog{position:fixed;inset:20px;margin:auto;width:calc(100vw - 40px);max-width:1600px;height:calc(100dvh - 40px);max-height:none;padding:0;border:1px solid var(--line);border-radius:7px;background:white;color:var(--fg)}
+.preview-dialog[open]{display:flex;flex-direction:column}
+.preview-dialog::backdrop{background:#0008}
+.preview-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);background:#fafafa}
+.preview-toolbar h2{border:0;padding:0;margin:0 auto 0 0;font-size:15px;font-weight:550}
+.preview-toolbar label{display:flex;align-items:center;gap:6px;font-size:12px}
+.preview-toolbar select{max-width:260px;padding:6px;border:1px solid var(--line);border-radius:3px;background:white;color:var(--fg);font:inherit}
+.preview-toolbar button,.preview-toolbar>a{border:1px solid var(--line);padding:6px 10px;border-radius:3px;background:white;color:var(--fg);font-size:12px}
+.preview-toolbar button:disabled{opacity:.4;cursor:default}
+.expanded-preview-body{flex:1;min-height:0;background:white}
+.expanded-preview{display:block;width:100%;height:100%;border:0;background:white}
+@media(max-width:1000px){.work-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.work-grid{grid-template-columns:1fr}.preview-dialog{inset:6px;width:calc(100vw - 12px);height:calc(100dvh - 12px)}.preview-toolbar{gap:7px;padding:10px}.preview-toolbar h2{width:100%;font-size:14px}.preview-toolbar select{max-width:190px}}
+</style></head><body><main><header class="masthead"><a class="wordmark" href="../../index.html">DONE <span>BENCH</span><i>/ 这活干成了没</i></a><span class="crumbs"><a href="../../index.html">首页</a> / <a href="https://github.com/huajuan404/donebench">GitHub ↗</a></span></header><span class="eyebrow">Case</span><h1>找出引入 stdin hang regression 的 commit<span class="tag core">核心集</span><span class="tag">工具调用</span></h1><p class="lead">`textual` 项目（Python TUI 库）出现了一个回归 bug：</p><p class="meta">通过判据：确定性 check 脚本判定；裁判分仅作参考 · <a href="https://github.com/huajuan404/donebench/tree/main/cases/2026-06-03-001-git-bisect-bug-hunt">题目、rubric 与 check 脚本 ↗</a></p><h2>最新一轮 <span class="note">每个模型取最近一次运行，按通过与参考分排序</span></h2><section class="work-section"><div class="work-grid" style="grid-template-columns:repeat(3,minmax(0,1fr))"><article class="work"><h4><span><span class="runner-marker" style="background:#b76a4c" aria-hidden="true"></span><a href="../../models/claude-fable-5.1/index.html">Claude Fable 5.1</a></span><span class="badge ok">通过</span></h4><div class="work-measures"><span>参考分 <strong>15</strong> / 15</span><span>耗时 <strong>1 分 11 秒</strong></span><span>成本 <strong>$1.11</strong></span><span>token <strong>387k</strong></span></div><div class="dims"><span>Commit 准确性 <b>5</b></span><span>根因解释 <b>5</b></span><span>调查过程 <b>5</b></span></div><p class="files">本轮无公开交付物</p><details><summary>裁判依据（gpt-6-astra）</summary><pre>Hash 前7位精确匹配 374478a；完整解释了无守卫的 tcgetattr 在 PIPE 下抛错、异常分支提前 return、跳过输入初始化而导致挂起的因果链；提供了版本历史、git blame、代码差异及后续修复提交的交叉证据。调查过程按这些具体陈述评分，原始命令执行日志未提供。</pre></details><p class="meta">运行 2026-09-08 · 20260908T083857-3db91d6a</p></article><article class="work"><h4><span><span class="runner-marker" style="background:#408fc2" aria-hidden="true"></span><a href="../../models/deepseek-v4.1-flash/index.html">DeepSeek V4.1 Flash</a></span><span class="badge ok">通过</span></h4><div class="work-measures"><span>参考分 <strong>15</strong> / 15</span><span>耗时 <strong>3 分 44 秒</strong></span><span>成本 <strong>—</strong></span><span>token <strong>1326k</strong></span></div><div class="dims"><span>Commit 准确性 <b>5</b></span><span>根因解释 <b>5</b></span><span>调查过程 <b>5</b></span></div><p class="files">本轮无公开交付物</p><details><summary>裁判依据（gpt-6-astra）</summary><pre>Hash 前7位准确匹配374478a；完整解释了无守卫的tcgetattr在stdin为PIPE时报错、except提前return并跳过输入线程启动的挂起因果链；提供git log搜索、提交信息、修复diff和祖先关系核对，并报告三版本对照实测。末尾包含要求的ANSWER和REASON。</pre></details><p class="meta">运行 2026-09-08 · 20260908T083857-3db91d6a</p></article><article class="work"><h4><span><span class="runner-marker" style="background:#7964b5" aria-hidden="true"></span><a href="../../models/glm-5.3/index.html">GLM-5.3</a></span><span class="badge ok">通过</span></h4><div class="work-measures"><span>参考分 <strong>15</strong> / 15</span><span>耗时 <strong>6 分 05 秒</strong></span><span>成本 <strong>—</strong></span><span>token <strong>450k</strong></span></div><div class="dims"><span>Commit 准确性 <b>5</b></span><span>根因解释 <b>5</b></span><span>调查过程 <b>5</b></span></div><p class="files">本轮无公开交付物</p><details><summary>裁判依据（gpt-6-astra）</summary><pre>提交 hash 前7位精确匹配 374478a；完整解释了无守卫的 tcgetattr 在 PIPE 上报错、异常路径提前 return、跳过输入线程及就绪通知而挂起的因果链；调查记录包含 git log、-S 搜索、版本归属核验及 PR #4105 修复交叉验证。</pre></details><p class="meta">运行 2026-09-08 · 20260908T083857-3db91d6a</p></article><article class="work"><h4><span><span class="runner-marker" style="background:#277d79" aria-hidden="true"></span><a href="../../models/kimi-k3/index.html">Kimi K3</a></span><span class="badge ok">通过</span></h4><div class="work-measures"><span>参考分 <strong>15</strong> / 15</span><span>耗时 <strong>4 分 11 秒</strong></span><span>成本 <strong>—</strong></span><span>token <strong>346k</strong></span></div><div class="dims"><span>Commit 准确性 <b>5</b></span><span>根因解释 <b>5</b></span><span>调查过程 <b>5</b></span></div><p class="files">本轮无公开交付物</p><details><summary>裁判依据（gpt-6-astra）</summary><pre>Hash 前7位准确匹配374478a；完整解释了无守卫的tcgetattr在PIPE下报错、except提前return、输入驱动未启动而持续挂起的因果链；输出记录了git log -S、git show、提交信息及后续修复的交叉验证。</pre></details><p class="meta">运行 2026-09-08 · 20260908T083857-3db91d6a</p></article><article class="work"><h4><span><span class="runner-marker" style="background:#315ac3" aria-hidden="true"></span><a href="../../models/deepseek-v4-pro/index.html">DeepSeek V4 Pro</a></span><span class="badge ok">通过</span></h4><div class="work-measures"><span>参考分 <strong>14</strong> / 15</span><span>耗时 <strong>7 分 19 秒</strong></span><span>成本 <strong>—</strong></span><span>token <strong>1132k</strong></span></div><div class="dims"><span>Commit 准确性 <b>5</b></span><span>根因解释 <b>5</b></span><span>调查过程 <b>4</b></span></div><p class="files">本轮无公开交付物</p><details><summary>裁判依据（gpt-6-astra）</summary><pre>提交 hash 前7位准确匹配374478a；完整解释了无守卫的tcgetattr在PIPE输入下抛ENOTTY、except提前return跳过输入线程初始化，最终挂起的因果链。输出报告了git历史查询、父提交对照复现及修复PR佐证，但未提供可独立核验的命令执行记录，调查过程保留1分。</pre></details><p class="meta">运行 2026-09-08 · 20260908T083857-3db91d6a</p></article><article class="work"><h4><span><span class="runner-marker" style="background:#cb793b" aria-hidden="true"></span><a href="../../models/minimax-m3/index.html">MiniMax M3</a></span><span class="badge ok">通过</span></h4><div class="work-measures"><span>参考分 <strong>14</strong> / 15</span><span>耗时 <strong>7 分 01 秒</strong></span><span>成本 <strong>—</strong></span><span>token <strong>1319k</strong></span></div><div class="dims"><span>Commit 准确性 <b>5</b></span><span>根因解释 <b>5</b></span><span>调查过程 <b>4</b></span></div><p class="files">本轮无公开交付物</p><details><summary>裁判依据（gpt-6-astra）</summary><pre>Hash 前 7 位精确匹配 374478a；完整解释了无守卫的 tcgetattr 在 PIPE 下抛错、except 提前返回、输入处理未启动而挂起的因果链。对比了旧版本、引入提交及修复提交，但提供的材料未展示实际 git 命令或输出，调查过程缺少可核验的执行证据。</pre></details><p class="meta">运行 2026-09-08 · 20260908T083857-3db91d6a</p></article><article class="work"><h4><span><span class="runner-marker" style="background:#252525" aria-hidden="true"></span><a href="../../models/codex-astra/index.html">GPT-6 Astra</a></span><span class="badge ok">通过</span></h4><div class="work-measures"><span>参考分 <strong>10</strong> / 15</span><span>耗时 <strong>2 分 13 秒</strong></span><span>成本 <strong>—</strong></span><span>token <strong>659k</strong></span></div><div class="dims"><span>Commit 准确性 <b>5</b></span><span>根因解释 <b>5</b></span><span>调查过程 <b>0</b></span></div><p class="files">本轮无公开交付物</p><details><summary>裁判依据（gpt-6-astra，与被评模型同源）</summary><pre>Commit 前7位精确匹配 374478a；根因完整说明了无 isatty 守卫的 tcgetattr 在 PIPE 输入下抛错、提前 return、跳过输入线程启动并导致挂起。所提供材料没有 git 命令、历史或 diff 调查记录，无法确认实际调查过程，该项不得分。</pre></details><p class="meta">运行 2026-09-08 · 20260908T083857-3db91d6a</p></article></div></section><h2>并排指标</h2><table><thead><tr><th>模型</th><th>结果</th><th class="num">参考分</th><th class="num">耗时</th><th class="num">token</th><th class="num">成本</th><th class="num">日期</th></tr></thead><tbody><tr><td><span class="runner-marker" style="background:#b76a4c" aria-hidden="true"></span><a href="../../models/claude-fable-5.1/index.html">Claude Fable 5.1</a></td><td><span class="badge ok">通过</span></td><td class="num">15 / 15</td><td class="num">1 分 11 秒</td><td class="num">387k</td><td class="num">$1.11</td><td class="num">2026-09-08</td></tr><tr><td><span class="runner-marker" style="background:#408fc2" aria-hidden="true"></span><a href="../../models/deepseek-v4.1-flash/index.html">DeepSeek V4.1 Flash</a></td><td><span class="badge ok">通过</span></td><td class="num">15 / 15</td><td class="num">3 分 44 秒</td><td class="num">1326k</td><td class="num">—</td><td class="num">2026-09-08</td></tr><tr><td><span class="runner-marker" style="background:#7964b5" aria-hidden="true"></span><a href="../../models/glm-5.3/index.html">GLM-5.3</a></td><td><span class="badge ok">通过</span></td><td class="num">15 / 15</td><td class="num">6 分 05 秒</td><td class="num">450k</td><td class="num">—</td><td class="num">2026-09-08</td></tr><tr><td><span class="runner-marker" style="background:#277d79" aria-hidden="true"></span><a href="../../models/kimi-k3/index.html">Kimi K3</a></td><td><span class="badge ok">通过</span></td><td class="num">15 / 15</td><td class="num">4 分 11 秒</td><td class="num">346k</td><td class="num">—</td><td class="num">2026-09-08</td></tr><tr><td><span class="runner-marker" style="background:#315ac3" aria-hidden="true"></span><a href="../../models/deepseek-v4-pro/index.html">DeepSeek V4 Pro</a></td><td><span class="badge ok">通过</span></td><td class="num">14 / 15</td><td class="num">7 分 19 秒</td><td class="num">1132k</td><td class="num">—</td><td class="num">2026-09-08</td></tr><tr><td><span class="runner-marker" style="background:#cb793b" aria-hidden="true"></span><a href="../../models/minimax-m3/index.html">MiniMax M3</a></td><td><span class="badge ok">通过</span></td><td class="num">14 / 15</td><td class="num">7 分 01 秒</td><td class="num">1319k</td><td class="num">—</td><td class="num">2026-09-08</td></tr><tr><td><span class="runner-marker" style="background:#252525" aria-hidden="true"></span><a href="../../models/codex-astra/index.html">GPT-6 Astra</a></td><td><span class="badge ok">通过</span></td><td class="num">10 / 15</td><td class="num">2 分 13 秒</td><td class="num">659k</td><td class="num">—</td><td class="num">2026-09-08</td></tr></tbody></table><p class="note">成本按厂商官方牌价与运行时的 token 用量计算，缓存读写分开计价；没有价格表的模型显示 —。</p><h2>历史 <span class="note">同一任务跨运行、跨模型代际的记录</span></h2><table><thead><tr><th>模型</th><th class="num">日期</th><th>结果</th><th class="num">参考分</th><th class="num">耗时</th><th class="num">成本</th><th>运行</th></tr></thead><tbody><tr><td><span class="runner-marker" style="background:#b76a4c" aria-hidden="true"></span>Claude Fable 5.1</td><td class="num">2026-09-08</td><td><span class="badge ok">通过</span></td><td class="num">15 / 15</td><td class="num">1 分 11 秒</td><td class="num">$1.11</td><td><span class="note">20260908T083857-3db91d6a</span></td></tr><tr><td><span class="runner-marker" style="background:#408fc2" aria-hidden="true"></span>DeepSeek V4.1 Flash</td><td class="num">2026-09-08</td><td><span class="badge ok">通过</span></td><td class="num">15 / 15</td><td class="num">3 分 44 秒</td><td class="num">—</td><td><span class="note">20260908T083857-3db91d6a</span></td></tr><tr><td><span class="runner-marker" style="background:#7964b5" aria-hidden="true"></span>GLM-5.3</td><td class="num">2026-09-08</td><td><span class="badge ok">通过</span></td><td class="num">15 / 15</td><td class="num">6 分 05 秒</td><td class="num">—</td><td><span class="note">20260908T083857-3db91d6a</span></td></tr><tr><td><span class="runner-marker" style="background:#277d79" aria-hidden="true"></span>Kimi K3</td><td class="num">2026-09-08</td><td><span class="badge ok">通过</span></td><td class="num">15 / 15</td><td class="num">4 分 11 秒</td><td class="num">—</td><td><span class="note">20260908T083857-3db91d6a</span></td></tr><tr><td><span class="runner-marker" style="background:#315ac3" aria-hidden="true"></span>DeepSeek V4 Pro</td><td class="num">2026-09-08</td><td><span class="badge ok">通过</span></td><td class="num">14 / 15</td><td class="num">7 分 19 秒</td><td class="num">—</td><td><span class="note">20260908T083857-3db91d6a</span></td></tr><tr><td><span class="runner-marker" style="background:#cb793b" aria-hidden="true"></span>MiniMax M3</td><td class="num">2026-09-08</td><td><span class="badge ok">通过</span></td><td class="num">14 / 15</td><td class="num">7 分 01 秒</td><td class="num">—</td><td><span class="note">20260908T083857-3db91d6a</span></td></tr><tr><td><span class="runner-marker" style="background:#252525" aria-hidden="true"></span>GPT-6 Astra</td><td class="num">2026-09-08</td><td><span class="badge ok">通过</span></td><td class="num">10 / 15</td><td class="num">2 分 13 秒</td><td class="num">—</td><td><span class="note">20260908T083857-3db91d6a</span></td></tr></tbody></table><footer>DoneBench · 真实个人任务的模型评测库。每个数字都对应 <a href="../../data/index.json">docs/data</a> 里的一条公开记录。参考分由 LLM 裁判给出，通过与否按用例声明的判据判定，均不代表模型总体能力。站点生成于 2026-09-19 UTC。</footer></main>
+<dialog id="html-preview-dialog" class="preview-dialog" aria-labelledby="html-preview-title">
+<header class="preview-toolbar"><h2 id="html-preview-title">作品预览</h2>
+<label>Runner <select id="html-preview-picker"></select></label>
+<button type="button" id="html-preview-prev">上一份</button>
+<button type="button" id="html-preview-next">下一份</button>
+<a id="html-preview-original" target="_blank" rel="noopener noreferrer">打开原始作品 ↗</a>
+<button type="button" id="html-preview-close" autofocus>关闭 ×</button></header>
+<div id="html-preview-body" class="expanded-preview-body"></div></dialog>
+
+<script id="report-previews">
+(() => {
+  const stages = [...document.querySelectorAll('.html-preview-stage')];
+  const resize = stage => stage.style.setProperty('--preview-scale', stage.clientWidth / 1440);
+  stages.forEach(resize);
+  if (window.ResizeObserver) {
+    const observer = new ResizeObserver(entries => entries.forEach(entry => resize(entry.target)));
+    stages.forEach(stage => observer.observe(stage));
+  } else {
+    window.addEventListener('resize', () => stages.forEach(resize));
+  }
+  const dialog = document.getElementById('html-preview-dialog');
+  const body = document.getElementById('html-preview-body');
+  const picker = document.getElementById('html-preview-picker');
+  const previous = document.getElementById('html-preview-prev');
+  const next = document.getElementById('html-preview-next');
+  const original = document.getElementById('html-preview-original');
+  let choices = [];
+  let current = 0;
+  function show(index) {
+    const button = choices[index];
+    if (!button) return;
+    const source = document.getElementById(button.dataset.preview);
+    if (!source) return;
+    current = index;
+    picker.value = String(index);
+    const frame = document.createElement('iframe');
+    frame.className = 'expanded-preview';
+    frame.setAttribute('sandbox', source.getAttribute('sandbox') || '');
+    frame.referrerPolicy = 'no-referrer';
+    frame.title = button.dataset.title + ' · 交互预览';
+    frame.srcdoc = source.getAttribute('srcdoc');
+    body.replaceChildren(frame);
+    const link = button.closest('.work').querySelector('.work-open');
+    if (link) original.href = link.href;
+    previous.disabled = index === 0;
+    next.disabled = index === choices.length - 1;
+  }
+  document.addEventListener('click', event => {
+    const button = event.target.closest('[data-preview]');
+    if (!button || typeof dialog.showModal !== 'function') return;
+    choices = [...button.closest('.work-section').querySelectorAll('[data-preview]')];
+    picker.replaceChildren(...choices.map((choice, index) => {
+      const option = document.createElement('option');
+      option.value = String(index);
+      option.textContent = choice.dataset.title;
+      return option;
+    }));
+    show(choices.indexOf(button));
+    dialog.showModal();
+  });
+  picker.addEventListener('change', () => show(Number(picker.value)));
+  previous.addEventListener('click', () => show(current - 1));
+  next.addEventListener('click', () => show(current + 1));
+  document.getElementById('html-preview-close').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('close', () => { body.replaceChildren(); choices = []; });
+})();
+</script>
+</body></html>

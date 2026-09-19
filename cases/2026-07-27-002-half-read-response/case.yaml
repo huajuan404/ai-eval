@@ -20,3 +20,8 @@ judge:
   enabled: true
   rubric_file: prompts/rubric.md
   dimensions: [data_verification, fix_quality, report_accuracy]
+
+# 公开站点
+core: true
+publish:
+  artifacts: [daily_report.py]

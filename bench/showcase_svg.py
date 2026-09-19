@@ -74,10 +74,12 @@ def render_showcase(data: dict, site: Path, *, mobile: bool = False) -> bytes:
         "role": "img", "aria-labelledby": "showcase-title showcase-description",
         "font-family": FONT, "fill": "#202020",
     })
-    node(root, "title", id="showcase-title").text = "DoneBench：两个真实任务，四份原生 SVG 动画"
+    names = data.get("names") or {}
+    titles = "、".join(c["title"] for c in data["cases"])
+    node(root, "title", id="showcase-title").text = f"DoneBench：{titles}，{len(data['records'])} 份原生 SVG 动画"
     node(root, "desc", id="showcase-description").text = (
-        "Kimi K3 与 GLM 5.3 的火烈鸟、水豚骑车作品和真实参考分、生成耗时。"
-        "所有动物、车轮与踏板动画来自本次模型原始输出。"
+        f"{' 与 '.join(names.get(r, r) for r in data['runners'])} 的作品和真实参考分、生成耗时。"
+        "所有画面与动画来自本次模型原始输出。"
     )
     node(root, "rect", width=width, height=height, rx=12, fill="#ffffff")
     margin = 28 if mobile else 36
@@ -85,13 +87,14 @@ def render_showcase(data: dict, site: Path, *, mobile: bool = False) -> bytes:
     label(root, width - margin, 44, data["date"], 15, fill="#737373", text_anchor="end")
     node(root, "path", d=f"M{margin} 64H{width-margin}", stroke="#e4e4e4")
     label(root, margin, 111, "同一任务，把作品摆在一起。", 30 if mobile else 34, font_weight=650)
-    label(root, margin, 145, "2 个模型 · 2 个任务 · 4 份真实交付", 20 if mobile else 18, fill="#666666")
+    label(root, margin, 145, f"{len(data['runners'])} 个模型 · {len(data['cases'])} 个任务 · {len(data['records'])} 份真实交付", 20 if mobile else 18, fill="#666666")
 
     for ci, case in enumerate(data["cases"]):
         section_y = 198 + ci * (766 if mobile else 399)
         label(root, margin, section_y, f"0{ci+1} / {case['title']}", 23, font_weight=600)
-        note = "车轮、踏板与双腿同步" if ci == 0 else "短腿要跟得上，表情还要淡定"
-        label(root, margin, section_y + 28, note, 20 if mobile else 17, fill="#737373")
+        note = case.get("note", "")
+        if note:
+            label(root, margin, section_y + 28, note, 20 if mobile else 17, fill="#737373")
         records = sorted((r for r in data["records"] if r["case"] == case["id"]),
                          key=lambda r: data["runners"].index(r["runner_label"]))
         for ri, record in enumerate(records):
@@ -103,7 +106,7 @@ def render_showcase(data: dict, site: Path, *, mobile: bool = False) -> bytes:
                  fill="#ffffff", stroke="#e4e4e4")
             color = runner_color(record["runner_label"])
             node(card, "rect", x=x+16, y=y+19, width=9, height=9, rx=2, fill=color)
-            name = "Kimi K3" if record["runner_label"] == "kimi-k3" else "GLM 5.3"
+            name = names.get(record["runner_label"], record["runner_label"])
             label(card, x+34, y+31, name, 24 if mobile else 20, font_weight=600)
             judge = record["judge"]
             label(card, x+card_w-16, y+31, f"{judge['score']:g} / {judge['max']:g}",
@@ -113,9 +116,15 @@ def render_showcase(data: dict, site: Path, *, mobile: bool = False) -> bytes:
             node(card, "path", d=f"M{x+16} {y+73}H{x+card_w-16}", stroke="#eeeeee")
             card.append(scoped_artwork(site / record["svg"], f"c{ci}-r{ri}",
                                        x+10, y+81, card_w-20, 205))
-            sync = judge["dimensions"]["leg_pedal_sync"]
-            label(card, x+16, y+309, f"腿脚同步  {sync:g} / 5", 20 if mobile else 16,
-                  fill="#a63f50" if sync < 3 else "#666666")
+            sync = (judge.get("dimensions") or {}).get("leg_pedal_sync")
+            if isinstance(sync, (int, float)):
+                label(card, x+16, y+309, f"腿脚同步  {sync:g} / 5", 20 if mobile else 16,
+                      fill="#a63f50" if sync < 3 else "#666666")
+            else:
+                verdict = record.get("verdict")
+                text = "通过" if verdict is True else ("未通过" if verdict is False else "未评")
+                label(card, x+16, y+309, text, 20 if mobile else 16,
+                      fill="#a63f50" if verdict is False else "#666666")
             if not mobile:
                 label(card, x+card_w-16, y+309, "原始 SVG · 持续循环", 15,
                       fill="#737373", text_anchor="end")
@@ -123,6 +132,6 @@ def render_showcase(data: dict, site: Path, *, mobile: bool = False) -> bytes:
     bottom = height - 70
     node(root, "path", d=f"M{margin} {bottom}H{width-margin}", stroke="#e4e4e4")
     label(root, margin, bottom+30, "每格 1 次 · 耗时不含判分 · 不代表总体能力", 16, fill="#737373")
-    label(root, margin, bottom+55, "点击进入完整报告：评分 / 耗时切换、作品放大、裁判依据 →",
+    label(root, margin, bottom+55, "点击进入公开结果站：每个任务一页，并排作品、通过与否、成本、裁判依据 →",
           14 if mobile else 17, fill="#277d79")
     return ET.tostring(root, encoding="utf-8", xml_declaration=True) + b"\n"

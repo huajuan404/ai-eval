@@ -1,0 +1,99 @@
+# 模型档案与价格表：runner 标签（runners.yaml）→ 展示名、厂商、模型 id、发布日期、按生效日期版本化的价格。
+#
+# 价格只追加不修改：厂商调价就新增一条 `since` 更晚的条目。公开账本里的每条记录在发布时按运行日期
+# 取当时生效的价格算出 cost_usd 并冻结，不随后来的调价重算。
+# 单位：每百万 token。厂商未列缓存价时按 input 价计。非美元报价按下方 fx 换算。
+# 来源必须是厂商官方价格页；没有核实到的模型不写 pricing，成本显示为 —。
+
+runners:
+  claude:
+    display: Claude (CLI 默认)
+    vendor: Anthropic
+    model: claude CLI 默认模型
+  claude-fable-5.1:
+    display: Claude Fable 5.1
+    vendor: Anthropic
+    model: claude-fable-5-1
+  sonnet-4.6:
+    display: Claude Sonnet 4.6
+    vendor: Anthropic
+    model: claude-sonnet-4-6
+  sonnet-4.6-bare:
+    display: Claude Sonnet 4.6 (bare)
+    vendor: Anthropic
+    model: claude-sonnet-4-6
+    note: 隔离全局 CLAUDE.md 的校准档
+  opus-4.6:
+    display: Claude Opus 4.6
+    vendor: Anthropic
+    model: claude-opus-4-6
+  codex:
+    display: Codex (CLI 默认)
+    vendor: OpenAI
+    model: codex CLI 默认模型
+  codex-astra:
+    display: GPT-6 Astra
+    vendor: OpenAI
+    model: gpt-6-astra
+    note: 经 Codex CLI 运行
+  codex-astra-max:
+    display: GPT-6 Astra (max reasoning)
+    vendor: OpenAI
+    model: gpt-6-astra
+    note: 裁判档，reasoning effort = max
+  deepseek-v4-pro:
+    display: DeepSeek V4 Pro
+    vendor: DeepSeek
+    model: deepseek-v4-pro
+  deepseek-v4.1-flash:
+    display: DeepSeek V4.1 Flash
+    vendor: DeepSeek
+    model: deepseek-v4.1-flash
+  deepseek-v4-flash:
+    display: DeepSeek V4 Flash
+    vendor: DeepSeek
+    model: deepseek-v4-flash
+  deepseek-v4-flash-vision-exp:
+    display: DeepSeek V4 Flash Vision (exp)
+    vendor: DeepSeek
+    model: deepseek-v4-flash-vision
+  glm-5.3:
+    display: GLM-5.3
+    vendor: Zhipu
+    model: glm-5.3
+    note: 经 ai-keeping 中转，背后是官方 glm-5.3
+  glm-5.3-official:
+    display: GLM-5.3 (官方直连)
+    vendor: Zhipu
+    model: glm-5.3
+  glm-5.3-ai-keeping:
+    display: GLM-5.3 (ai-keeping)
+    vendor: Zhipu
+    model: glm-5.3
+  glm-5.3-flash:
+    display: GLM-5.3-Flash
+    vendor: Zhipu
+    model: glm-5.3-flash
+  glm-5.2:
+    display: GLM-5.2
+    vendor: Zhipu
+    model: glm-5.2
+  kimi-k3:
+    display: Kimi K3
+    vendor: Moonshot
+    model: kimi-k3
+  minimax-m3:
+    display: MiniMax M3
+    vendor: MiniMax
+    model: MiniMax-M3
+  minimax-m3-c0-direct:
+    display: MiniMax M3 (直调)
+    vendor: MiniMax
+    model: MiniMax-M3
+  qwen-0.5b-weak:
+    display: Qwen2.5 0.5B (弱基线)
+    vendor: Alibaba
+    model: qwen2.5:0.5b
+    note: 本地 ollama 弱模型地板，不计价
+
+fx: {}

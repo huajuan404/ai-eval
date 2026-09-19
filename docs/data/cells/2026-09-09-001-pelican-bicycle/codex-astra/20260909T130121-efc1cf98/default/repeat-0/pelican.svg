@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="800" viewBox="0 0 1000 800" role="img" aria-labelledby="title desc">
+<title id="title">The morning commute</title>
+<desc id="desc">A white pelican with a long golden bill rides a teal bicycle, its webbed feet on the pedals and a wing reaching to the handlebars. A rust-red scarf flutters in the breeze beneath a warm sun.</desc>
+<path fill="#f6f0df" d="M0 0h1000v800H0z"/>
+<circle cx="735" cy="209" r="125" fill="#f2cb70"/>
+<g fill="none" stroke="#ddd5bd" stroke-width="2"><path d="M90 267h108m-71 14h42M786 420h102m-64 15h35M106 607q112-19 200-10m447 4q72-9 139 3"/></g>
+<g fill="none" stroke="#657b73" stroke-width="3" stroke-linecap="round"><path d="M795 99q12-12 24 0 12-12 24 0M851 132q8-8 16 0 8-8 16 0"/></g>
+<ellipse cx="500" cy="724" rx="334" ry="15" fill="#dfdac6"/>
+<g stroke-linecap="round" stroke-linejoin="round">
+<!-- Wheels and individually drawn spokes. -->
+<g fill="#f9f5e9" stroke="#263e3c" stroke-width="13"><circle cx="289" cy="570" r="137"/><circle cx="716" cy="570" r="137"/></g>
+<g fill="none" stroke="#d5b98b" stroke-width="5"><circle cx="289" cy="570" r="128"/><circle cx="716" cy="570" r="128"/></g>
+<g fill="none" stroke="#a8b7ac" stroke-width="2">
+<path d="M289 442v256M161 570h256M198.5 479.5l181 181m-181 0 181-181M240 452l98 236M171 521l236 98M171 619l236-98M240 688l98-236"/>
+<path d="M716 442v256M588 570h256M625.5 479.5l181 181m-181 0 181-181M667 452l98 236M598 521l236 98M598 619l236-98M667 688l98-236"/>
+</g>
+<g fill="none" stroke="#fffaf0" stroke-width="3"><path d="M180 528a117 117 0 0 1 89-73M608 528a117 117 0 0 1 88-73"/></g>
+<!-- Far leg and raised pedal. -->
+<path d="M430 356q-12 47-49 82l53 69" fill="none" stroke="#263e3c" stroke-width="20"/>
+<path d="M430 356q-12 47-49 82l53 69" fill="none" stroke="#e3a348" stroke-width="12"/>
+<path d="m431 494 36 15q12 7 7 13l-59 1q-13-5-5-14z" fill="#eeae4d" stroke="#263e3c" stroke-width="4"/>
+<!-- Bicycle frame and fork. -->
+<g fill="none" stroke="#263e3c" stroke-width="16"><path d="m289 570 136-168 64 168H289m136-168 206 2-142 166m142-166 85 166"/></g>
+<g fill="none" stroke="#398b82" stroke-width="10"><path d="m289 570 136-168 64 168H289m136-168 206 2-142 166m142-166 85 166"/></g>
+<g fill="none" stroke="#82b7a1" stroke-width="2.5"><path d="m300 555 120-148m14-11 187 2m10 21-129 142m139-143 66 144"/></g>
+<path d="m426 406-13-46m215 40-16-57q-4-13 10-16h49" fill="none" stroke="#263e3c" stroke-width="10"/>
+<path d="M651 327h31q11 0 11 11" fill="none" stroke="#b76a44" stroke-width="13"/>
+<path d="M640 338q-3 48 38 77t35 101" fill="none" stroke="#263e3c" stroke-width="2.5"/>
+<path d="M382 353q26-9 68 2 10 3 7 11-3 8-29 5l-46-3q-15-3 0-15" fill="#a95f40" stroke="#263e3c" stroke-width="4"/>
+<path d="M386 355q25-5 53 3" fill="none" stroke="#d79562" stroke-width="3"/>
+<!-- Chain guard, hubs and cranks. -->
+<path d="m290 554 196-13q34-1 35 29t-33 31l-198-15q-18-2-18-16t18-16" fill="#e6e4d6" stroke="#263e3c" stroke-width="3"/>
+<path d="m293 560 193-12m-193 32 193 13" fill="none" stroke="#99aaa0" stroke-width="2"/>
+<circle cx="489" cy="570" r="25" fill="#f6f0df" stroke="#263e3c" stroke-width="5"/>
+<circle cx="489" cy="570" r="15" fill="#c0cec0" stroke="#a8b7ac" stroke-width="2"/>
+<g fill="#263e3c"><circle cx="289" cy="570" r="9"/><circle cx="716" cy="570" r="9"/></g>
+<path d="m447 515 42 55 44 54" fill="none" stroke="#263e3c" stroke-width="8"/>
+<path d="M428 523h35M518 626h43" fill="none" stroke="#263e3c" stroke-width="10"/>
+<circle cx="489" cy="570" r="6" fill="#e6e4d6"/>
+<!-- Tail, pear-shaped body, and curved pelican neck. -->
+<path d="M346 283q-49-25-90-8l45 39-43 5q38 28 78 21" fill="#e8ecdf" stroke="#263e3c" stroke-width="4.5"/>
+<path d="m270 281 55 30m-53 10 53 2" fill="none" stroke="#a6b9ac" stroke-width="3"/>
+<path d="M334 278c47-38 91-40 137-19 25 11 39 10 48-13 11-28 1-45 9-72 7-29 27-49 55-48 37 0 56 24 49 49-6 20-23 31-40 36-15 5-16 14-12 36 12 55-9 95-46 117-47 29-115 21-162-8-33-20-48-49-38-78Z" fill="#fffdf1" stroke="#263e3c" stroke-width="5"/>
+<path d="M550 202c-5 41 16 67-2 108-21 47-78 60-133 45 59 36 116 27 148-7 25-27 27-56 17-101-4-22-3-31 12-36z" fill="#dce5d8"/>
+<path d="M353 283c36-23 80-20 121 11 12 9 24 11 34 12-22 34-58 47-96 30-27-12-42-28-59-53Z" fill="#edf0e3" stroke="#263e3c" stroke-width="4"/>
+<g fill="none" stroke="#9daf9f" stroke-width="3"><path d="M374 284q39 7 73 34M374 300q27 9 48 26M398 280q37 10 63 34"/></g>
+<!-- Forward wing curls over the handlebar. -->
+<path d="M511 283q40 6 65 23 32 17 74 13 13-1 18 8-17 14-48 13-53-2-93-24" fill="#fffdf1" stroke="#263e3c" stroke-width="4.5"/>
+<path d="m641 326 15 0m-26 6 16 1" fill="none" stroke="#9daf9f" stroke-width="2.5"/>
+<!-- Long bill and deep throat pouch. -->
+<path d="M598 177 820 184c-33 20-71 35-111 49-50 17-89 11-111-22-7-11-9-23 0-34Z" fill="#edb65e" stroke="#263e3c" stroke-width="4.5"/>
+<path d="M606 197q58 47 174-1-48 36-91 43-50 9-75-18" fill="#d98c46"/>
+<path d="M597 169c43-4 104 0 146 4l81 10q8 2-1 8l-218 7q-12-12-8-29Z" fill="#f7c75f" stroke="#263e3c" stroke-width="4.5"/>
+<path d="m617 178 167 7" fill="none" stroke="#ffdfa0" stroke-width="3"/>
+<path d="m808 184 16-1" fill="none" stroke="#263e3c" stroke-width="3"/>
+<ellipse cx="581" cy="157" rx="14" ry="15" fill="#edcf85"/>
+<circle cx="584" cy="157" r="6.5" fill="#263e3c"/><circle cx="586" cy="155" r="2" fill="#fffdf1"/>
+<path d="M565 137q10-7 20-4M539 148l-8-12m19 5-3-15" fill="none" stroke="#263e3c" stroke-width="3"/>
+<!-- Windblown scarf. -->
+<path d="M538 250q17 9 43 2l2 15q-29 11-46-2Z" fill="#cc654b" stroke="#263e3c" stroke-width="3.5"/>
+<path d="M538 254q-32-21-63-9l16 11-13 10q31-9 58 2" fill="#cc654b" stroke="#263e3c" stroke-width="3.5"/>
+<path d="M490 251q25-1 43 10" fill="none" stroke="#ed9e71" stroke-width="2"/>
+<!-- Near leg and a broad webbed foot on the lower pedal. -->
+<path d="M477 368q36 28 58 71 8 14 2 35l-20 119" fill="none" stroke="#263e3c" stroke-width="20"/>
+<path d="M477 368q36 28 58 71 8 14 2 35l-20 119" fill="none" stroke="#edb052" stroke-width="12"/>
+<path d="M508 587q10-4 18 7l14 11 34 10q11 5 4 11l-70-1q-12-2-9-13Z" fill="#efb14f" stroke="#263e3c" stroke-width="4"/>
+<path d="m529 608 30 12m-39-7 17 8" fill="none" stroke="#b97c38" stroke-width="2.5"/>
+<path d="M468 360q4 13 18 18" fill="none" stroke="#fffdf1" stroke-width="9"/>
+</g>
+<text x="500" y="769" fill="#405950" text-anchor="middle" font-family="Georgia,serif" font-size="19" letter-spacing="5">THE MORNING COMMUTE</text>
+<g fill="#c58b4b"><circle cx="300" cy="762" r="3"/><circle cx="700" cy="762" r="3"/></g>
+</svg>

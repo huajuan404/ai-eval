@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Running an AI-native engineering org — Claude Code</title>
+<meta name="description" content="At Code w/ Claude SF 2026, Fiona Fung walked through how the Claude Code team's processes and structure changed once agentic coding became the default way of working.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FAF6F0;
+    --paper-deep:#F3EDE3;
+    --ink:#1C1917;
+    --ink-soft:#44403C;
+    --muted:#8A8178;
+    --faint:#C9C1B6;
+    --line:#E4DCD0;
+    --clay:#C15F3C;
+    --clay-bright:#D97757;
+    --clay-soft:#F6E3D9;
+    --green:#3E7C4F;
+    --serif:'Fraunces', Georgia, serif;
+    --body:'Newsreader', Georgia, 'Times New Roman', serif;
+    --sans:'Inter', -apple-system, 'Helvetica Neue', sans-serif;
+    --mono:'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    --measure:42rem;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--body);
+    font-size:1.1875rem;
+    line-height:1.72;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  ::selection{background:var(--clay-bright);color:#fff;}
+
+  /* ---------- progress bar ---------- */
+  #progress{
+    position:fixed;top:0;left:0;height:3px;width:0%;
+    background:linear-gradient(90deg,var(--clay-bright),var(--clay));
+    z-index:100;
+  }
+
+  /* ---------- hero ---------- */
+  header.hero{
+    min-height:92vh;
+    display:flex;flex-direction:column;justify-content:center;
+    padding:6rem 1.5rem 4rem;
+    position:relative;
+    background:
+      radial-gradient(60rem 30rem at 85% -10%, rgba(217,119,87,.14), transparent 60%),
+      radial-gradient(40rem 26rem at -10% 110%, rgba(217,119,87,.08), transparent 60%),
+      var(--paper);
+  }
+  .hero-inner{max-width:56rem;margin:0 auto;width:100%;}
+  .term-chip{
+    display:inline-flex;align-items:center;gap:.55rem;
+    font-family:var(--mono);font-size:.8rem;color:var(--ink-soft);
+    background:#fff;border:1px solid var(--line);border-radius:999px;
+    padding:.45rem 1rem;margin-bottom:2.2rem;
+    box-shadow:0 1px 3px rgba(28,25,23,.06);
+  }
+  .term-chip .prompt{color:var(--clay);font-weight:500;}
+  .cursor{
+    display:inline-block;width:.55em;height:1.05em;background:var(--clay-bright);
+    vertical-align:text-bottom;animation:blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink{50%{opacity:0;}}
+  .kicker{
+    font-family:var(--sans);font-size:.78rem;font-weight:600;
+    letter-spacing:.22em;text-transform:uppercase;color:var(--clay);
+    margin-bottom:1.4rem;
+  }
+  h1{
+    font-family:var(--serif);font-weight:500;
+    font-size:clamp(2.6rem,6.4vw,4.6rem);
+    line-height:1.08;letter-spacing:-.015em;
+    margin-bottom:1.8rem;
+  }
+  h1 em{font-style:italic;color:var(--clay);}
+  .standfirst{
+    font-size:clamp(1.15rem,2vw,1.35rem);line-height:1.6;
+    color:var(--ink-soft);font-style:italic;
+    max-width:44rem;margin-bottom:3rem;
+  }
+  .meta{
+    display:flex;flex-wrap:wrap;gap:.6rem 2rem;
+    font-family:var(--sans);font-size:.85rem;color:var(--muted);
+    border-top:1px solid var(--line);padding-top:1.4rem;
+  }
+  .meta b{color:var(--ink-soft);font-weight:600;}
+  .meta a{color:var(--clay);text-decoration:none;border-bottom:1px solid var(--clay-soft);}
+  .meta a:hover{border-bottom-color:var(--clay);}
+  .scroll-hint{
+    position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);
+    font-family:var(--sans);font-size:.72rem;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--muted);
+    display:flex;flex-direction:column;align-items:center;gap:.5rem;
+  }
+  .scroll-hint::after{
+    content:'';width:1px;height:2.6rem;
+    background:linear-gradient(var(--muted),transparent);
+    animation:drip 2s ease-in-out infinite;
+  }
+  @keyframes drip{0%{transform:scaleY(0);transform-origin:top;}55%{transform:scaleY(1);transform-origin:top;}56%{transform-origin:bottom;}100%{transform:scaleY(0);transform-origin:bottom;}}
+
+  /* ---------- article body ---------- */
+  article{padding:4rem 1.5rem 0;}
+  .col{max-width:var(--measure);margin:0 auto;}
+  p{margin-bottom:1.6rem;}
+  p a{color:var(--clay);text-decoration:none;border-bottom:1px solid var(--clay-soft);transition:border-color .2s;}
+  p a:hover{border-bottom-color:var(--clay);}
+  strong{font-weight:600;}
+
+  .section-num{
+    font-family:var(--mono);font-size:.78rem;color:var(--clay);
+    letter-spacing:.15em;display:block;margin-bottom:.9rem;
+  }
+  h2{
+    font-family:var(--serif);font-weight:500;
+    font-size:clamp(1.9rem,3.6vw,2.5rem);line-height:1.2;
+    letter-spacing:-.01em;margin:5.5rem 0 1.8rem;
+  }
+  h3{
+    font-family:var(--serif);font-weight:600;
+    font-size:1.35rem;line-height:1.35;margin:3rem 0 1.1rem;
+    display:flex;align-items:baseline;gap:.7rem;
+  }
+  h3 .tick{
+    font-family:var(--mono);font-size:.8rem;color:var(--faint);font-weight:400;
+  }
+
+  /* ---------- bottleneck shift diagram ---------- */
+  .shift{
+    margin:3.5rem 0;padding:2.2rem 1.8rem;
+    background:#fff;border:1px solid var(--line);border-radius:1rem;
+    box-shadow:0 1px 3px rgba(28,25,23,.05);
+  }
+  .shift-label{
+    font-family:var(--sans);font-size:.72rem;font-weight:600;
+    letter-spacing:.18em;text-transform:uppercase;color:var(--muted);
+    margin-bottom:1.4rem;
+  }
+  .shift-row{display:flex;align-items:center;gap:1rem;margin-bottom:1.1rem;}
+  .shift-row:last-child{margin-bottom:0;}
+  .shift-tag{
+    font-family:var(--mono);font-size:.7rem;color:var(--muted);
+    width:4.2rem;flex-shrink:0;text-align:right;
+  }
+  .shift-bars{display:flex;gap:.35rem;flex-wrap:wrap;flex:1;}
+  .seg{
+    font-family:var(--sans);font-size:.72rem;font-weight:500;
+    padding:.32rem .7rem;border-radius:.45rem;white-space:nowrap;
+    transition:transform .5s cubic-bezier(.2,.8,.2,1),opacity .5s;
+  }
+  .seg.cheap{background:var(--paper-deep);color:var(--muted);}
+  .seg.bottleneck{background:var(--clay);color:#fff;box-shadow:0 2px 8px rgba(193,95,60,.35);}
+  .seg.ghost{background:transparent;border:1px dashed var(--faint);color:var(--faint);}
+  .shift-note{
+    font-family:var(--sans);font-size:.8rem;color:var(--muted);
+    margin-top:1.3rem;padding-top:1rem;border-top:1px dashed var(--line);
+  }
+
+  /* ---------- before/after : the anchor ---------- */
+  section.rewrite{
+    margin:6rem 0;
+    padding:5rem 1.5rem 5.5rem;
+    background:var(--ink);
+    color:#EDE8E0;
+    position:relative;
+    overflow:hidden;
+  }
+  section.rewrite::before{
+    content:'';position:absolute;inset:0;
+    background:radial-gradient(50rem 24rem at 50% 0%, rgba(217,119,87,.16), transparent 65%);
+    pointer-events:none;
+  }
+  .rewrite-inner{max-width:62rem;margin:0 auto;position:relative;}
+  .rewrite-head{text-align:center;margin-bottom:3.5rem;}
+  .rewrite-head .section-num{color:var(--clay-bright);}
+  .rewrite-head h2{margin:0 0 1rem;color:#FAF6F0;}
+  .rewrite-head p{
+    font-family:var(--sans);font-size:.95rem;color:#A8A29E;
+    max-width:34rem;margin:0 auto;line-height:1.6;
+  }
+  .ba-grid{display:flex;flex-direction:column;gap:1.6rem;}
+  .ba-row{
+    display:grid;
+    grid-template-columns:1fr auto 1fr;
+    gap:1.2rem;align-items:stretch;
+    opacity:0;transform:translateY(2rem);
+    transition:opacity .7s ease,transform .7s cubic-bezier(.2,.8,.2,1);
+  }
+  .ba-row.in{opacity:1;transform:none;}
+  .ba-dim{
+    grid-column:1 / -1;
+    font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--clay-bright);
+    margin-bottom:-.4rem;
+  }
+  .ba-card{
+    border-radius:.9rem;padding:1.4rem 1.5rem;
+    font-size:1.02rem;line-height:1.6;position:relative;
+  }
+  .ba-before{
+    background:rgba(255,255,255,.045);
+    border:1px dashed rgba(168,162,158,.35);
+    color:#A8A29E;
+  }
+  .ba-before .ba-side{
+    font-family:var(--sans);font-size:.68rem;font-weight:700;
+    letter-spacing:.18em;text-transform:uppercase;color:#78716C;
+    display:block;margin-bottom:.6rem;
+  }
+  .ba-before .strike{position:relative;display:inline;}
+  .ba-before .strike::after{
+    content:'';position:absolute;left:0;top:52%;height:2px;width:0;
+    background:var(--clay-bright);border-radius:1px;
+    transition:width 1s cubic-bezier(.6,0,.2,1) .55s;
+  }
+  .ba-row.in .ba-before .strike::after{width:100%;}
+  .ba-arrow{
+    align-self:center;
+    width:3rem;height:3rem;border-radius:50%;
+    border:1px solid rgba(217,119,87,.5);
+    display:flex;align-items:center;justify-content:center;
+    color:var(--clay-bright);
+    transform:scale(.4);opacity:0;
+    transition:transform .6s cubic-bezier(.34,1.56,.5,1) .8s,opacity .4s ease .8s;
+  }
+  .ba-row.in .ba-arrow{transform:scale(1);opacity:1;}
+  .ba-arrow svg{width:1.3rem;height:1.3rem;}
+  .ba-after{
+    background:rgba(217,119,87,.12);
+    border:1px solid rgba(217,119,87,.55);
+    color:#FAF6F0;
+    box-shadow:0 4px 24px rgba(217,119,87,.12);
+    transform:translateX(.8rem);opacity:0;
+    transition:transform .7s cubic-bezier(.2,.8,.2,1) .95s,opacity .7s ease .95s;
+  }
+  .ba-row.in .ba-after{transform:none;opacity:1;}
+  .ba-after .ba-side{
+    font-family:var(--sans);font-size:.68rem;font-weight:700;
+    letter-spacing:.18em;text-transform:uppercase;color:var(--clay-bright);
+    display:block;margin-bottom:.6rem;
+  }
+  .rewrite-caption{
+    text-align:center;margin-top:3rem;
+    font-family:var(--sans);font-size:.8rem;color:#78716C;
+  }
+
+  /* ---------- principles diagram ---------- */
+  .principles{margin:4rem 0 3rem;}
+  .principles-stage{
+    position:relative;max-width:56rem;margin:0 auto;
+    padding:1rem 0 0;
+  }
+  .principles-svg{
+    position:absolute;inset:0;width:100%;height:100%;
+    pointer-events:none;z-index:0;
+  }
+  .principles-svg line{
+    stroke:var(--faint);stroke-width:1.5;stroke-dasharray:4 5;
+  }
+  .principles-grid{
+    position:relative;z-index:1;
+    display:grid;grid-template-columns:repeat(3,1fr);gap:1.4rem;
+  }
+  .principle{
+    background:#fff;border:1px solid var(--line);border-radius:1rem;
+    padding:1.6rem 1.5rem;font-size:1rem;line-height:1.62;
+    box-shadow:0 1px 3px rgba(28,25,23,.05);
+    opacity:0;transform:translateY(1.6rem);
+    transition:opacity .6s ease,transform .6s cubic-bezier(.2,.8,.2,1);
+  }
+  .principle.in{opacity:1;transform:none;}
+  .principle:nth-child(2){transition-delay:.12s;}
+  .principle:nth-child(3){transition-delay:.24s;}
+  .principle .p-num{
+    font-family:var(--mono);font-size:.72rem;color:var(--clay);
+    display:block;margin-bottom:.7rem;letter-spacing:.1em;
+  }
+  .principle .p-title{
+    font-family:var(--serif);font-weight:600;font-size:1.12rem;
+    line-height:1.35;margin-bottom:.7rem;display:block;
+  }
+  .principle p{font-size:.98rem;margin:0;color:var(--ink-soft);}
+  .principles-hub{
+    position:relative;z-index:1;
+    max-width:38rem;margin:2.4rem auto 0;
+    background:var(--ink);color:#EDE8E0;
+    border-radius:1rem;padding:1.6rem 1.8rem;
+    font-size:1.02rem;line-height:1.65;
+    opacity:0;transform:translateY(1.6rem) scale(.97);
+    transition:opacity .6s ease .35s,transform .6s cubic-bezier(.2,.8,.2,1) .35s;
+  }
+  .principles-hub.in{opacity:1;transform:none;}
+  .principles-hub .hub-tag{
+    font-family:var(--sans);font-size:.68rem;font-weight:700;
+    letter-spacing:.2em;text-transform:uppercase;color:var(--clay-bright);
+    display:block;margin-bottom:.5rem;
+  }
+
+  /* ---------- metrics ---------- */
+  .metrics{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:1.4rem;
+    margin:3rem 0 2rem;
+  }
+  .metric{
+    background:#fff;border:1px solid var(--line);border-radius:1rem;
+    padding:1.6rem 1.5rem 1.2rem;
+    box-shadow:0 1px 3px rgba(28,25,23,.05);
+    opacity:0;transform:translateY(1.6rem);
+    transition:opacity .6s ease,transform .6s cubic-bezier(.2,.8,.2,1);
+  }
+  .metric.in{opacity:1;transform:none;}
+  .metric:nth-child(2){transition-delay:.12s;}
+  .metric:nth-child(3){transition-delay:.24s;}
+  .metric .m-name{
+    font-family:var(--sans);font-size:.78rem;font-weight:600;
+    letter-spacing:.06em;color:var(--ink-soft);margin-bottom:.2rem;
+  }
+  .metric .m-dir{
+    font-family:var(--serif);font-size:1.9rem;font-weight:500;
+    line-height:1.2;margin-bottom:.6rem;
+  }
+  .metric .m-dir.down{color:var(--green);}
+  .metric .m-dir.up{color:var(--clay);}
+  .m-dir::after{margin-left:.45rem;font-size:1.4rem;}
+  .m-dir.down::after{content:'↓';}
+  .m-dir.up::after{content:'↑';}
+  .metric svg{width:100%;height:3.4rem;display:block;margin-bottom:.8rem;}
+  .metric svg path{
+    fill:none;stroke-width:2.5;stroke-linecap:round;
+    stroke-dasharray:300;stroke-dashoffset:300;
+    transition:stroke-dashoffset 1.4s cubic-bezier(.4,0,.2,1) .3s;
+  }
+  .metric.in svg path{stroke-dashoffset:0;}
+  .metric svg .area{stroke:none;opacity:0;transition:opacity .8s ease 1.2s;}
+  .metric.in svg .area{opacity:.12;}
+  .metric p{font-size:.95rem;line-height:1.6;color:var(--ink-soft);margin:0;}
+
+  /* ---------- pull quote ---------- */
+  .pullquote{
+    margin:4.5rem auto;max-width:46rem;text-align:center;
+    padding:0 1rem;
+  }
+  .pullquote blockquote{
+    font-family:var(--serif);font-weight:500;font-style:italic;
+    font-size:clamp(1.6rem,3.4vw,2.3rem);line-height:1.35;
+    letter-spacing:-.01em;color:var(--ink);
+  }
+  .pullquote blockquote span{color:var(--clay);}
+  .pullquote::before{
+    content:'';display:block;width:3rem;height:3px;
+    background:var(--clay-bright);margin:0 auto 1.8rem;border-radius:2px;
+  }
+
+  /* ---------- footer ---------- */
+  footer{
+    margin-top:6rem;padding:3.5rem 1.5rem 4rem;
+    border-top:1px solid var(--line);
+    background:var(--paper-deep);
+  }
+  .footer-inner{
+    max-width:var(--measure);margin:0 auto;
+    font-family:var(--sans);font-size:.85rem;color:var(--muted);
+    line-height:1.7;
+  }
+  .footer-inner a{color:var(--clay);text-decoration:none;}
+  .footer-inner .f-title{
+    font-family:var(--serif);font-size:1.1rem;color:var(--ink);
+    margin-bottom:.5rem;
+  }
+
+  /* ---------- generic reveal ---------- */
+  .reveal{opacity:0;transform:translateY(1.4rem);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.8,.2,1);}
+  .reveal.in{opacity:1;transform:none;}
+
+  /* ---------- responsive ---------- */
+  @media (max-width:760px){
+    body{font-size:1.08rem;}
+    header.hero{min-height:auto;padding:5rem 1.25rem 4.5rem;}
+    .scroll-hint{display:none;}
+    .ba-row{grid-template-columns:1fr;gap:.7rem;}
+    .ba-arrow{justify-self:center;transform:scale(.4) rotate(90deg);}
+    .ba-row.in .ba-arrow{transform:scale(1) rotate(90deg);}
+    .ba-after{transform:translateY(.8rem);}
+    .principles-grid{grid-template-columns:1fr;}
+    .principles-svg{display:none;}
+    .metrics{grid-template-columns:1fr;}
+    .shift-tag{width:3.2rem;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation:none!important;transition:none!important;}
+    .reveal,.ba-row,.ba-after,.ba-arrow,.principle,.principles-hub,.metric{opacity:1!important;transform:none!important;}
+    .ba-before .strike::after{width:100%;}
+    .metric svg path{stroke-dashoffset:0;}
+    .metric svg .area{opacity:.12;}
+  }
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+
+<!-- ======================= HERO ======================= -->
+<header class="hero">
+  <div class="hero-inner">
+    <div class="term-chip"><span class="prompt">$</span> claude <span style="color:var(--faint)">—</span> Code w/ Claude SF 2026 <span class="cursor"></span></div>
+    <div class="kicker">Engineering Leadership</div>
+    <h1>Running an <em>AI-native</em> engineering org</h1>
+    <p class="standfirst">At Code w/ Claude SF 2026, Director of Engineering for Claude Code and Claude Cowork Fiona Fung walked through how the team's processes and structure changed once agentic coding became the default way of working.</p>
+    <div class="meta">
+      <span>Category&nbsp; <b><a href="https://claude.com/blog/category/claude-code">Claude Code</a></b></span>
+      <span>Product&nbsp; <b>Claude Code</b></span>
+      <span>Date&nbsp; <b>June 3, 2026</b></span>
+      <span>Reading time&nbsp; <b>5 min</b></span>
+    </div>
+  </div>
+  <div class="scroll-hint">Scroll</div>
+</header>
+
+<article>
+  <div class="col">
+
+    <p class="reveal">For years, engineering bandwidth was the expensive part of building applications. Every process we used to have around software planning and shipping, first waterfall and then agile, was built around that cost.</p>
+
+    <p class="reveal">I started my career in the early 2000s working on Visual Studio. In those days we shipped software on CD-ROMs with hard manufacturing deadlines. Once we could distribute software online, we began increasing to shipping updates continuously. Now we're changing the way we work again, this time around the time and people it takes to write software.</p>
+
+    <p class="reveal">On the Claude Code team, writing code, writing tests, and refactoring rarely slows us down anymore. But the bottlenecks didn't go away when agentic coding took away the actual need to type code. Verification, code review, and security took their place.</p>
+
+    <!-- bottleneck shift diagram -->
+    <div class="shift reveal" aria-label="Diagram: the bottleneck moved from writing code to verification, review and security">
+      <div class="shift-label">The bottleneck moved</div>
+      <div class="shift-row">
+        <span class="shift-tag">before</span>
+        <div class="shift-bars">
+          <span class="seg bottleneck">writing code</span>
+          <span class="seg cheap">verification</span>
+          <span class="seg cheap">review</span>
+          <span class="seg cheap">security</span>
+        </div>
+      </div>
+      <div class="shift-row">
+        <span class="shift-tag">now</span>
+        <div class="shift-bars">
+          <span class="seg ghost">writing code</span>
+          <span class="seg bottleneck">verification</span>
+          <span class="seg bottleneck">code review</span>
+          <span class="seg bottleneck">security</span>
+        </div>
+      </div>
+      <div class="shift-note">Agentic coding took away the need to type code — verification, review and security took its place as the constraint.</div>
+    </div>
+
+    <p class="reveal">We can all generate a lot of code really fast now, but this also brings up new questions: Is this code correct? How is it maintained? And one of the top questions I get from fellow engineering leaders: "How are humans keeping up with how you're doing code reviews?"</p>
+
+    <h2 class="reveal"><span class="section-num">01</span>The processes that quietly stopped working</h2>
+
+    <p class="reveal">We all put processes in place for a reason, to close a gap or make something work better. But when that gap no longer exists and those processes become obsolete, they rarely go away on their own. When the Claude Code team began using agentic coding as our default way of working, a lot of our existing processes stopped working. Here are the norms we rewrote, and why.</p>
+
+    <h3 class="reveal"><span class="tick">1.1</span>Planning: shift roadmaps to just in time</h3>
+    <p class="reveal">The old norm was to spend a lot more time pre-planning because coding time was expensive. When I first joined the Claude Code team, we wrote a pretty good six month roadmap, and then <em>because</em> of Claude Code, so many things changed that it was out of date by month three.</p>
+    <p class="reveal">Engineering speed and throughput is different now, so the way we plan sprints has changed. I call it just-in-time (JIT) planning, almost like JIT compiling: how do you do just the right amount at the right time? Our planning ritual shifted away from design docs toward discussions in PRs or prototypes. The space moves fast so we don't do a lot of product reviews. Our process now is let's prototype, get a lot of internal users on it, and start acting on their feedback.</p>
+
+    <h3 class="reveal"><span class="tick">1.2</span>Context gathering: ask Claude, not the author</h3>
+    <p class="reveal">When engineers wrote code, the first step to getting an answer to most questions was to find the person who wrote the code. Now, since all our PRs are assisted by Claude, "Who made this change?" is no longer sufficient. Our new norm is to go a level deeper: what do you actually need to know? For instance: Are you looking for who caused a regression? An expert to answer a customer question? Or context on a decision? You ask Claude that question, and consider whether Claude can answer it directly, also with more data and context.</p>
+    <p class="reveal">On the Claude Code team, no matter what that question is, our process is to also ask "Is there a way to automate it?" For example, having Claude summarize customer feedback channels every morning went from a ritual I did manually with my coffee to something I just have running automatically in the background.</p>
+
+    <h3 class="reveal"><span class="tick">1.3</span>Code review: trust but verify</h3>
+    <p class="reveal">We use <a href="https://code.claude.com/docs/en/code-review">Code Review</a> heavily. Claude handles all the style and linting, PR feedback requests, catching bugs and fixing them before a full commit, and adding tests. Where we still definitely want a human is expertise.</p>
+    <p class="reveal">The new norm is human review where it matters: for legal review, I always want my legal partner involved in risk tolerance. For trust boundaries and security-sensitive code, I want the domain experts. Product managers and designers also need to be involved with product sense and taste.</p>
+    <p class="reveal">It's important to continually evaluate, though, because the right balance of trust vs. verify will keep changing as the models improve. What you need humans for today might look different with the next model.</p>
+
+    <h3 class="reveal"><span class="tick">1.4</span>Team makeup: blurring roles</h3>
+    <p class="reveal">Claude and AI have reshaped roles across the team. Our PMs code a lot now, which is fun to see. With Claude, you have nontraditional coders now being able to do more engineering, and you have engineers who take on things like content and design, work that were traditionally not on the technical side.</p>
+    <p class="reveal">On the Claude Code engineering team, I've indexed heavily on two profiles. One is creative builders with product sense: the dreamers who are deeply curious and passionate about shipping products that solve problems. The other one is engineers with deep systems expertise. For example, when I joined the team, I noticed we were missing experts with systems backgrounds and we needed that when building <a href="https://www.anthropic.com/news/claude-code-on-the-web">Claude Code on the Web</a>, to ensure we can run Claude everywhere.</p>
+    <p class="reveal">What I index on less, on the other hand, is raw throughput; the models handle that. The more important question is where you still need human expertise, and that's where I'd focus.</p>
+
+  </div>
+
+  <!-- ================= BEFORE / AFTER : the anchor ================= -->
+  <section class="rewrite">
+    <div class="rewrite-inner">
+      <div class="rewrite-head">
+        <span class="section-num">The rewrite at a glance</span>
+        <h2>Four norms, rewritten</h2>
+        <p>Scroll — and watch the old way of working get crossed out, one process at a time.</p>
+      </div>
+
+      <div class="ba-grid">
+
+        <div class="ba-row">
+          <div class="ba-dim">Planning</div>
+          <div class="ba-card ba-before">
+            <span class="ba-side">Before</span>
+            <span class="strike">Six-month product roadmaps.</span>
+          </div>
+          <div class="ba-arrow" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </div>
+          <div class="ba-card ba-after">
+            <span class="ba-side">After</span>
+            Just-in-time (JIT) planning: prototype, put internal users on it, and act on their feedback.
+          </div>
+        </div>
+
+        <div class="ba-row">
+          <div class="ba-dim">Context gathering</div>
+          <div class="ba-card ba-before">
+            <span class="ba-side">Before</span>
+            <span class="strike">Find the person who wrote the code and ask them.</span>
+          </div>
+          <div class="ba-arrow" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </div>
+          <div class="ba-card ba-after">
+            <span class="ba-side">After</span>
+            Ask Claude first. Then ask whether what you are asking about can be automated.
+          </div>
+        </div>
+
+        <div class="ba-row">
+          <div class="ba-dim">Code review</div>
+          <div class="ba-card ba-before">
+            <span class="ba-side">Before</span>
+            <span class="strike">Humans review everything.</span>
+          </div>
+          <div class="ba-arrow" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </div>
+          <div class="ba-card ba-after">
+            <span class="ba-side">After</span>
+            Claude handles style, bugs, and tests. Humans review where domain expertise is important.
+          </div>
+        </div>
+
+        <div class="ba-row">
+          <div class="ba-dim">Team makeup</div>
+          <div class="ba-card ba-before">
+            <span class="ba-side">Before</span>
+            <span class="strike">Fixed roles: engineers write code, PMs plan, designers design.</span>
+          </div>
+          <div class="ba-arrow" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </div>
+          <div class="ba-card ba-after">
+            <span class="ba-side">After</span>
+            Roles blur: PMs prototype, engineers take on design and context. Hire for creative builders and deep systems expertise.
+          </div>
+        </div>
+
+      </div>
+      <div class="rewrite-caption">Source: the Before / After table from the talk, rendered as it happened — old norms struck through, new ones taking their place.</div>
+    </div>
+  </section>
+
+  <div class="col">
+
+    <h2 class="reveal"><span class="section-num">02</span>How we rolled out our new norms</h2>
+
+    <p class="reveal">As these norms changed, some aspects were mandated as team principles and others we let small sub-teams (pods) figure out on their own. There is a set of the Claude Code core team principles that are non-negotiable "must dos":</p>
+  </div>
+
+  <!-- principles diagram -->
+  <div class="principles">
+    <div class="principles-stage" id="principlesStage">
+      <svg class="principles-svg" id="principlesSvg" aria-hidden="true" preserveAspectRatio="none"></svg>
+      <div class="principles-grid" id="principlesGrid">
+        <div class="principle">
+          <span class="p-num">Principle / 01</span>
+          <span class="p-title">Relentlessly dogfood your product:</span>
+          <p>Every Claude Code team member, including cross-functional partners, uses Claude Code (and also Claude Cowork). We're always thinking of ways to get Claude to help us do our work faster, and more efficiently.</p>
+        </div>
+        <div class="principle">
+          <span class="p-num">Principle / 02</span>
+          <span class="p-title">Keep the team flat as possible.</span>
+          <p>When I joined Claude Code I wanted every manager to start out as an IC first, learn how to be an effective engineer on the team by shipping, and really live through and understand what it's like to be an engineer at Anthropic. We have one overall team mission on Claude Code and Claude Cowork. Managers support pods of work while keeping the team agile so people can move to where the work is.</p>
+        </div>
+        <div class="principle">
+          <span class="p-num">Principle / 03</span>
+          <span class="p-title">Don't hesitate to kill processes that no longer work:</span>
+          <p>Finally, we relentlessly question why we do things the way we do. When something doesn't make sense anymore, team members have explicit permission to question and kill old processes.</p>
+        </div>
+      </div>
+      <div class="principles-hub">
+        <span class="hub-tag">The space inside the rules</span>
+        Within these few rules, though, each pod has a lot of agency. They have room to adapt how they use Claude to do triage, how they run any planning rituals or standups, and which workflows get "Claudified" first.
+      </div>
+    </div>
+  </div>
+
+  <div class="col">
+
+    <h2 class="reveal"><span class="section-num">03</span>How to know your new processes are sticking</h2>
+
+    <p class="reveal">Here are three numbers every engineering leader should start tracking now as they roll out changes.</p>
+  </div>
+
+  <!-- metrics -->
+  <div class="col" style="max-width:56rem;">
+    <div class="metrics">
+      <div class="metric">
+        <div class="m-name">Onboarding ramp time</div>
+        <div class="m-dir down">goes down:</div>
+        <svg viewBox="0 0 200 54" aria-hidden="true">
+          <path class="area" style="fill:#3E7C4F" d="M6 10 C 50 12, 90 26, 194 46 L194 52 L6 52 Z"/>
+          <path style="stroke:#3E7C4F" d="M6 10 C 50 12, 90 26, 194 46"/>
+        </svg>
+        <p>How soon can an engineer, a designer, or a PM start being effective? On our team this is much faster than a year ago, and engineers ship real code now within their first week.</p>
+      </div>
+      <div class="metric">
+        <div class="m-name">PR cycle time</div>
+        <div class="m-dir down">goes down:</div>
+        <svg viewBox="0 0 200 54" aria-hidden="true">
+          <path class="area" style="fill:#3E7C4F" d="M6 8 C 60 10, 120 30, 194 44 L194 52 L6 52 Z"/>
+          <path style="stroke:#3E7C4F" d="M6 8 C 60 10, 120 30, 194 44"/>
+        </svg>
+        <p>This one's interesting to dig into because it might help you identify where your pipeline is struggling to scale. As we're generating so much more code, sometimes build systems and continuous integration (CI) may struggle to keep up.</p>
+      </div>
+      <div class="metric">
+        <div class="m-name">Claude-assisted commits</div>
+        <div class="m-dir up">going up:</div>
+        <svg viewBox="0 0 200 54" aria-hidden="true">
+          <path class="area" style="fill:#C15F3C" d="M6 46 C 60 44, 110 30, 194 8 L194 52 L6 52 Z"/>
+          <path style="stroke:#C15F3C" d="M6 46 C 60 44, 110 30, 194 8"/>
+        </svg>
+        <p>For us, by default, every commit is Claude-assisted. I don't think I've seen a non-Claude-assisted commit in the last four months.</p>
+      </div>
+    </div>
+
+    <p class="reveal">On the third bullet, don't confuse throughput with success. Throughput is one metric, but the real metric is measuring the thing you're trying to solve. With the right alignment, throughput can help you solve problems faster.</p>
+
+    <h2 class="reveal"><span class="section-num">04</span>Getting started</h2>
+
+    <div class="pullquote reveal">
+      <blockquote>If I were to leave you with one thing: <span>pick your noisiest workflow.</span></blockquote>
+    </div>
+
+    <p class="reveal">That could be your most expensive workflow, the one you might be dreading, or that your team doesn't look forward to. And ask: is it still serving its purpose? If so, can you automate it?</p>
+
+    <p class="reveal">I was once on a team that had an expensive weekly review, with a large number of people in a meeting room. I noticed everybody was on their laptops except when it was their time to give a status report. They would pop their head up, say the status, and go back down to their laptops. I asked one simple question: "Why are we having this meeting again? It seems like an expensive use of our time." And just that one question made everyone realize it wasn't needed. So we canceled it.</p>
+
+    <p class="reveal">So, ask yourself: what's one piece of your engineering workflow that you might consider automating or even dropping altogether?</p>
+
+  </div>
+</article>
+
+<footer>
+  <div class="footer-inner">
+    <div class="f-title">Running an AI-native engineering org</div>
+    Fiona Fung · Director of Engineering, Claude Code &amp; Claude Cowork · Code w/ Claude SF 2026 · June 3, 2026<br>
+    From the <a href="https://claude.com/blog/category/claude-code">Claude Code blog</a>. Related: <a href="https://code.claude.com/docs/en/code-review">Code Review docs</a> · <a href="https://www.anthropic.com/news/claude-code-on-the-web">Claude Code on the Web</a>
+  </div>
+</footer>
+
+<script>
+(function(){
+  'use strict';
+
+  /* reading progress */
+  var bar = document.getElementById('progress');
+  function onScroll(){
+    var h = document.documentElement;
+    var max = h.scrollHeight - h.clientHeight;
+    bar.style.width = (max > 0 ? (h.scrollTop / max) * 100 : 0) + '%';
+  }
+  window.addEventListener('scroll', onScroll, {passive:true});
+  onScroll();
+
+  /* scroll reveal */
+  var targets = document.querySelectorAll('.reveal, .ba-row, .principle, .principles-hub, .metric');
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if (e.isIntersecting) {
+          e.target.classList.add('in');
+          io.unobserve(e.target);
+        }
+      });
+    }, {threshold: 0.18, rootMargin: '0px 0px -8% 0px'});
+    targets.forEach(function(t){ io.observe(t); });
+  } else {
+    targets.forEach(function(t){ t.classList.add('in'); });
+  }
+
+  /* connector lines: principles -> hub */
+  var stage = document.getElementById('principlesStage');
+  var svg = document.getElementById('principlesSvg');
+  var grid = document.getElementById('principlesGrid');
+  var hub = document.querySelector('.principles-hub');
+
+  function drawLines(){
+    if (window.innerWidth <= 760) { svg.innerHTML = ''; return; }
+    var sr = stage.getBoundingClientRect();
+    var hr = hub.getBoundingClientRect();
+    svg.setAttribute('viewBox', '0 0 ' + sr.width + ' ' + sr.height);
+    svg.innerHTML = '';
+    var hx = hr.left - sr.left + hr.width / 2;
+    var hy = hr.top - sr.top;
+    Array.prototype.forEach.call(grid.children, function(card){
+      var cr = card.getBoundingClientRect();
+      var cx = cr.left - sr.left + cr.width / 2;
+      var cy = cr.bottom - sr.top;
+      var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', cx); line.setAttribute('y1', cy);
+      line.setAttribute('x2', hx); line.setAttribute('y2', hy);
+      svg.appendChild(line);
+    });
+  }
+  window.addEventListener('resize', drawLines);
+  /* fonts shift layout; draw after load and once more shortly after */
+  window.addEventListener('load', drawLines);
+  setTimeout(drawLines, 600);
+  drawLines();
+})();
+</script>
+</body>
+</html>
