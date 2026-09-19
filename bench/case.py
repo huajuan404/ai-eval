@@ -131,8 +131,10 @@ class Case:
     evaluation: EvaluationPolicy = field(default_factory=EvaluationPolicy)
     schema_version: int = 1
     protocol: ProtocolSpec | None = None
-    core: bool = False  # 核心集：每个新模型必跑，公开站点优先展示
-    publish_artifacts: tuple[str, ...] = ()  # 公开发布时随 output_file 一起入库的交付物 glob（相对 artifacts 目录）
+    core: bool = False  # 核心集：固定任务集，公开站点优先展示
+    publish_artifacts: tuple[str, ...] = ()
+    title: str = ""  # 公开展示标题；缺省时站点退回 task.md / README 的一级标题
+    summary: str = ""  # 公开展示一句话摘要；缺省时站点退回 README / task.md 首段  # 公开发布时随 output_file 一起入库的交付物 glob（相对 artifacts 目录）
 
     def __post_init__(self) -> None:
         # Preserve the small programmatic Case constructor used by integrations
@@ -383,6 +385,8 @@ def _normalize_v2_case(data: dict[str, Any], name: str) -> dict[str, Any]:
             "evaluation",
             "core",
             "publish",
+            "title",
+            "summary",
         },
         f"用例 '{name}'",
     )
@@ -548,6 +552,20 @@ def _parse_evaluation(
         unit_of_analysis=unit.strip(),
         independent_unit=independent.strip(),
     )
+
+
+def _parse_display(data: dict[str, Any], name: str) -> tuple[str, str]:
+    """`title` / `summary`：公开站点与计分卡的展示文案，单行非空字符串，可缺省。"""
+    values = []
+    for key in ("title", "summary"):
+        raw = data.get(key)
+        if raw is None:
+            values.append("")
+            continue
+        if not isinstance(raw, str) or not raw.strip() or "\n" in raw.strip():
+            raise CaseError(f"用例 '{name}' 的 {key} 必须是单行非空字符串。")
+        values.append(raw.strip())
+    return values[0], values[1]
 
 
 def _parse_publish(raw: Any, name: str) -> tuple[str, ...]:
@@ -741,6 +759,7 @@ def load_case(case_dir: str | Path) -> Case:
     if not isinstance(core, bool):
         raise CaseError(f"用例 '{name}' 的 core 必须是布尔值。")
     publish_artifacts = _parse_publish(data.get("publish"), name)
+    title, summary = _parse_display(data, name)
     return Case(
         name=name,
         directory=directory,
@@ -749,6 +768,8 @@ def load_case(case_dir: str | Path) -> Case:
         judge=judge,
         core=core,
         publish_artifacts=publish_artifacts,
+        title=title,
+        summary=summary,
         requires_engine=(
             data.get("requires_engine")
             or (protocol.default_requires_engine if protocol else None)

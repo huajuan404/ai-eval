@@ -20,5 +20,7 @@ judge:
 
 # 公开站点
 core: true
+title: FizzBuzz：补全函数让测试通过
+summary: 最小的编码题：在 solution.py 里实现 fizzbuzz(n)，测试全过即通过。用来验证整条流水线能跑通，也是一道地板题。
 publish:
   artifacts: [solution.py]

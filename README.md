@@ -66,6 +66,7 @@ expected:
 ```
 
 需要输入文件就放进 `input/`；有自动校验脚本时增加 `check: check.sh`，校验基准放在不会拷给模型的 `verify/`。
+要发布到公开站点，再加一行 `title:` 和一行 `summary:`，用人话写给没见过这道题的访客看；缺省时站点退回 task.md 或 README 的标题与首段。
 完整示例可看 [火烈鸟 case](cases/2026-09-15-001-flamingo-bicycle/README.md)。
 
 ### 已经做过的任务，可以从 session 提取

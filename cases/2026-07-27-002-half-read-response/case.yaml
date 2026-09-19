@@ -23,5 +23,7 @@ judge:
 
 # 公开站点
 core: true
+title: 日报脚本读错字段，AI 会核对数据吗
+summary: 脚本跑得通但把订单数报成 0，同一份响应里明明有 47 单。看模型会不会对 0 起疑、交叉验证并修好字段映射。
 publish:
   artifacts: [daily_report.py]
