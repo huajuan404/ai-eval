@@ -74,14 +74,14 @@ def render_showcase(data: dict, site: Path, *, mobile: bool = False) -> bytes:
         "role": "img", "aria-labelledby": "showcase-title showcase-description",
         "font-family": FONT, "fill": "#202020",
     })
-    node(root, "title", id="showcase-title").text = "donebench：两个真实任务，四份原生 SVG 动画"
+    node(root, "title", id="showcase-title").text = "DoneBench：两个真实任务，四份原生 SVG 动画"
     node(root, "desc", id="showcase-description").text = (
         "Kimi K3 与 GLM 5.3 的火烈鸟、水豚骑车作品和真实参考分、生成耗时。"
         "所有动物、车轮与踏板动画来自本次模型原始输出。"
     )
     node(root, "rect", width=width, height=height, rx=12, fill="#ffffff")
     margin = 28 if mobile else 36
-    label(root, margin, 45, "DONEBENCH", 24, font_weight=750, letter_spacing="-1")
+    label(root, margin, 45, "DONE BENCH", 24, font_weight=750, letter_spacing="-1")
     label(root, width - margin, 44, data["date"], 15, fill="#737373", text_anchor="end")
     node(root, "path", d=f"M{margin} 64H{width-margin}", stroke="#e4e4e4")
     label(root, margin, 111, "同一任务，把作品摆在一起。", 30 if mobile else 34, font_weight=650)

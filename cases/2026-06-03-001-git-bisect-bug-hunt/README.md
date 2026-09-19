@@ -21,7 +21,7 @@ input/repo 包含 textual @ 374478a（已 checkout，git 全历史可用）。
 - **check.sh**（确定性）: 抽 `ANSWER:` 行与 expected.commit 比对，hash 前 7 位匹配 = pass
 - **judge**（advisory，3 维 × 5 分 = 15）: commit 准确性 / 根因解释 / 调查过程
 
-## 为什么这个 case 特别适合 donebench
+## 为什么这个 case 特别适合 DoneBench
 
 1. **真 regression**（0.47.x 一切正常，0.48.0 必坏）
 2. **headless 验证**（subprocess stdin 即可，不需要 GUI）
