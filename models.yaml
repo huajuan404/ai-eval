@@ -227,11 +227,26 @@ runners:
     display: MiniMax M3
     vendor: MiniMax
     model: MiniMax-M3
-    note: 官方价格页（platform.minimax.io / platform.minimax.cn）为 JS 渲染，2026-09-18 未能读到一手牌价，暂不计价
+    pricing:
+      - since: 2026-09-01
+        currency: USD
+        input_per_m: 0.30
+        output_per_m: 1.20
+        cache_read_per_m: 0.06
+        source: https://platform.minimax.io/docs/guides/pricing-paygo
+        note: Standard 档、≤512k 输入价；>512k 翻倍。核实于 2026-09-19
   minimax-m3-c0-direct:
     display: MiniMax M3 (直调)
     vendor: MiniMax
     model: MiniMax-M3
+    pricing:
+      - since: 2026-09-01
+        currency: USD
+        input_per_m: 0.30
+        output_per_m: 1.20
+        cache_read_per_m: 0.06
+        source: https://platform.minimax.io/docs/guides/pricing-paygo
+        note: 同 minimax-m3
   qwen-0.5b-weak:
     display: Qwen2.5 0.5B (弱基线)
     vendor: Alibaba
