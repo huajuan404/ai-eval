@@ -209,7 +209,7 @@ def public_report(data: dict, site: Path) -> str:
         report = report.replace(f">{case}</summary>", f">{title}</summary>")
         report = report.replace(f">{case}</a>", f">{title}</a>")
     report = report.replace('<a class="wordmark" href="#">', f'<a class="wordmark" href="{REPO_URL}">')
-    report = report.replace("<title>评测报告 ", "<title>donebench · 公开评测报告 ")
+    report = report.replace("<title>评测报告 ", "<title>DoneBench · 公开评测报告 ")
     approved = hashes(data["records"]) + tuple(
         base64.b64encode((site / row["svg"]).read_bytes()).decode() for row in data["records"]
     )
