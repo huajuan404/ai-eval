@@ -179,6 +179,7 @@ runners:
     display: GLM-5.3 (ai-keeping)
     vendor: Zhipu
     model: glm-5.3
+    note: 早期 runner 标签，与 glm-5.3 同一条 ai-keeping 中转通道；只跑过种子用例，后续统一用 glm-5.3
     pricing:
       - since: 2026-09-01
         currency: USD

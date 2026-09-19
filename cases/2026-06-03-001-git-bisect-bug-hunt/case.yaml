@@ -28,3 +28,5 @@ expected:
 
 # 公开站点
 core: true
+title: 找出引入 stdin 挂起回归的 commit
+summary: 给一个真实开源库（textual）的仓库和复现描述，模型要用 git 自己查出是哪个 commit 引入了 bug，答案与真实修复对得上才算通过。

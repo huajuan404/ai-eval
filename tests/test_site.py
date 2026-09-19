@@ -11,8 +11,15 @@ from pathlib import Path
 import pytest
 
 from bench.models import ModelBook
-from bench.publish import sha256
-from bench.site import SITE, SiteError, Verdicts, build, load_ledger, verdicts
+from bench.site import (
+    SITE,
+    SiteError,
+    Verdicts,
+    build,
+    load_ledger,
+    summarize,
+    verdicts,
+)
 
 
 @pytest.fixture
@@ -128,3 +135,57 @@ def test_models_without_pricing_show_dash_not_zero(site):
     build(site, book=ModelBook())
     page = (site / "cases" / "2026-09-09-001-pelican-bicycle" / "index.html").read_text(encoding="utf-8")
     assert "$0.00" not in page
+
+
+def test_launcher_errors_are_counted_separately_from_failures(site):
+    build(site)
+    ledger = load_ledger(site)
+    case = "2026-06-02-001-fizzbuzz"
+    errored = ledger.latest[(case, "claude-fable-5.1")]
+    assert errored[0]["is_error"] and errored[0]["verdict"] is False
+    assert verdicts(errored).label == "运行失败" and verdicts(errored).klass == "err"
+    total = summarize([rows for (name, _), rows in ledger.latest.items() if name == case])
+    assert (total.passes, total.fails, total.errors) == (3, 0, 2)
+    assert total.breakdown == "3 通过 · 2 运行失败"
+    data = json.loads((site / "data" / "index.json").read_text(encoding="utf-8"))
+    cell = next(c for c in data["latest"] if c["case"] == case and c["runner"] == "claude-fable-5.1")
+    assert cell["verdict"] == "运行失败"
+    index = (site / "index.html").read_text(encoding="utf-8")
+    assert "不计入通过率" in index and "每个新模型必跑" not in index
+
+
+def test_index_shows_featured_works_summaries_and_per_task_cost(site):
+    build(site)
+    ledger = load_ledger(site)
+    index = (site / "index.html").read_text(encoding="utf-8")
+    featured = json.loads((site / "data" / "featured.json").read_text())
+    assert "先看作品" in index
+    assert index.count('class="featured"') == 4
+    for case in featured["cases"]:
+        assert case["title"] in index
+    assert ledger.cases["2026-09-15-001-flamingo-bicycle"].brief.startswith("手写一个自带动画的 SVG")
+    assert ledger.cases["2026-09-15-001-flamingo-bicycle"].brief in index
+    assert "平均每任务成本" in index and "累计 $" in index
+
+
+def test_text_artifacts_get_inline_preview_and_links(site):
+    build(site)
+    page = (site / "cases" / "2026-06-02-001-fizzbuzz" / "index.html").read_text(encoding="utf-8")
+    assert 'class="code-preview"' in page and "def fizzbuzz" in page
+    assert "打开原始文件" in page
+    model = (site / "models" / "deepseek-v4.1-flash" / "index.html").read_text(encoding="utf-8")
+    assert "交付文件 ↗" in model
+
+
+def test_case_display_fields_must_be_single_line(tmp_path):
+    from bench.case import CaseError, load_case
+
+    source = SITE.parent / "cases" / "2026-09-15-001-flamingo-bicycle"
+    target = tmp_path / "flamingo"
+    shutil.copytree(source, target)
+    manifest = target / "case.yaml"
+    text = manifest.read_text(encoding="utf-8")
+    assert "title: " in text
+    manifest.write_text(text.replace("title: ", "title: |\n  两行\n  标题\nsummary_backup: ", 1), encoding="utf-8")
+    with pytest.raises(CaseError):
+        load_case(target)

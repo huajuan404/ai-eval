@@ -94,8 +94,11 @@ def _case_info(name: str) -> CaseInfo:
         readme_title, readme_brief = _readme_brief(directory / "README.md")
         title = readme_title if title == case.name and readme_title else title
         brief = brief or readme_brief
+    # case.yaml 里人写的展示文案优先；退回的 task.md / README 首段是给模型或维护者看的，只做兜底清理。
+    title = case.title or title.removeprefix("任务：").removeprefix("用例: ").removeprefix("用例：").replace("`", "")
+    brief = case.summary or brief.replace("`", "").replace("**", "").rstrip("：:—- ")
     return CaseInfo(
-        id=name, title=title.removeprefix("任务：").removeprefix("用例: ").removeprefix("用例：").replace("`", ""), brief=brief,
+        id=name, title=title, brief=brief,
         class_=case.class_, core=case.core, exists=True,
         max_score=_number((case.expected or {}).get("max_score")), criteria=_criteria_text(case),
     )
@@ -194,9 +197,16 @@ def _index_cells(ledger: Ledger) -> None:
 
 @dataclass(frozen=True)
 class Verdicts:
+    """通过 / 未通过 / 未评 / 运行失败 四桶。
+
+    运行失败 = 启动器报错或超时，没有可判定的交付；它说明这次运行没跑起来，不说明模型做不成，
+    所以单独计数、不进通过率的分母。
+    """
+
     passes: int
     fails: int
     unknown: int
+    errors: int = 0
 
     @property
     def evaluated(self) -> int:
@@ -205,7 +215,7 @@ class Verdicts:
     @property
     def label(self) -> str:
         if self.evaluated == 0:
-            return "未评"
+            return "运行失败" if self.errors and not self.unknown else "未评"
         if self.fails == 0:
             return "通过" if self.evaluated == 1 else f"{self.passes}/{self.evaluated} 通过"
         if self.passes == 0:
@@ -215,16 +225,40 @@ class Verdicts:
     @property
     def klass(self) -> str:
         if self.evaluated == 0:
-            return "na"
+            return "err" if self.errors and not self.unknown else "na"
         if self.fails == 0:
             return "ok"
         return "bad" if self.passes == 0 else "warn"
 
+    @property
+    def breakdown(self) -> str:
+        """只列非零桶，例如「3 通过 · 2 运行失败」。"""
+        parts = [(self.passes, "通过"), (self.fails, "未通过"), (self.unknown, "未评"), (self.errors, "运行失败")]
+        return " · ".join(f"{n} {name}" for n, name in parts if n) or "—"
+
 
 def verdicts(rows: list[dict[str, Any]]) -> Verdicts:
-    values = [r["verdict"] for r in rows]
-    return Verdicts(passes=sum(v is True for v in values), fails=sum(v is False for v in values),
-                    unknown=sum(v is None for v in values))
+    errors = [r for r in rows if r["is_error"] and r["verdict"] is not True]
+    judged = [r["verdict"] for r in rows if r not in errors]
+    return Verdicts(passes=sum(v is True for v in judged), fails=sum(v is False for v in judged),
+                    unknown=sum(v is None for v in judged), errors=len(errors))
+
+
+def summarize(cells: list[list[dict[str, Any]]]) -> Verdicts:
+    """把多个格（每格若干次重复）折成一份四桶计数：一格要全部重复通过才算通过。"""
+    passes = fails = unknown = errors = 0
+    for rows in cells:
+        v = verdicts(rows)
+        if v.evaluated:
+            if v.fails:
+                fails += 1
+            else:
+                passes += 1
+        elif v.errors and not v.unknown:
+            errors += 1
+        else:
+            unknown += 1
+    return Verdicts(passes, fails, unknown, errors)
 
 
 def mean(values: list[float | None]) -> float | None:
@@ -274,8 +308,37 @@ def cell_cost(rows: list[dict[str, Any]]) -> float | None:
     return mean([r.get("cost_usd") for r in rows])
 
 
+def cell_duration(rows: list[dict[str, Any]]) -> float | None:
+    return mean([r["duration_ms"] for r in rows])
+
+
 def badge(v: Verdicts) -> str:
     return f'<span class="badge {v.klass}">{esc(v.label)}</span>'
+
+
+def work_link(row: dict[str, Any]) -> str | None:
+    """卡片、模型页「作品」链接指向的文件：声明的 output，否则第一份公开交付物。"""
+    if row["output"]:
+        return row["output"]
+    return row["artifacts"][0]["path"] if row["artifacts"] else None
+
+
+TEXT_PREVIEW_SUFFIXES = {".py", ".js", ".ts", ".sh", ".md", ".txt", ".json", ".csv", ".yaml", ".yml", ".css"}
+TEXT_PREVIEW_LINES = 40
+
+
+def render_text_preview(path: Path) -> str:
+    """代码类交付物没有画面可看，就把文件正文放进卡片；长文件只截前几十行，完整内容走链接。"""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError):
+        return ""
+    shown = lines[:TEXT_PREVIEW_LINES]
+    tail = f"\n… 共 {len(lines)} 行，打开原始文件看全部" if len(lines) > len(shown) else ""
+    return f'<pre class="code-preview">{esc(chr(10).join(shown))}{esc(tail)}</pre>'
+
+LEGEND = ('<p class="note legend">通过 = 满足用例声明的判据；未通过 = 有交付但未达标；未评 = 没有可用判据或裁判未给分；'
+          '运行失败 = 启动器报错或超时、没有可判定的交付，不计入通过率。参考分是 LLM 裁判打分，只作参考。</p>')
 
 
 # ------------------------------------------------------------------ 页面骨架
@@ -292,7 +355,11 @@ h1{font-size:26px;margin:26px 0 6px}h2{font-size:18px;margin:38px 0 12px;padding
 table{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0 4px}th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{font-weight:550;color:var(--muted);font-size:12px}
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr:hover td{background:#fafafa}
 .badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600;white-space:nowrap}
-.badge.ok{color:var(--ok);background:var(--ok-bg)}.badge.bad{color:var(--bad);background:var(--bad-bg)}.badge.warn{color:var(--warn);background:var(--warn-bg)}.badge.na{color:var(--na);background:var(--na-bg)}
+.badge.ok{color:var(--ok);background:var(--ok-bg)}.badge.bad{color:var(--bad);background:var(--bad-bg)}.badge.warn{color:var(--warn);background:var(--warn-bg)}.badge.na{color:var(--na);background:var(--na-bg)}.badge.err{color:var(--na);background:var(--na-bg);border:1px dashed var(--na)}
+.legend{margin:6px 0 0;line-height:1.7}.scroll-hint{display:none}
+.featured-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 22px;margin:12px 0 4px}.featured{border:1px solid var(--line);border-radius:6px;padding:12px;background:#fff}
+.featured h4{margin:0 0 8px;font-size:13px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}.featured h4 a{text-decoration:none;font-weight:600}.featured .work-measures{margin:8px 0 0}
+.code-preview{max-height:320px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;tab-size:4}.badge.num,.picked strong{font-variant-numeric:tabular-nums}
 .tag{display:inline-block;padding:1px 7px;border:1px solid var(--line);border-radius:3px;font-size:11px;color:var(--muted);margin-left:6px}.tag.core{border-color:#222;color:#222}
 .runner-marker{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:7px;vertical-align:baseline}
 .work-section{margin:12px 0 4px}.work-grid{display:grid;gap:22px}.work{border:1px solid var(--line);border-radius:6px;padding:14px;background:#fff}
@@ -304,7 +371,9 @@ details{margin:8px 0}summary{cursor:pointer;font-size:12px;color:var(--muted)}pr
 .spark{display:block;width:100%;max-width:520px;height:120px}.spark text{font-size:10px;fill:var(--muted)}.spark .axis{stroke:var(--line)}
 .note{font-size:12px;color:var(--muted)}.preview-empty{display:flex;align-items:center;justify-content:center;background:var(--card);border:1px dashed var(--line);border-radius:5px;color:var(--muted);font-size:12px;height:160px}
 footer{margin-top:60px;padding-top:16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
-@media(max-width:760px){body{padding:0 12px 40px}.work-grid{grid-template-columns:1fr!important}h1{font-size:22px}table{display:block;overflow-x:auto}}
+@media(max-width:760px){body{padding:0 12px 40px}.work-grid,.featured-grid{grid-template-columns:1fr!important}h1{font-size:22px}
+table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}th:first-child,td:first-child{position:sticky;left:0;z-index:1;background:#fff;min-width:150px;max-width:190px;box-shadow:4px 0 6px -4px #0002}
+tr:hover td:first-child{background:#fff}.brief{display:none}.scroll-hint{display:block;margin:0 0 4px}}
 """
 
 
@@ -341,6 +410,40 @@ def model_href(prefix: str, runner: str) -> str:
 # ------------------------------------------------------------------ 首页
 
 
+def _featured_section(ledger: Ledger) -> str:
+    """首页精选作品：与 README 首图同一份 featured.json，2 个任务 × 2 个模型的原样 SVG。"""
+    featured = featured_data(ledger)
+    if not featured:
+        return ""
+    by_key = {(r["case"], r["runner_label"]): r for r in featured["records"]}
+    cards = []
+    for case in featured["cases"]:
+        for runner in featured["runners"]:
+            row = by_key[(case["id"], runner)]
+            v = verdicts([row])
+            judge = row.get("judge") or {}
+            score = (f'<strong>{judge["score"]:g}</strong> / {judge["max"]:g}'
+                     if judge.get("score") is not None and judge.get("max") else "<strong>—</strong>")
+            cards.append(
+                f'<article class="featured"><h4><span><a href="{esc(case_href("", case["id"]))}">{esc(case["title"])}</a>'
+                f' · {marker(runner)}<a href="{esc(model_href("", runner))}">{esc(featured["names"][runner])}</a></span>{badge(v)}</h4>'
+                f'{render_html_preview(ledger.site / row["svg"], f"featured-{runner}-{case['id']}", featured["names"][runner])}'
+                f'<div class="work-measures"><span>参考分 {score}</span><span>耗时 <strong>{esc(fmt_duration(row["duration_ms"]))}</strong></span>'
+                f'<span>成本 <strong>{esc(fmt_cost(row.get("cost_usd")))}</strong></span></div>'
+                f'{f"<p class=note>{esc(case['note'])}</p>" if case.get("note") else ""}</article>'
+            )
+    return (
+        '<h2>先看作品 <span class="note">同一道题、两个模型的原样输出，动画保留在 SVG 里；进用例页看全部模型</span></h2>'
+        f'<div class="featured-grid">{"".join(cards)}</div>'
+    )
+
+
+def _picked(ledger: Ledger, pick: tuple[str, list[dict[str, Any]]] | None, value: str) -> str:
+    if not pick:
+        return '<span class="note">—</span>'
+    return f'<span class="picked">{marker(pick[0])}{esc(ledger.runner_name(pick[0]))} <strong>{esc(value)}</strong></span>'
+
+
 def render_index(ledger: Ledger) -> str:
     cases = sorted(ledger.cases.values(), key=lambda c: (not c.core, c.id), reverse=False)
     runners = sorted({r["runner_label"] for r in ledger.records})
@@ -348,62 +451,59 @@ def render_index(ledger: Ledger) -> str:
     def case_row(info: CaseInfo) -> str:
         cells = {runner: ledger.latest.get((info.id, runner)) for runner in runners}
         evaluated = [(runner, rows) for runner, rows in cells.items() if rows]
-        summary = Verdicts(
-            passes=sum(verdicts(rows).fails == 0 and verdicts(rows).evaluated > 0 for _, rows in evaluated),
-            fails=sum(verdicts(rows).passes == 0 and verdicts(rows).evaluated > 0 for _, rows in evaluated),
-            unknown=sum(verdicts(rows).evaluated == 0 for _, rows in evaluated),
-        )
+        summary = summarize([rows for _, rows in evaluated])
         passers = [(runner, rows) for runner, rows in evaluated if verdicts(rows).evaluated and verdicts(rows).fails == 0]
         cheapest = min((r for r in passers if cell_cost(r[1]) is not None), key=lambda r: cell_cost(r[1]), default=None)
-        fastest = min(passers, key=lambda r: mean([x["duration_ms"] for x in r[1]]) or 0, default=None)
+        fastest = min(passers, key=lambda r: cell_duration(r[1]) or 0, default=None)
         last = max(max(r["started_at"] for r in rows) for _, rows in evaluated)[:10] if evaluated else "—"
-        cheapest_html = (f'{marker(cheapest[0])}{esc(ledger.runner_name(cheapest[0]))} <span class="note">{fmt_cost(cell_cost(cheapest[1]))}</span>'
-                         if cheapest else '<span class="note">—</span>')
-        fastest_html = (f'{marker(fastest[0])}{esc(ledger.runner_name(fastest[0]))} <span class="note">{fmt_duration(mean([x["duration_ms"] for x in fastest[1]]))}</span>'
-                        if fastest else '<span class="note">—</span>')
         tag = '<span class="tag core">核心集</span>' if info.core else ""
         klass = f'<span class="tag">{esc(CLASS_LABELS.get(info.class_, info.class_))}</span>' if info.class_ else ""
         return (
             f'<tr><td><a href="{esc(case_href("", info.id))}">{esc(info.title)}</a>{tag}{klass}'
-            f'<br><span class="note">{esc(info.brief[:80])}</span></td>'
+            f'<br><span class="note brief">{esc(info.brief[:80])}</span></td>'
             f'<td class="num">{len(evaluated)}</td>'
-            f'<td>{badge(Verdicts(summary.passes, summary.fails, summary.unknown)) if evaluated else "—"} '
-            f'<span class="note">{summary.passes} 通过 · {summary.fails} 未通过 · {summary.unknown} 未评</span></td>'
-            f'<td>{cheapest_html}</td><td>{fastest_html}</td><td class="num">{esc(last)}</td></tr>'
+            f'<td>{badge(summary) if evaluated else "—"} <span class="note">{esc(summary.breakdown)}</span></td>'
+            f'<td>{_picked(ledger, cheapest, fmt_cost(cell_cost(cheapest[1])) if cheapest else "")}</td>'
+            f'<td>{_picked(ledger, fastest, fmt_duration(cell_duration(fastest[1])) if fastest else "")}</td>'
+            f'<td class="num">{esc(last)}</td></tr>'
         )
 
-    head = ('<thead><tr><th>任务</th><th class="num">模型数</th><th>结果</th><th>最便宜的通过者</th>'
-            '<th>最快的通过者</th><th class="num">最近运行</th></tr></thead>')
+    head = ('<thead><tr><th>任务</th><th class="num">模型数</th><th>结果</th><th>通过者中最便宜</th>'
+            '<th>通过者中最快</th><th class="num">最近运行</th></tr></thead>')
+    hint = '<p class="note scroll-hint">表格可左右滑动</p>'
     core_rows = [case_row(c) for c in cases if c.core]
     other_rows = [case_row(c) for c in cases if not c.core]
     sections = []
     if core_rows:
-        sections.append(f'<h2>核心集 <span class="note">每个新模型必跑</span></h2><table>{head}<tbody>{"".join(core_rows)}</tbody></table>')
+        sections.append('<h2>核心集 <span class="note">固定的任务集，新模型来了跑同一批题，才能跨模型、跨代际比较</span></h2>'
+                        f'{hint}<table>{head}<tbody>{"".join(core_rows)}</tbody></table>')
     if other_rows:
-        sections.append(f'<h2>{"更多用例" if core_rows else "用例"}</h2><table>{head}<tbody>{"".join(other_rows)}</tbody></table>')
+        sections.append(f'<h2>{"更多用例" if core_rows else "用例"}</h2>{hint}<table>{head}<tbody>{"".join(other_rows)}</tbody></table>')
 
     model_rows = []
     for runner in runners:
         cells = [(case, rows) for (case, label), rows in ledger.latest.items() if label == runner]
-        v = Verdicts(
-            passes=sum(verdicts(rows).evaluated > 0 and verdicts(rows).fails == 0 for _, rows in cells),
-            fails=sum(verdicts(rows).evaluated > 0 and verdicts(rows).passes == 0 for _, rows in cells),
-            unknown=sum(verdicts(rows).evaluated == 0 for _, rows in cells),
-        )
-        costs = [cell_cost(rows) for _, rows in cells]
-        spent = sum(c for c in costs if c is not None) if any(c is not None for c in costs) else None
+        v = summarize([rows for _, rows in cells])
+        costs = [c for c in (cell_cost(rows) for _, rows in cells) if c is not None]
+        spent = sum(costs) if costs else None
+        per_task = spent / len(costs) if costs else None
         profile = ledger.book.profiles.get(runner)
+        channel = f' · {esc(profile.note)}' if profile and profile.note else ""
         last = max(max(r["started_at"] for r in rows) for _, rows in cells)[:10]
+        cost_html = (f'{fmt_cost(per_task)}<br><span class="note">累计 {fmt_cost(spent)} · {len(costs)} 个任务</span>'
+                     if per_task is not None else "—")
         model_rows.append(
             f'<tr><td>{marker(runner)}<a href="{esc(model_href("", runner))}">{esc(ledger.runner_name(runner))}</a>'
-            f'<br><span class="note">{esc(profile.vendor if profile else "")} {esc(profile.model if profile else "")}</span></td>'
-            f'<td class="num">{len(cells)}</td><td>{badge(v)} <span class="note">{v.passes} 通过 · {v.fails} 未通过 · {v.unknown} 未评</span></td>'
-            f'<td class="num">{fmt_cost(spent)}</td><td class="num">{esc(last)}</td></tr>'
+            f'<br><span class="note">{esc(profile.vendor if profile else "")} {esc(profile.model if profile else "")}{channel}</span></td>'
+            f'<td class="num">{len(cells)}</td><td>{badge(v)} <span class="note">{esc(v.breakdown)}</span></td>'
+            f'<td class="num">{cost_html}</td><td class="num">{esc(last)}</td></tr>'
         )
     sections.append(
         '<h2>模型 <span class="note">按最新一轮汇总，不同任务不合成总分</span></h2>'
-        '<table><thead><tr><th>模型</th><th class="num">任务数</th><th>结果</th><th class="num">累计成本</th><th class="num">最近运行</th></tr></thead>'
+        f'{hint}<table><thead><tr><th>模型</th><th class="num">任务数</th><th>结果</th><th class="num">平均每任务成本</th><th class="num">最近运行</th></tr></thead>'
         f'<tbody>{"".join(model_rows)}</tbody></table>'
+        '<p class="note">比较的是「启动器 + 模型」组合：同一个模型经官方直连、第三方中转或不同 CLI 运行，会分开记录成不同行。'
+        '各模型跑过的任务数不同，成本只在同一任务内可比，平均值只作量级参考。</p>'
     )
     total_runs = len(ledger.runs)
     body = (
@@ -411,8 +511,10 @@ def render_index(ledger: Ledger) -> str:
         '<h1>用自己的真实任务，看每个模型到底干成了没。</h1>'
         '<p class="lead">同一份任务交给不同模型，把交付的作品、通过与否、耗时和成本摆在一起。'
         '公开榜单回答"这个模型多强"，这里回答"它在我这类活上干成了没、花了多少钱、作品长什么样"。</p>'
-        f'<p class="meta">{len(ledger.cases)} 个任务 · {len(runners)} 个模型 · {len(ledger.records)} 条运行记录 · {total_runs} 轮 · '
+        f'<p class="meta">{len(ledger.cases)} 个任务 · {len(runners)} 个模型 · {len(ledger.records)} 条运行记录 · {total_runs} 个运行批次 · '
         f'<a href="data/index.json">原始数据</a> · <a href="{REPO_URL}#加一个用例">加入自己的任务 ↗</a></p>'
+        f'{LEGEND}'
+        f'{_featured_section(ledger)}'
         + "".join(sections)
     )
     return page(title="DoneBench", body=body, prefix="", crumbs=[],
@@ -432,7 +534,7 @@ def _dims_html(judge: dict[str, Any] | None) -> str:
 
 def _artifact_links(prefix: str, row: dict[str, Any]) -> str:
     if not row["artifacts"]:
-        return '<p class="files">本轮无公开交付物</p>'
+        return ""
     links = "".join(
         f'<a href="{esc(prefix + a["path"])}" target="_blank" rel="noopener noreferrer">{esc(Path(a["path"]).name)}</a>'
         for a in row["artifacts"]
@@ -445,15 +547,19 @@ def _work_card(ledger: Ledger, prefix: str, info: CaseInfo, runner: str, rows: l
     v = verdicts(rows)
     score = score_of(rows)
     output = first["output"]
+    link = work_link(first)
     preview = ""
     if output and Path(output).suffix.lower() in PREVIEW_SUFFIXES:
         preview = render_html_preview(ledger.site / output, f"preview-{runner}-{first['run_id']}", ledger.runner_name(runner))
     elif first["is_error"]:
-        preview = '<p class="note">运行失败：启动器报错或超时，下面的文件是工作目录快照，不是完成的交付。</p>'
+        preview = ('<p class="note">运行失败：启动器报错或超时，没有可判定的交付，不计入通过率。'
+                   + ('下面的文件是工作目录快照。' if first["artifacts"] else '') + '</p>')
+    elif link and Path(link).suffix.lower() in TEXT_PREVIEW_SUFFIXES:
+        preview = render_text_preview(ledger.site / link)
     else:
-        preview = ""
-    open_link = (f'<a class="work-open" href="{esc(prefix + output)}" target="_blank" rel="noopener noreferrer">打开原始作品 ↗</a>'
-                 if output else "")
+        preview = '<p class="note">交付是对话里的回复，正文不公开；通过与否由 check 脚本判定。</p>' if not first["artifacts"] else ""
+    open_link = (f'<a class="work-open" href="{esc(prefix + link)}" target="_blank" rel="noopener noreferrer">打开原始{"作品" if output else "文件"} ↗</a>'
+                 if link and not first["is_error"] else "")
     judge = first.get("judge")
     reasoning = ""
     if judge and judge.get("reasoning"):
@@ -540,9 +646,10 @@ def render_case(ledger: Ledger, info: CaseInfo) -> str:
         f'<span class="eyebrow">Case</span><h1>{esc(info.title)}{tag}{klass}</h1>'
         f'<p class="lead">{esc(info.brief)}</p>'
         f'<p class="meta">通过判据：{esc(info.criteria)} · <a href="{esc(repo_case)}">题目、rubric 与 check 脚本 ↗</a></p>'
+        f'{LEGEND}'
         f'<h2>最新一轮 <span class="note">每个模型取最近一次运行，按通过与参考分排序</span></h2>'
         f'<section class="work-section"><div class="work-grid" style="grid-template-columns:repeat({columns},minmax(0,1fr))">{cards}</div></section>'
-        '<h2>并排指标</h2><table><thead><tr><th>模型</th><th>结果</th><th class="num">参考分</th><th class="num">耗时</th>'
+        '<h2>并排指标</h2><p class="note scroll-hint">表格可左右滑动</p><table><thead><tr><th>模型</th><th>结果</th><th class="num">参考分</th><th class="num">耗时</th>'
         f'<th class="num">token</th><th class="num">成本</th><th class="num">日期</th></tr></thead><tbody>{"".join(rows_html)}</tbody></table>'
         '<p class="note">成本按厂商官方牌价与运行时的 token 用量计算，缓存读写分开计价；没有价格表的模型显示 —。</p>'
         f'<h2>历史 <span class="note">同一任务跨运行、跨模型代际的记录</span></h2>{spark}'
@@ -566,8 +673,9 @@ def render_model(ledger: Ledger, runner: str) -> str:
         info = ledger.cases[case]
         score = score_of(rows)
         first = min(rows, key=lambda r: r["repeat_index"])
-        link = (f' · <a href="{esc(prefix + first["output"])}" target="_blank" rel="noopener noreferrer">作品 ↗</a>'
-                if first["output"] else "")
+        target = work_link(first) if not first["is_error"] else None
+        link = (f' · <a href="{esc(prefix + target)}" target="_blank" rel="noopener noreferrer">{"作品" if first["output"] else "交付文件"} ↗</a>'
+                if target else "")
         rows_html.append(
             f'<tr><td><a href="{esc(case_href(prefix, case))}">{esc(info.title)}</a>{"<span class=\"tag core\">核心集</span>" if info.core else ""}{link}</td>'
             f'<td>{badge(verdicts(rows))}</td><td class="num">{f"{score[0]:g} / {score[1]:g}" if score else "—"}</td>'
@@ -580,19 +688,16 @@ def render_model(ledger: Ledger, runner: str) -> str:
         price_html = (f'当前牌价 {price.currency} {price.input_per_m:g} / {price.output_per_m:g} 每百万 token（输入 / 输出）'
                       + (f'，缓存读 {price.cache_read_per_m:g}' if price.cache_read_per_m is not None else "")
                       + (f' · <a href="{esc(price.source)}">来源 ↗</a>' if price.source else ""))
-    summary = Verdicts(
-        passes=sum(verdicts(rows).evaluated > 0 and verdicts(rows).fails == 0 for _, rows in cells),
-        fails=sum(verdicts(rows).evaluated > 0 and verdicts(rows).passes == 0 for _, rows in cells),
-        unknown=sum(verdicts(rows).evaluated == 0 for _, rows in cells),
-    )
+    summary = summarize([rows for _, rows in cells])
     body = (
         f'<span class="eyebrow">Model</span><h1>{marker(runner)}{esc(ledger.runner_name(runner))}</h1>'
         f'<p class="lead">{esc(profile.vendor if profile else "")} {esc(profile.model if profile else runner)}'
         f'{" · 发布于 " + esc(profile.released) if profile and profile.released else ""}</p>'
-        f'<p class="meta">{len(cells)} 个任务 · {summary.passes} 通过 · {summary.fails} 未通过 · {summary.unknown} 未评'
+        f'<p class="meta">{len(cells)} 个任务 · {esc(summary.breakdown)}'
         f'{" · " + price_html if price_html else ""}</p>'
         f'{"<p class=note>" + esc(profile.note) + "</p>" if profile and profile.note else ""}'
-        '<h2>各任务最新表现</h2><table><thead><tr><th>任务</th><th>结果</th><th class="num">参考分</th><th class="num">耗时</th>'
+        f'{LEGEND}'
+        '<h2>各任务最新表现</h2><p class="note scroll-hint">表格可左右滑动</p><table><thead><tr><th>任务</th><th>结果</th><th class="num">参考分</th><th class="num">耗时</th>'
         f'<th class="num">token</th><th class="num">成本</th><th class="num">日期</th></tr></thead><tbody>{"".join(rows_html)}</tbody></table>'
         '<p class="note">不同任务的分数不相加，不合成总分。</p>'
     )
