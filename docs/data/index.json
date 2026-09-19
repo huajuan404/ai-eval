@@ -83,7 +83,7 @@
       "date": "2026-09-08",
       "verdict": "通过",
       "score": null,
-      "cost_usd": null,
+      "cost_usd": 1.14945,
       "duration_ms": 42053.0,
       "output": null
     },
@@ -94,7 +94,7 @@
       "date": "2026-09-08",
       "verdict": "通过",
       "score": null,
-      "cost_usd": null,
+      "cost_usd": 0.01217,
       "duration_ms": 8031.0,
       "output": null
     },
@@ -105,7 +105,7 @@
       "date": "2026-09-08",
       "verdict": "通过",
       "score": null,
-      "cost_usd": null,
+      "cost_usd": 0.063153,
       "duration_ms": 23317.0,
       "output": null
     },
@@ -130,7 +130,7 @@
         15.0,
         15.0
       ],
-      "cost_usd": 1.107682,
+      "cost_usd": 0.808268,
       "duration_ms": 70737.0,
       "output": null
     },
@@ -144,7 +144,7 @@
         10.0,
         15.0
       ],
-      "cost_usd": null,
+      "cost_usd": 6.74285,
       "duration_ms": 132768.0,
       "output": null
     },
@@ -158,7 +158,7 @@
         14.0,
         15.0
       ],
-      "cost_usd": null,
+      "cost_usd": 0.162414,
       "duration_ms": 439186.0,
       "output": null
     },
@@ -172,7 +172,7 @@
         15.0,
         15.0
       ],
-      "cost_usd": null,
+      "cost_usd": 0.045314,
       "duration_ms": 223501.0,
       "output": null
     },
@@ -186,7 +186,7 @@
         15.0,
         15.0
       ],
-      "cost_usd": null,
+      "cost_usd": 0.179514,
       "duration_ms": 364835.0,
       "output": null
     },
@@ -200,7 +200,7 @@
         15.0,
         15.0
       ],
-      "cost_usd": null,
+      "cost_usd": 0.225886,
       "duration_ms": 250782.0,
       "output": null
     },
@@ -228,7 +228,7 @@
         20.0,
         25.0
       ],
-      "cost_usd": 5.562078,
+      "cost_usd": 4.748635,
       "duration_ms": 819880.0,
       "output": "data/cells/2026-06-11-001-interactive-html/claude-fable-5.1/20260908T083857-3db91d6a/default/repeat-0/docs/article.html"
     },
@@ -242,7 +242,7 @@
         19.0,
         25.0
       ],
-      "cost_usd": null,
+      "cost_usd": 9.60546,
       "duration_ms": 684986.0,
       "output": "data/cells/2026-06-11-001-interactive-html/codex-astra/20260908T083857-3db91d6a/default/repeat-0/docs/article.html"
     },
@@ -256,7 +256,7 @@
         17.0,
         25.0
       ],
-      "cost_usd": null,
+      "cost_usd": 0.785314,
       "duration_ms": 2115100.0,
       "output": "data/cells/2026-06-11-001-interactive-html/deepseek-v4-pro/20260908T083857-3db91d6a/default/repeat-0/docs/article.html"
     },
@@ -270,7 +270,7 @@
         18.0,
         25.0
       ],
-      "cost_usd": null,
+      "cost_usd": 0.152388,
       "duration_ms": 565595.0,
       "output": "data/cells/2026-06-11-001-interactive-html/deepseek-v4.1-flash/20260908T083857-3db91d6a/default/repeat-0/docs/article.html"
     },
@@ -284,7 +284,7 @@
         18.0,
         25.0
       ],
-      "cost_usd": null,
+      "cost_usd": 3.080578,
       "duration_ms": 3793673.0,
       "output": "data/cells/2026-06-11-001-interactive-html/glm-5.3/20260908T083857-3db91d6a/default/repeat-0/docs/article.html"
     },
@@ -298,7 +298,7 @@
         16.0,
         25.0
       ],
-      "cost_usd": null,
+      "cost_usd": 1.448134,
       "duration_ms": 1157537.0,
       "output": "data/cells/2026-06-11-001-interactive-html/kimi-k3/20260908T083857-3db91d6a/default/repeat-0/docs/article.html"
     },
@@ -326,7 +326,7 @@
         10.0,
         10.0
       ],
-      "cost_usd": 0.823596,
+      "cost_usd": 0.575924,
       "duration_ms": 44595.0,
       "output": null
     },
@@ -340,7 +340,7 @@
         10.0,
         10.0
       ],
-      "cost_usd": null,
+      "cost_usd": 2.41709,
       "duration_ms": 69534.0,
       "output": null
     },
@@ -354,7 +354,7 @@
         10.0,
         10.0
       ],
-      "cost_usd": null,
+      "cost_usd": 0.091703,
       "duration_ms": 122577.0,
       "output": null
     },
@@ -368,7 +368,7 @@
         10.0,
         10.0
       ],
-      "cost_usd": null,
+      "cost_usd": 0.021146,
       "duration_ms": 28497.0,
       "output": null
     },
@@ -382,7 +382,7 @@
         10.0,
         10.0
       ],
-      "cost_usd": null,
+      "cost_usd": 0.108957,
       "duration_ms": 90717.0,
       "output": null
     },
@@ -396,7 +396,7 @@
         10.0,
         10.0
       ],
-      "cost_usd": null,
+      "cost_usd": 0.178131,
       "duration_ms": 101758.0,
       "output": null
     },
@@ -424,7 +424,7 @@
         18.0,
         20.0
       ],
-      "cost_usd": 0.979648,
+      "cost_usd": 0.729395,
       "duration_ms": 74446.0,
       "output": "data/cells/2026-09-09-001-pelican-bicycle/claude-fable-5.1/20260909T130121-efc1cf98/default/repeat-0/pelican.svg"
     },
@@ -438,7 +438,7 @@
         20.0,
         20.0
       ],
-      "cost_usd": null,
+      "cost_usd": 2.30309,
       "duration_ms": 171690.0,
       "output": "data/cells/2026-09-09-001-pelican-bicycle/codex-astra/20260909T130121-efc1cf98/default/repeat-0/pelican.svg"
     },
@@ -452,7 +452,7 @@
         18.0,
         20.0
       ],
-      "cost_usd": null,
+      "cost_usd": 0.29321,
       "duration_ms": 875785.0,
       "output": "data/cells/2026-09-09-001-pelican-bicycle/deepseek-v4-pro/20260909T130121-efc1cf98/default/repeat-0/pelican.svg"
     },
@@ -466,7 +466,7 @@
         18.0,
         20.0
       ],
-      "cost_usd": null,
+      "cost_usd": 0.069523,
       "duration_ms": 149664.0,
       "output": "data/cells/2026-09-09-001-pelican-bicycle/deepseek-v4.1-flash/20260909T130121-efc1cf98/default/repeat-0/pelican.svg"
     },
@@ -480,7 +480,7 @@
         19.0,
         20.0
       ],
-      "cost_usd": null,
+      "cost_usd": 0.320785,
       "duration_ms": 932258.0,
       "output": "data/cells/2026-09-09-001-pelican-bicycle/glm-5.3/20260909T130121-efc1cf98/default/repeat-0/pelican.svg"
     },
@@ -494,7 +494,7 @@
         18.0,
         20.0
       ],
-      "cost_usd": null,
+      "cost_usd": 0.167427,
       "duration_ms": 110951.0,
       "output": "data/cells/2026-09-09-001-pelican-bicycle/kimi-k3/20260909T130121-efc1cf98/default/repeat-0/pelican.svg"
     },
@@ -522,7 +522,7 @@
         24.0,
         25.0
       ],
-      "cost_usd": null,
+      "cost_usd": 0.621784,
       "duration_ms": 1759807.0,
       "output": "data/cells/2026-09-15-001-flamingo-bicycle/glm-5.3/20260915T124011-4c12491f/default/repeat-0/flamingo.svg"
     },
@@ -536,7 +536,7 @@
         25.0,
         25.0
       ],
-      "cost_usd": null,
+      "cost_usd": 0.666483,
       "duration_ms": 650011.0,
       "output": "data/cells/2026-09-15-001-flamingo-bicycle/kimi-k3/20260915T124011-4c12491f/default/repeat-0/flamingo.svg"
     },
@@ -550,7 +550,7 @@
         29.0,
         30.0
       ],
-      "cost_usd": null,
+      "cost_usd": 0.572611,
       "duration_ms": 1354821.0,
       "output": "data/cells/2026-09-15-002-capybara-bicycle/glm-5.3/20260915T124011-4c12491f/default/repeat-0/capybara.svg"
     },
@@ -564,7 +564,7 @@
         24.0,
         30.0
       ],
-      "cost_usd": null,
+      "cost_usd": 0.616708,
       "duration_ms": 339375.0,
       "output": "data/cells/2026-09-15-002-capybara-bicycle/kimi-k3/20260915T124011-4c12491f/default/repeat-0/capybara.svg"
     }

@@ -10,23 +10,68 @@ runners:
     display: Claude (CLI 默认)
     vendor: Anthropic
     model: claude CLI 默认模型
+    pricing:
+      - since: 2026-09-01
+        currency: USD
+        input_per_m: 5
+        output_per_m: 25
+        cache_read_per_m: 0.5
+        cache_write_per_m: 6.25
+        source: https://claude.com/pricing
+        note: claude CLI 默认模型为 Opus 4.8（runners.yaml 注释），按其牌价；官方页核实于 2026-09-18；缓存价按 5 分钟 TTL
   claude-fable-5.1:
     display: Claude Fable 5.1
     vendor: Anthropic
     model: claude-fable-5-1
+    pricing:
+      - since: 2026-09-01
+        currency: USD
+        input_per_m: 10
+        output_per_m: 50
+        cache_read_per_m: 0.25
+        cache_write_per_m: 12.5
+        source: https://claude.com/pricing
+        note: 官方页核实于 2026-09-18；缓存价按 5 分钟 TTL
   sonnet-4.6:
     display: Claude Sonnet 4.6
     vendor: Anthropic
     model: claude-sonnet-4-6
+    pricing:
+      - since: 2026-09-01
+        currency: USD
+        input_per_m: 3
+        output_per_m: 15
+        cache_read_per_m: 0.3
+        cache_write_per_m: 3.75
+        source: https://claude.com/pricing
+        note: 官方页核实于 2026-09-18；缓存价按 5 分钟 TTL
   sonnet-4.6-bare:
     display: Claude Sonnet 4.6 (bare)
     vendor: Anthropic
     model: claude-sonnet-4-6
     note: 隔离全局 CLAUDE.md 的校准档
+    pricing:
+      - since: 2026-09-01
+        currency: USD
+        input_per_m: 3
+        output_per_m: 15
+        cache_read_per_m: 0.3
+        cache_write_per_m: 3.75
+        source: https://claude.com/pricing
+        note: 官方页核实于 2026-09-18；缓存价按 5 分钟 TTL
   opus-4.6:
     display: Claude Opus 4.6
     vendor: Anthropic
     model: claude-opus-4-6
+    pricing:
+      - since: 2026-09-01
+        currency: USD
+        input_per_m: 5
+        output_per_m: 25
+        cache_read_per_m: 0.5
+        cache_write_per_m: 6.25
+        source: https://claude.com/pricing
+        note: 官方页核实于 2026-09-18；缓存价按 5 分钟 TTL
   codex:
     display: Codex (CLI 默认)
     vendor: OpenAI
@@ -36,56 +81,153 @@ runners:
     vendor: OpenAI
     model: gpt-6-astra
     note: 经 Codex CLI 运行
+    pricing:
+      - since: 2026-09-01
+        currency: USD
+        input_per_m: 10
+        output_per_m: 50
+        cache_read_per_m: 1
+        source: https://developers.openai.com/api/docs/pricing
+        note: Standard 档、短上下文价；长上下文 20/75，Batch/Flex 减半。核实于 2026-09-18
   codex-astra-max:
     display: GPT-6 Astra (max reasoning)
     vendor: OpenAI
     model: gpt-6-astra
     note: 裁判档，reasoning effort = max
+    pricing:
+      - since: 2026-09-01
+        currency: USD
+        input_per_m: 10
+        output_per_m: 50
+        cache_read_per_m: 1
+        source: https://developers.openai.com/api/docs/pricing
+        note: Standard 档、短上下文价；长上下文 20/75，Batch/Flex 减半。核实于 2026-09-18
   deepseek-v4-pro:
     display: DeepSeek V4 Pro
     vendor: DeepSeek
     model: deepseek-v4-pro
+    pricing:
+      - since: 2026-09-01
+        currency: CNY
+        input_per_m: 9.0
+        output_per_m: 27.0
+        cache_read_per_m: 0.3
+        source: https://api-docs.deepseek.com/zh-cn/quick_start/pricing
+        note: deepseek-v4-pro 高峰价（工作日 9–12、14–18 北京时间）；低谷价减半，本表不按小时区分。核实于 2026-09-18
   deepseek-v4.1-flash:
     display: DeepSeek V4.1 Flash
     vendor: DeepSeek
     model: deepseek-v4.1-flash
+    pricing:
+      - since: 2026-09-01
+        currency: CNY
+        input_per_m: 2.0
+        output_per_m: 8.0
+        cache_read_per_m: 0.04
+        source: https://api-docs.deepseek.com/zh-cn/quick_start/pricing
+        note: deepseek-flash（V4.1-Flash） 高峰价（工作日 9–12、14–18 北京时间）；低谷价减半，本表不按小时区分。核实于 2026-09-18
   deepseek-v4-flash:
     display: DeepSeek V4 Flash
     vendor: DeepSeek
     model: deepseek-v4-flash
+    pricing:
+      - since: 2026-09-01
+        currency: CNY
+        input_per_m: 2.0
+        output_per_m: 8.0
+        cache_read_per_m: 0.04
+        source: https://api-docs.deepseek.com/zh-cn/quick_start/pricing
+        note: 旧名 deepseek-v4-flash 已路由到 Flash，按 Flash 高峰价（工作日 9–12、14–18 北京时间）；低谷价减半，本表不按小时区分。核实于 2026-09-18
   deepseek-v4-flash-vision-exp:
     display: DeepSeek V4 Flash Vision (exp)
     vendor: DeepSeek
     model: deepseek-v4-flash-vision
+    pricing:
+      - since: 2026-09-01
+        currency: CNY
+        input_per_m: 2.0
+        output_per_m: 8.0
+        cache_read_per_m: 0.04
+        source: https://api-docs.deepseek.com/zh-cn/quick_start/pricing
+        note: 旧名 vision-exp 已路由到 Flash，按 Flash 高峰价（工作日 9–12、14–18 北京时间）；低谷价减半，本表不按小时区分。核实于 2026-09-18
   glm-5.3:
     display: GLM-5.3
     vendor: Zhipu
     model: glm-5.3
     note: 经 ai-keeping 中转，背后是官方 glm-5.3
+    pricing:
+      - since: 2026-09-01
+        currency: USD
+        input_per_m: 1.4
+        output_per_m: 4.4
+        cache_read_per_m: 0.26
+        source: https://docs.z.ai/guides/overview/pricing
+        note: z.ai 国际站美元牌价；bigmodel.cn 人民币页为 JS 渲染未能核实，经 ai-keeping 中转的实付可能不同，按官方 glm-5.3 计；核实于 2026-09-18
   glm-5.3-official:
     display: GLM-5.3 (官方直连)
     vendor: Zhipu
     model: glm-5.3
+    pricing:
+      - since: 2026-09-01
+        currency: USD
+        input_per_m: 1.4
+        output_per_m: 4.4
+        cache_read_per_m: 0.26
+        source: https://docs.z.ai/guides/overview/pricing
+        note: z.ai 国际站美元牌价；bigmodel.cn 人民币页为 JS 渲染未能核实，核实于 2026-09-18
   glm-5.3-ai-keeping:
     display: GLM-5.3 (ai-keeping)
     vendor: Zhipu
     model: glm-5.3
+    pricing:
+      - since: 2026-09-01
+        currency: USD
+        input_per_m: 1.4
+        output_per_m: 4.4
+        cache_read_per_m: 0.26
+        source: https://docs.z.ai/guides/overview/pricing
+        note: z.ai 国际站美元牌价；bigmodel.cn 人民币页为 JS 渲染未能核实，经 ai-keeping 中转的实付可能不同，按官方 glm-5.3 计；核实于 2026-09-18
   glm-5.3-flash:
     display: GLM-5.3-Flash
     vendor: Zhipu
     model: glm-5.3-flash
+    pricing:
+      - since: 2026-09-01
+        currency: USD
+        input_per_m: 0.15
+        output_per_m: 0.5
+        cache_read_per_m: 0.03
+        source: https://docs.z.ai/guides/overview/pricing
+        note: z.ai 国际站美元牌价；bigmodel.cn 人民币页为 JS 渲染未能核实，核实于 2026-09-18
   glm-5.2:
     display: GLM-5.2
     vendor: Zhipu
     model: glm-5.2
+    pricing:
+      - since: 2026-09-01
+        currency: USD
+        input_per_m: 1.4
+        output_per_m: 4.4
+        cache_read_per_m: 0.26
+        source: https://docs.z.ai/guides/overview/pricing
+        note: z.ai 国际站美元牌价；bigmodel.cn 人民币页为 JS 渲染未能核实，核实于 2026-09-18
   kimi-k3:
     display: Kimi K3
     vendor: Moonshot
     model: kimi-k3
+    pricing:
+      - since: 2026-09-01
+        currency: CNY
+        input_per_m: 20
+        output_per_m: 100
+        cache_read_per_m: 2
+        source: https://platform.kimi.com/docs/pricing/chat
+        note: 标准推理价（1M 上下文单一档）；本机经 api.kimi.com/coding 套餐调用，实付可能不同。核实于 2026-09-18
   minimax-m3:
     display: MiniMax M3
     vendor: MiniMax
     model: MiniMax-M3
+    note: 官方价格页（platform.minimax.io / platform.minimax.cn）为 JS 渲染，2026-09-18 未能读到一手牌价，暂不计价
   minimax-m3-c0-direct:
     display: MiniMax M3 (直调)
     vendor: MiniMax
@@ -96,4 +238,6 @@ runners:
     model: qwen2.5:0.5b
     note: 本地 ollama 弱模型地板，不计价
 
-fx: {}
+fx:
+  # 人民币→美元。来源 open.er-api.com（ECB 等公开汇率聚合），2026-09-19；调整时追加新条目而不是改旧值。
+  CNY_USD: {rate: 0.149, as_of: 2026-09-19}
