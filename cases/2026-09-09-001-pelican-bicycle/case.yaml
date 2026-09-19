@@ -13,3 +13,6 @@ evaluation:
   role: visual_diagnostic
   scope: SVG drawing of a pelican riding a bicycle; not general model intelligence
   generalizes: false
+
+# 公开站点
+core: true

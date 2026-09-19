@@ -41,6 +41,10 @@
 - `report_view.py` — 按运行目录的 `report_view.json` 选择展示用例，校验来源和 case 锁；
   `--report` 重建与 `--rejudge` 重判都保留此视图，不改原始运行选择。
 - `scrub.py` — 密钥脱敏（record 与计分卡共用）
+- `models.py` — `models.yaml` 模型档案与按生效日期版本化的价格表 → 每条记录的 `cost_usd` 与 `price_version`
+- `publish.py` — 把 `runs/<run_id>/` 经发布门槛写进公开账本 `docs/data/`（白名单字段与交付物、本机路径/凭证整次拒绝、校验通过才落盘）
+- `site.py` — 从账本生成 GitHub Pages：首页、`cases/<case>/`、`models/<runner>/`、`data/index.json`、README 首图；`--check` 校验产物一致
+- `showcase_svg.py` — README 首图 SVG 渲染（由 `docs/data/featured.json` 驱动，保留模型原始动画）
 
 ## 启动器编号（config.env，由 `c` 切换器使用）
 
@@ -92,9 +96,10 @@
 
 **MVP 四件事，零现金投入**：
 1. 改名 DoneBench（已完成），站点继续用 GitHub Pages，不买域名。
-2. 结果入库：每个用例一个可视化对比页（多模型并排产出、分数、耗时、成本），展示管线从硬编码 2×2 泛化到全库，Pages 首页为用例列表。
-3. 模型成本表：按厂商官方价格页维护，带生效日期，每条记录自动算出美元成本。
-4. 核心集首轮：精修 6 到 8 题（优先带确定性 check 的痛点用例与骑车动画签名任务），跑当前主流模型一轮作为首发内容。
+2. 结果入库（已完成）：`bench.publish` 把运行写进 `docs/data/` 账本，`bench.site` 生成每个用例一页的多模型并排对比、模型页和首页。
+3. 模型成本表（机制已完成，牌价按核实进度补）：`models.yaml` 按生效日期版本化，发布时冻结 `cost_usd`。
+4. 核心集首轮：`core: true` 已标在 8 个用例上（fizzbuzz、git-bisect、interactive-html、fake-green-tests、half-read-response、
+   pelican、flamingo、capybara）；下一步跑当前主流模型一轮作为首发内容。
 
 **验证指标与触发线**：GitHub star。到 1000 星再买域名建独立网站。
 
@@ -102,6 +107,10 @@
 私有任务脱敏后才能入公开库，隐私优先。
 
 ## 开发约定
+
+- 公开账本与站点：改了 `docs/data/`、`models.yaml`、`bench/site.py`、`bench/showcase_svg.py` 或任何用例的标题/判据后，
+  运行 `python3 -m bench.site` 重建并提交产物；提交前 `python3 -m bench.site --check` 必须通过。`docs/` 下除 `data/runs/*.json`、
+  `data/cells/**`、`data/featured.json` 外都是生成产物，不手改。
 
 - Python 3.11+；不可变优先（dataclass frozen + replace）；多个小文件 > 大文件。
 - 新 case 优先用严格且极简的 `schema_version: 2`；只有至少两个 case 共享同一机制时才新增 protocol。旧 v1 只做兼容维护。

@@ -5,7 +5,7 @@
 把同一份任务交给不同模型和启动器，直接比较交付的作品、参考评分、耗时与 token。
 代码修复、报告生成、工具调用、SVG 动画，都可以成为你的评测题。
 
-[打开完整交互报告 ↗](https://huajuan404.github.io/donebench/) · [快速开始](#快速开始) · [加入自己的任务](#加一个用例)
+[打开公开结果站 ↗](https://huajuan404.github.io/donebench/) · [快速开始](#快速开始) · [加入自己的任务](#加一个用例)
 
 <a href="https://huajuan404.github.io/donebench/">
   <picture>
@@ -15,9 +15,10 @@
 </a>
 
 上面四份作品直接保留模型输出中的 **SMIL 动画**，轮子、踏板和腿脚的运动都留在 README 里。
-点击首图，在完整报告里切换参考分与耗时、放大对照作品、展开裁判依据。
+点击首图进入公开结果站：每个任务一页，多模型并排交付物、通过与否、参考分、耗时、成本、裁判原文和历史运行；
+每个模型也有一页，看它在所有任务上的最新表现。
 
-<sub>真实运行快照 · 每格 1 次 · 分数为裁判参考分 · 比较的是启动器与模型的组合。</sub>
+<sub>真实运行快照 · 每格 1 次 · 分数为裁判参考分 · 比较的是启动器与模型的组合 · 成本按厂商官方牌价计算。</sub>
 
 ## 快速开始
 
@@ -164,19 +165,24 @@ task:
 模块职责、用例约定和测试命令统一放在 [AGENTS.md](AGENTS.md)。
 
 <details>
-<summary>更新 README 动态演示</summary>
+<summary>发布结果到公开站点</summary>
 
-公开展示保存在 `docs/`，由 GitHub Pages 的 `main:/docs` 发布。
-它复用已审核的 SVG 与评测数据，保留原始动画和作品缺陷。
+公开结果账本保存在 `docs/data/`，站点由 GitHub Pages 的 `main:/docs` 发布，`docs/` 下其余文件都是从账本生成的。
+`runs/` 不会自动发布；一次运行要经过发布门槛才能入库：只接受公开 `cases/` 下的用例，提示词和输入目录必须与当前仓库一致，
+只带走白名单字段和白名单交付物（`expected.output_file` 加 case.yaml 里 `publish.artifacts` 声明的文件，单文件 ≤ 2 MB），
+文本里出现本机路径或疑似凭证就整次拒绝。原始日志、最终回复文本和本机配置永远不进账本。
 
 ```bash
-python3 -m bench.showcase --import-run runs/<run_id>
-python3 -m bench.showcase --check
+python3 -m bench.publish <run_id>            # 一次运行入账本，可加 --cases / --runners 只发布部分格
+python3 -m bench.site                        # 从账本重建首页、用例页、模型页与 README 首图
+python3 -m bench.site --check                # 只校验产物与账本一致（提交前、CI 用）
 ```
 
-只调整展示代码时运行 `python3 -m bench.showcase` 即可重建。
-当前导出限定为上面的两个 SVG case × `kimi-k3`、`glm-5.3`，每格一次；
-普通 `runs/` 不会自动发布，原始日志、本机配置和任意额外文件不进入导出。
+成本来自 [models.yaml](models.yaml)：每个 runner 的展示名、厂商、按生效日期版本化的官方牌价与汇率。
+发布时按运行日期取当时的价格算出美元成本并冻结，调价只追加新条目，历史记录不重算。
+没有牌价的模型成本显示为 —，不猜。
+
+README 首图由 `docs/data/featured.json` 选定账本里的 2 个任务 × 2 个模型；用例 `core: true` 会进入首页的核心集分组。
 
 </details>
 

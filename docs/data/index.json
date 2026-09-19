@@ -1,0 +1,572 @@
+{
+  "schema_version": 1,
+  "generated_from": [
+    "20260908T080306-1cddfd59",
+    "20260908T081004-a36a7550",
+    "20260908T081318-559a5567",
+    "20260908T083142-8f28bfc0",
+    "20260908T083857-3db91d6a",
+    "20260909T130121-efc1cf98",
+    "20260915T124011-4c12491f"
+  ],
+  "cases": [
+    {
+      "id": "2026-06-02-001-fizzbuzz",
+      "title": "fizzbuzz（种子用例）",
+      "class": "coding",
+      "core": true
+    },
+    {
+      "id": "2026-06-03-001-git-bisect-bug-hunt",
+      "title": "找出引入 stdin hang regression 的 commit",
+      "class": "tool-using",
+      "core": true
+    },
+    {
+      "id": "2026-06-11-001-interactive-html",
+      "title": "将一篇文章变成一个让人愿意读完的网页",
+      "class": "coding",
+      "core": true
+    },
+    {
+      "id": "2026-07-27-002-half-read-response",
+      "title": "half-read-response — AI 只读了返回值的一半，就汇报数据正常",
+      "class": "coding",
+      "core": true
+    },
+    {
+      "id": "2026-09-09-001-pelican-bicycle",
+      "title": "鹈鹕骑自行车",
+      "class": "coding",
+      "core": true
+    },
+    {
+      "id": "2026-09-15-001-flamingo-bicycle",
+      "title": "火烈鸟骑自行车：SVG 动画诊断",
+      "class": "coding",
+      "core": true
+    },
+    {
+      "id": "2026-09-15-002-capybara-bicycle",
+      "title": "卡皮巴拉骑自行车：SVG 动画诊断",
+      "class": "coding",
+      "core": true
+    }
+  ],
+  "runners": [
+    "claude-fable-5.1",
+    "codex-astra",
+    "deepseek-v4-pro",
+    "deepseek-v4.1-flash",
+    "glm-5.3",
+    "glm-5.3-ai-keeping",
+    "glm-5.3-flash",
+    "kimi-k3",
+    "minimax-m3"
+  ],
+  "latest": [
+    {
+      "case": "2026-06-02-001-fizzbuzz",
+      "runner": "claude-fable-5.1",
+      "run_id": "20260908T083142-8f28bfc0",
+      "date": "2026-09-08",
+      "verdict": "未通过",
+      "score": null,
+      "cost_usd": null,
+      "duration_ms": 201772.0,
+      "output": null
+    },
+    {
+      "case": "2026-06-02-001-fizzbuzz",
+      "runner": "codex-astra",
+      "run_id": "20260908T083142-8f28bfc0",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": null,
+      "cost_usd": null,
+      "duration_ms": 42053.0,
+      "output": null
+    },
+    {
+      "case": "2026-06-02-001-fizzbuzz",
+      "runner": "deepseek-v4.1-flash",
+      "run_id": "20260908T080306-1cddfd59",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": null,
+      "cost_usd": null,
+      "duration_ms": 8031.0,
+      "output": null
+    },
+    {
+      "case": "2026-06-02-001-fizzbuzz",
+      "runner": "glm-5.3-ai-keeping",
+      "run_id": "20260908T081318-559a5567",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": null,
+      "cost_usd": null,
+      "duration_ms": 23317.0,
+      "output": null
+    },
+    {
+      "case": "2026-06-02-001-fizzbuzz",
+      "runner": "glm-5.3-flash",
+      "run_id": "20260908T081004-a36a7550",
+      "date": "2026-09-08",
+      "verdict": "未通过",
+      "score": null,
+      "cost_usd": null,
+      "duration_ms": 183138.0,
+      "output": null
+    },
+    {
+      "case": "2026-06-03-001-git-bisect-bug-hunt",
+      "runner": "claude-fable-5.1",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        15.0,
+        15.0
+      ],
+      "cost_usd": 1.107682,
+      "duration_ms": 70737.0,
+      "output": null
+    },
+    {
+      "case": "2026-06-03-001-git-bisect-bug-hunt",
+      "runner": "codex-astra",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        10.0,
+        15.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 132768.0,
+      "output": null
+    },
+    {
+      "case": "2026-06-03-001-git-bisect-bug-hunt",
+      "runner": "deepseek-v4-pro",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        14.0,
+        15.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 439186.0,
+      "output": null
+    },
+    {
+      "case": "2026-06-03-001-git-bisect-bug-hunt",
+      "runner": "deepseek-v4.1-flash",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        15.0,
+        15.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 223501.0,
+      "output": null
+    },
+    {
+      "case": "2026-06-03-001-git-bisect-bug-hunt",
+      "runner": "glm-5.3",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        15.0,
+        15.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 364835.0,
+      "output": null
+    },
+    {
+      "case": "2026-06-03-001-git-bisect-bug-hunt",
+      "runner": "kimi-k3",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        15.0,
+        15.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 250782.0,
+      "output": null
+    },
+    {
+      "case": "2026-06-03-001-git-bisect-bug-hunt",
+      "runner": "minimax-m3",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        14.0,
+        15.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 421209.0,
+      "output": null
+    },
+    {
+      "case": "2026-06-11-001-interactive-html",
+      "runner": "claude-fable-5.1",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        20.0,
+        25.0
+      ],
+      "cost_usd": 5.562078,
+      "duration_ms": 819880.0,
+      "output": "data/cells/2026-06-11-001-interactive-html/claude-fable-5.1/20260908T083857-3db91d6a/default/repeat-0/docs/article.html"
+    },
+    {
+      "case": "2026-06-11-001-interactive-html",
+      "runner": "codex-astra",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        19.0,
+        25.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 684986.0,
+      "output": "data/cells/2026-06-11-001-interactive-html/codex-astra/20260908T083857-3db91d6a/default/repeat-0/docs/article.html"
+    },
+    {
+      "case": "2026-06-11-001-interactive-html",
+      "runner": "deepseek-v4-pro",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        17.0,
+        25.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 2115100.0,
+      "output": "data/cells/2026-06-11-001-interactive-html/deepseek-v4-pro/20260908T083857-3db91d6a/default/repeat-0/docs/article.html"
+    },
+    {
+      "case": "2026-06-11-001-interactive-html",
+      "runner": "deepseek-v4.1-flash",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        18.0,
+        25.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 565595.0,
+      "output": "data/cells/2026-06-11-001-interactive-html/deepseek-v4.1-flash/20260908T083857-3db91d6a/default/repeat-0/docs/article.html"
+    },
+    {
+      "case": "2026-06-11-001-interactive-html",
+      "runner": "glm-5.3",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        18.0,
+        25.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 3793673.0,
+      "output": "data/cells/2026-06-11-001-interactive-html/glm-5.3/20260908T083857-3db91d6a/default/repeat-0/docs/article.html"
+    },
+    {
+      "case": "2026-06-11-001-interactive-html",
+      "runner": "kimi-k3",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        16.0,
+        25.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 1157537.0,
+      "output": "data/cells/2026-06-11-001-interactive-html/kimi-k3/20260908T083857-3db91d6a/default/repeat-0/docs/article.html"
+    },
+    {
+      "case": "2026-06-11-001-interactive-html",
+      "runner": "minimax-m3",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        14.0,
+        25.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 750607.0,
+      "output": "data/cells/2026-06-11-001-interactive-html/minimax-m3/20260908T083857-3db91d6a/default/repeat-0/docs/article.html"
+    },
+    {
+      "case": "2026-07-27-002-half-read-response",
+      "runner": "claude-fable-5.1",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        10.0,
+        10.0
+      ],
+      "cost_usd": 0.823596,
+      "duration_ms": 44595.0,
+      "output": null
+    },
+    {
+      "case": "2026-07-27-002-half-read-response",
+      "runner": "codex-astra",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        10.0,
+        10.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 69534.0,
+      "output": null
+    },
+    {
+      "case": "2026-07-27-002-half-read-response",
+      "runner": "deepseek-v4-pro",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        10.0,
+        10.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 122577.0,
+      "output": null
+    },
+    {
+      "case": "2026-07-27-002-half-read-response",
+      "runner": "deepseek-v4.1-flash",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        10.0,
+        10.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 28497.0,
+      "output": null
+    },
+    {
+      "case": "2026-07-27-002-half-read-response",
+      "runner": "glm-5.3",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        10.0,
+        10.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 90717.0,
+      "output": null
+    },
+    {
+      "case": "2026-07-27-002-half-read-response",
+      "runner": "kimi-k3",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        10.0,
+        10.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 101758.0,
+      "output": null
+    },
+    {
+      "case": "2026-07-27-002-half-read-response",
+      "runner": "minimax-m3",
+      "run_id": "20260908T083857-3db91d6a",
+      "date": "2026-09-08",
+      "verdict": "通过",
+      "score": [
+        9.0,
+        10.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 52577.0,
+      "output": null
+    },
+    {
+      "case": "2026-09-09-001-pelican-bicycle",
+      "runner": "claude-fable-5.1",
+      "run_id": "20260909T130121-efc1cf98",
+      "date": "2026-09-09",
+      "verdict": "通过",
+      "score": [
+        18.0,
+        20.0
+      ],
+      "cost_usd": 0.979648,
+      "duration_ms": 74446.0,
+      "output": "data/cells/2026-09-09-001-pelican-bicycle/claude-fable-5.1/20260909T130121-efc1cf98/default/repeat-0/pelican.svg"
+    },
+    {
+      "case": "2026-09-09-001-pelican-bicycle",
+      "runner": "codex-astra",
+      "run_id": "20260909T130121-efc1cf98",
+      "date": "2026-09-09",
+      "verdict": "通过",
+      "score": [
+        20.0,
+        20.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 171690.0,
+      "output": "data/cells/2026-09-09-001-pelican-bicycle/codex-astra/20260909T130121-efc1cf98/default/repeat-0/pelican.svg"
+    },
+    {
+      "case": "2026-09-09-001-pelican-bicycle",
+      "runner": "deepseek-v4-pro",
+      "run_id": "20260909T130121-efc1cf98",
+      "date": "2026-09-09",
+      "verdict": "通过",
+      "score": [
+        18.0,
+        20.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 875785.0,
+      "output": "data/cells/2026-09-09-001-pelican-bicycle/deepseek-v4-pro/20260909T130121-efc1cf98/default/repeat-0/pelican.svg"
+    },
+    {
+      "case": "2026-09-09-001-pelican-bicycle",
+      "runner": "deepseek-v4.1-flash",
+      "run_id": "20260909T130121-efc1cf98",
+      "date": "2026-09-09",
+      "verdict": "通过",
+      "score": [
+        18.0,
+        20.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 149664.0,
+      "output": "data/cells/2026-09-09-001-pelican-bicycle/deepseek-v4.1-flash/20260909T130121-efc1cf98/default/repeat-0/pelican.svg"
+    },
+    {
+      "case": "2026-09-09-001-pelican-bicycle",
+      "runner": "glm-5.3",
+      "run_id": "20260909T130121-efc1cf98",
+      "date": "2026-09-09",
+      "verdict": "通过",
+      "score": [
+        19.0,
+        20.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 932258.0,
+      "output": "data/cells/2026-09-09-001-pelican-bicycle/glm-5.3/20260909T130121-efc1cf98/default/repeat-0/pelican.svg"
+    },
+    {
+      "case": "2026-09-09-001-pelican-bicycle",
+      "runner": "kimi-k3",
+      "run_id": "20260909T130121-efc1cf98",
+      "date": "2026-09-09",
+      "verdict": "通过",
+      "score": [
+        18.0,
+        20.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 110951.0,
+      "output": "data/cells/2026-09-09-001-pelican-bicycle/kimi-k3/20260909T130121-efc1cf98/default/repeat-0/pelican.svg"
+    },
+    {
+      "case": "2026-09-09-001-pelican-bicycle",
+      "runner": "minimax-m3",
+      "run_id": "20260909T130121-efc1cf98",
+      "date": "2026-09-09",
+      "verdict": "通过",
+      "score": [
+        16.0,
+        20.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 147199.0,
+      "output": "data/cells/2026-09-09-001-pelican-bicycle/minimax-m3/20260909T130121-efc1cf98/default/repeat-0/pelican.svg"
+    },
+    {
+      "case": "2026-09-15-001-flamingo-bicycle",
+      "runner": "glm-5.3",
+      "run_id": "20260915T124011-4c12491f",
+      "date": "2026-09-15",
+      "verdict": "通过",
+      "score": [
+        24.0,
+        25.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 1759807.0,
+      "output": "data/cells/2026-09-15-001-flamingo-bicycle/glm-5.3/20260915T124011-4c12491f/default/repeat-0/flamingo.svg"
+    },
+    {
+      "case": "2026-09-15-001-flamingo-bicycle",
+      "runner": "kimi-k3",
+      "run_id": "20260915T124011-4c12491f",
+      "date": "2026-09-15",
+      "verdict": "通过",
+      "score": [
+        25.0,
+        25.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 650011.0,
+      "output": "data/cells/2026-09-15-001-flamingo-bicycle/kimi-k3/20260915T124011-4c12491f/default/repeat-0/flamingo.svg"
+    },
+    {
+      "case": "2026-09-15-002-capybara-bicycle",
+      "runner": "glm-5.3",
+      "run_id": "20260915T124011-4c12491f",
+      "date": "2026-09-15",
+      "verdict": "通过",
+      "score": [
+        29.0,
+        30.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 1354821.0,
+      "output": "data/cells/2026-09-15-002-capybara-bicycle/glm-5.3/20260915T124011-4c12491f/default/repeat-0/capybara.svg"
+    },
+    {
+      "case": "2026-09-15-002-capybara-bicycle",
+      "runner": "kimi-k3",
+      "run_id": "20260915T124011-4c12491f",
+      "date": "2026-09-15",
+      "verdict": "未通过",
+      "score": [
+        24.0,
+        30.0
+      ],
+      "cost_usd": null,
+      "duration_ms": 339375.0,
+      "output": "data/cells/2026-09-15-002-capybara-bicycle/kimi-k3/20260915T124011-4c12491f/default/repeat-0/capybara.svg"
+    }
+  ]
+}

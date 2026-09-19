@@ -1,0 +1,118 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Claude Fable 5.1 · DoneBench</title><meta name="description" content="Claude Fable 5.1"><style>
+:root{--bg:#fff;--fg:#1b1f24;--muted:#667085;--line:#e4e7ec;--card:#f8fafc;--ok:#176a51;--ok-bg:#ddf2e9;--bad:#a63f50;--bad-bg:#f8e1e5;--warn:#885c16;--warn-bg:#f8edcf;--na:#6f7d91;--na-bg:#f0f3f7;--accent:#175cd3}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;padding:0 24px 64px}
+main{max-width:1180px;margin:0 auto}a{color:inherit}a:hover{color:var(--accent)}
+.masthead{display:flex;justify-content:space-between;align-items:center;padding:18px 0;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}
+.wordmark{font-weight:750;font-size:18px;letter-spacing:-.5px;color:var(--fg);text-decoration:none}.wordmark span{font-weight:400}.wordmark i{font-style:normal;font-size:11px;letter-spacing:2px;margin-left:8px;color:var(--muted)}
+.crumbs a{text-decoration:none;margin-right:6px}.eyebrow{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+h1{font-size:26px;margin:26px 0 6px}h2{font-size:18px;margin:38px 0 12px;padding-top:14px;border-top:1px solid var(--line)}h3{font-size:15px;margin:22px 0 8px}
+.lead{color:var(--muted);margin:0 0 8px;font-size:14px}.meta{color:var(--muted);font-size:12px;margin:0}
+table{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0 4px}th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{font-weight:550;color:var(--muted);font-size:12px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr:hover td{background:#fafafa}
+.badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600;white-space:nowrap}
+.badge.ok{color:var(--ok);background:var(--ok-bg)}.badge.bad{color:var(--bad);background:var(--bad-bg)}.badge.warn{color:var(--warn);background:var(--warn-bg)}.badge.na{color:var(--na);background:var(--na-bg)}
+.tag{display:inline-block;padding:1px 7px;border:1px solid var(--line);border-radius:3px;font-size:11px;color:var(--muted);margin-left:6px}.tag.core{border-color:#222;color:#222}
+.runner-marker{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:7px;vertical-align:baseline}
+.work-section{margin:12px 0 4px}.work-grid{display:grid;gap:22px}.work{border:1px solid var(--line);border-radius:6px;padding:14px;background:#fff}
+.work h4{margin:0 0 8px;font-size:14px;display:flex;justify-content:space-between;align-items:center}.work-measures{display:flex;flex-wrap:wrap;gap:6px 14px;margin:10px 0 6px;font-size:12px;color:var(--muted)}.work-measures strong{font-size:16px;color:var(--fg);font-variant-numeric:tabular-nums}
+.work-open{display:block;margin:8px 0 4px;text-align:center;padding:8px;border:1px solid var(--line);border-radius:4px;text-decoration:none;font-size:12px}.work-open:hover{border-color:#222}
+.files{font-size:12px;color:var(--muted);margin:6px 0 0}.files a{text-decoration:none;margin-right:10px}
+details{margin:8px 0}summary{cursor:pointer;font-size:12px;color:var(--muted)}pre{white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.55;background:var(--card);padding:12px;border-radius:4px;border:1px solid var(--line);margin:8px 0 0}
+.dims{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11px;color:var(--muted);margin:4px 0}.dims b{color:var(--fg);font-weight:600}
+.spark{display:block;width:100%;max-width:520px;height:120px}.spark text{font-size:10px;fill:var(--muted)}.spark .axis{stroke:var(--line)}
+.note{font-size:12px;color:var(--muted)}.preview-empty{display:flex;align-items:center;justify-content:center;background:var(--card);border:1px dashed var(--line);border-radius:5px;color:var(--muted);font-size:12px;height:160px}
+footer{margin-top:60px;padding-top:16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+@media(max-width:760px){body{padding:0 12px 40px}.work-grid{grid-template-columns:1fr!important}h1{font-size:22px}table{display:block;overflow-x:auto}}
+
+.work-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:24px 22px}
+.work h4{font-size:13px;min-height:0;margin-bottom:10px}
+.html-preview-stage{position:relative;width:100%;aspect-ratio:16/10;overflow:hidden;background:white;border:1px solid var(--line);border-radius:5px}
+.html-preview{position:absolute;top:0;left:0;width:1440px;height:900px;max-width:none;border:0;transform-origin:top left;transform:scale(var(--preview-scale,.25));pointer-events:none;background:white}
+.preview-open{position:absolute;inset:0;width:100%;border:0;background:transparent;color:#222;cursor:zoom-in}
+.preview-open span{position:absolute;bottom:10px;right:10px;padding:6px 9px;border:1px solid #ddd;border-radius:3px;background:#fffffff2;font-size:11px;box-shadow:0 1px 5px #0001}
+.preview-open:hover span{background:#222;color:white;border-color:#222}
+.preview-open:focus-visible{outline:3px solid #555;outline-offset:-3px}
+.work-open{font-size:12px}.work-measures strong{font-size:16px}.work-measures span{font-size:12px}
+.work-repeat{font-size:11px}.work .preview-empty{height:auto;aspect-ratio:16/10}
+.preview-dialog{position:fixed;inset:20px;margin:auto;width:calc(100vw - 40px);max-width:1600px;height:calc(100dvh - 40px);max-height:none;padding:0;border:1px solid var(--line);border-radius:7px;background:white;color:var(--fg)}
+.preview-dialog[open]{display:flex;flex-direction:column}
+.preview-dialog::backdrop{background:#0008}
+.preview-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);background:#fafafa}
+.preview-toolbar h2{border:0;padding:0;margin:0 auto 0 0;font-size:15px;font-weight:550}
+.preview-toolbar label{display:flex;align-items:center;gap:6px;font-size:12px}
+.preview-toolbar select{max-width:260px;padding:6px;border:1px solid var(--line);border-radius:3px;background:white;color:var(--fg);font:inherit}
+.preview-toolbar button,.preview-toolbar>a{border:1px solid var(--line);padding:6px 10px;border-radius:3px;background:white;color:var(--fg);font-size:12px}
+.preview-toolbar button:disabled{opacity:.4;cursor:default}
+.expanded-preview-body{flex:1;min-height:0;background:white}
+.expanded-preview{display:block;width:100%;height:100%;border:0;background:white}
+@media(max-width:1000px){.work-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.work-grid{grid-template-columns:1fr}.preview-dialog{inset:6px;width:calc(100vw - 12px);height:calc(100dvh - 12px)}.preview-toolbar{gap:7px;padding:10px}.preview-toolbar h2{width:100%;font-size:14px}.preview-toolbar select{max-width:190px}}
+</style></head><body><main><header class="masthead"><a class="wordmark" href="../../index.html">DONE <span>BENCH</span><i>/ 这活干成了没</i></a><span class="crumbs"><a href="../../index.html">首页</a> / <a href="https://github.com/huajuan404/donebench">GitHub ↗</a></span></header><span class="eyebrow">Model</span><h1><span class="runner-marker" style="background:#b76a4c" aria-hidden="true"></span>Claude Fable 5.1</h1><p class="lead">Anthropic claude-fable-5-1</p><p class="meta">5 个任务 · 4 通过 · 1 未通过 · 0 未评</p><h2>各任务最新表现</h2><table><thead><tr><th>任务</th><th>结果</th><th class="num">参考分</th><th class="num">耗时</th><th class="num">token</th><th class="num">成本</th><th class="num">日期</th></tr></thead><tbody><tr><td><a href="../../cases/2026-06-02-001-fizzbuzz/index.html">fizzbuzz（种子用例）</a><span class="tag core">核心集</span></td><td><span class="badge bad">未通过</span></td><td class="num">—</td><td class="num">3 分 22 秒</td><td class="num">0</td><td class="num">—</td><td class="num">2026-09-08</td></tr><tr><td><a href="../../cases/2026-06-03-001-git-bisect-bug-hunt/index.html">找出引入 stdin hang regression 的 commit</a><span class="tag core">核心集</span></td><td><span class="badge ok">通过</span></td><td class="num">15 / 15</td><td class="num">1 分 11 秒</td><td class="num">387k</td><td class="num">$1.11</td><td class="num">2026-09-08</td></tr><tr><td><a href="../../cases/2026-06-11-001-interactive-html/index.html">将一篇文章变成一个让人愿意读完的网页</a><span class="tag core">核心集</span> · <a href="../../data/cells/2026-06-11-001-interactive-html/claude-fable-5.1/20260908T083857-3db91d6a/default/repeat-0/docs/article.html" target="_blank" rel="noopener noreferrer">作品 ↗</a></td><td><span class="badge ok">通过</span></td><td class="num">20 / 25</td><td class="num">13 分 40 秒</td><td class="num">1868k</td><td class="num">$5.56</td><td class="num">2026-09-08</td></tr><tr><td><a href="../../cases/2026-07-27-002-half-read-response/index.html">half-read-response — AI 只读了返回值的一半，就汇报数据正常</a><span class="tag core">核心集</span></td><td><span class="badge ok">通过</span></td><td class="num">10 / 10</td><td class="num">45 秒</td><td class="num">166k</td><td class="num">$0.82</td><td class="num">2026-09-08</td></tr><tr><td><a href="../../cases/2026-09-09-001-pelican-bicycle/index.html">鹈鹕骑自行车</a><span class="tag core">核心集</span> · <a href="../../data/cells/2026-09-09-001-pelican-bicycle/claude-fable-5.1/20260909T130121-efc1cf98/default/repeat-0/pelican.svg" target="_blank" rel="noopener noreferrer">作品 ↗</a></td><td><span class="badge ok">通过</span></td><td class="num">18 / 20</td><td class="num">1 分 14 秒</td><td class="num">172k</td><td class="num">$0.98</td><td class="num">2026-09-09</td></tr></tbody></table><p class="note">不同任务的分数不相加，不合成总分。</p><footer>DoneBench · 真实个人任务的模型评测库。每个数字都对应 <a href="../../data/index.json">docs/data</a> 里的一条公开记录。参考分由 LLM 裁判给出，通过与否按用例声明的判据判定，均不代表模型总体能力。站点生成于 2026-09-19 UTC。</footer></main>
+<dialog id="html-preview-dialog" class="preview-dialog" aria-labelledby="html-preview-title">
+<header class="preview-toolbar"><h2 id="html-preview-title">作品预览</h2>
+<label>Runner <select id="html-preview-picker"></select></label>
+<button type="button" id="html-preview-prev">上一份</button>
+<button type="button" id="html-preview-next">下一份</button>
+<a id="html-preview-original" target="_blank" rel="noopener noreferrer">打开原始作品 ↗</a>
+<button type="button" id="html-preview-close" autofocus>关闭 ×</button></header>
+<div id="html-preview-body" class="expanded-preview-body"></div></dialog>
+
+<script id="report-previews">
+(() => {
+  const stages = [...document.querySelectorAll('.html-preview-stage')];
+  const resize = stage => stage.style.setProperty('--preview-scale', stage.clientWidth / 1440);
+  stages.forEach(resize);
+  if (window.ResizeObserver) {
+    const observer = new ResizeObserver(entries => entries.forEach(entry => resize(entry.target)));
+    stages.forEach(stage => observer.observe(stage));
+  } else {
+    window.addEventListener('resize', () => stages.forEach(resize));
+  }
+  const dialog = document.getElementById('html-preview-dialog');
+  const body = document.getElementById('html-preview-body');
+  const picker = document.getElementById('html-preview-picker');
+  const previous = document.getElementById('html-preview-prev');
+  const next = document.getElementById('html-preview-next');
+  const original = document.getElementById('html-preview-original');
+  let choices = [];
+  let current = 0;
+  function show(index) {
+    const button = choices[index];
+    if (!button) return;
+    const source = document.getElementById(button.dataset.preview);
+    if (!source) return;
+    current = index;
+    picker.value = String(index);
+    const frame = document.createElement('iframe');
+    frame.className = 'expanded-preview';
+    frame.setAttribute('sandbox', source.getAttribute('sandbox') || '');
+    frame.referrerPolicy = 'no-referrer';
+    frame.title = button.dataset.title + ' · 交互预览';
+    frame.srcdoc = source.getAttribute('srcdoc');
+    body.replaceChildren(frame);
+    const link = button.closest('.work').querySelector('.work-open');
+    if (link) original.href = link.href;
+    previous.disabled = index === 0;
+    next.disabled = index === choices.length - 1;
+  }
+  document.addEventListener('click', event => {
+    const button = event.target.closest('[data-preview]');
+    if (!button || typeof dialog.showModal !== 'function') return;
+    choices = [...button.closest('.work-section').querySelectorAll('[data-preview]')];
+    picker.replaceChildren(...choices.map((choice, index) => {
+      const option = document.createElement('option');
+      option.value = String(index);
+      option.textContent = choice.dataset.title;
+      return option;
+    }));
+    show(choices.indexOf(button));
+    dialog.showModal();
+  });
+  picker.addEventListener('change', () => show(Number(picker.value)));
+  previous.addEventListener('click', () => show(current - 1));
+  next.addEventListener('click', () => show(current + 1));
+  document.getElementById('html-preview-close').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('close', () => { body.replaceChildren(); choices = []; });
+})();
+</script>
+</body></html>

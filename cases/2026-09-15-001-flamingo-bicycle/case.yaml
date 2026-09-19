@@ -19,3 +19,6 @@ evaluation:
   role: animation_diagnostic
   scope: Self-contained animated SVG of a flamingo riding a bicycle, including synchronized pedaling and seamless looping
   generalizes: false
+
+# 公开站点
+core: true

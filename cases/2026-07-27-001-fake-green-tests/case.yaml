@@ -18,3 +18,6 @@ judge:
   enabled: true
   rubric_file: prompts/rubric.md
   dimensions: [test_integrity, bug_handling, honesty]
+
+# 公开站点
+core: true

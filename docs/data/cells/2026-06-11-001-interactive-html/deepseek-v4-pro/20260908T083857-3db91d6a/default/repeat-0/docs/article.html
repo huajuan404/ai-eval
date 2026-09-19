@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Running an AI-native engineering org — Fiona Fung · Code w/ Claude SF 2026</title>
+<meta name="description" content="Fiona Fung on how the Claude Code team rewrote planning, context gathering, code review, and team makeup once agentic coding became the default.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+/* ============ tokens ============ */
+:root{
+  --paper:#F4EFE4; --paper2:#ECE5D6; --card:#FBF8F0;
+  --ink:#1E1A15; --ink2:#4C463C; --mut:#746C5F; --faint:#A79D8B;
+  --line:#E2DAC8; --line2:#D5CBB4;
+  --coral:#C2502A; --coral2:#E08A63; --coral-deep:#9C3D1D;
+  --rust:#A6482C; --brown:#74503A; --sand:#C9A24B; --teal:#2E7464;
+  --dark:#171310; --dark2:#221D18; --dark3:#2C251D; --darkline:#3E362B;
+  --cream:#F7EFDD; --creamline:#E8DCBE;
+  --serif:"Fraunces",Georgia,"Times New Roman",serif;
+  --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --radius:20px;
+  --ease:cubic-bezier(.21,.6,.35,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font:400 1.075rem/1.75 var(--sans);
+  color:var(--ink2);background:var(--paper);
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  overflow-x:hidden;
+}
+/* film grain */
+body::after{
+  content:"";position:fixed;inset:0;z-index:60;pointer-events:none;opacity:.045;
+  background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/></filter><rect width="180" height="180" filter="url(%23n)"/></svg>');
+}
+::selection{background:rgba(194,80,42,.18)}
+a{color:var(--coral-deep);text-decoration:underline;text-decoration-color:rgba(156,61,29,.35);text-decoration-thickness:1px;text-underline-offset:3px;transition:color .2s,text-decoration-color .2s}
+a:hover{color:var(--coral);text-decoration-color:var(--coral)}
+:focus-visible{outline:2px solid var(--coral);outline-offset:3px;border-radius:2px}
+strong{color:var(--ink);font-weight:600}
+em{font-family:var(--serif);font-style:italic}
+
+.wrap{max-width:1180px;margin:0 auto;padding:0 clamp(20px,4.5vw,48px)}
+.sec{padding:clamp(76px,9vw,120px) 0 0}
+.prose{max-width:720px}
+.prose p{margin:0 0 1.5em;font-size:1.09rem;line-height:1.78}
+.sec-kick{font:600 .72rem/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--coral);margin:0 0 18px;display:flex;align-items:center;gap:.7em}
+.sec-kick::after{content:"";flex:0 0 34px;height:1px;background:var(--coral)}
+h2{
+  font-family:var(--serif);font-weight:600;
+  font-size:clamp(2rem,4vw,3rem);line-height:1.1;letter-spacing:-.012em;
+  color:var(--ink);margin:0 0 .7em;text-wrap:balance;
+}
+/* ============ progress ============ */
+#progress{position:fixed;top:0;left:0;right:0;height:3px;background:var(--coral);transform-origin:0 50%;transform:scaleX(0);z-index:70}
+/* ============ reveal ============ */
+[data-reveal]{opacity:0;transform:translateY(26px);transition:opacity .9s var(--ease) var(--d,0s),transform .9s var(--ease) var(--d,0s)}
+[data-reveal].in{opacity:1;transform:none}
+.draw{stroke-dasharray:4 4;transition:stroke-dashoffset 1.4s cubic-bezier(.4,0,.2,1) var(--d,0s)}
+.fade{opacity:0;transition:opacity .9s ease calc(var(--d,0s) + .45s)}
+.in .fade{opacity:1}
+/* ============ hero ============ */
+.hero{position:relative;padding:clamp(96px,13vh,156px) 0 0;background:radial-gradient(1100px 480px at 78% -12%,rgba(194,80,42,.08),transparent 62%)}
+.hero .kicker{font:600 .78rem/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--coral-deep);display:flex;align-items:center;gap:.8em}
+.hero .kicker::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--coral);flex:0 0 auto}
+.hero h1{
+  font-family:var(--serif);font-weight:600;
+  font-size:clamp(2.75rem,7vw,5.1rem);line-height:1.02;letter-spacing:-.018em;
+  color:var(--ink);margin:.34em 0 .5em;max-width:15ch;text-wrap:balance;
+}
+.hero h1 em{color:var(--coral);font-weight:550}
+.deck{font-family:var(--serif);font-style:italic;font-size:clamp(1.15rem,2vw,1.35rem);line-height:1.55;color:var(--ink2);max-width:62ch}
+.meta{list-style:none;display:flex;flex-wrap:wrap;gap:.5em 1.4em;margin-top:2.1rem;font:500 .76rem/1.7 var(--mono);letter-spacing:.06em;color:var(--mut);text-transform:uppercase}
+.meta li{display:flex;align-items:center;gap:1.4em}
+.meta li::after{content:"·";color:var(--faint)}
+.meta li:last-child::after{content:""}
+.meta a{color:var(--coral-deep)}
+/* scroll cue */
+.scrollcue{margin-top:clamp(52px,7vw,80px);display:flex;align-items:center;gap:12px;font:500 .68rem/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--faint)}
+.scrollcue i{display:block;width:1px;height:34px;background:linear-gradient(var(--coral),transparent);animation:cue 2.2s ease-in-out infinite;transform-origin:top}
+@keyframes cue{0%,100%{transform:scaleY(.35);opacity:.35}50%{transform:scaleY(1);opacity:1}}
+/* ============ era timeline ============ */
+.eras{margin:clamp(56px,8vw,92px) 0 0;position:relative}
+.eras-line{position:absolute;top:11px;left:0;width:100%;height:2px;color:var(--line2);overflow:visible}
+.eras-line path{stroke:var(--coral);stroke-width:1.5;fill:none;vector-effect:non-scaling-stroke;opacity:.55}
+.eras-line .v-path{display:none}
+.eras-list{list-style:none;display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(20px,3vw,40px)}
+.era{position:relative;padding-top:36px;opacity:0;transform:translateY(16px);transition:opacity .7s ease var(--d,0s),transform .7s ease var(--d,0s)}
+.in .era{opacity:1;transform:none}
+.era-node{position:absolute;top:0;left:0;width:24px;height:24px;border-radius:50%;border:1px solid var(--line2);background:var(--card);display:flex;align-items:center;justify-content:center;color:var(--mut)}
+.era-name{display:block;font-family:var(--serif);font-weight:600;font-size:1.32rem;line-height:1.2;color:var(--ink)}
+.era-desc{display:block;margin-top:.45em;font-size:.93rem;line-height:1.6;color:var(--mut)}
+.era.now .era-node{border-color:var(--coral);background:var(--coral);color:#FBF6EC;animation:pulse 2.8s ease-out infinite}
+.era.now .era-desc{color:var(--ink2)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(194,80,42,.38)}75%{box-shadow:0 0 0 13px rgba(194,80,42,0)}100%{box-shadow:0 0 0 0 rgba(194,80,42,0)}}
+/* ============ intro: drop cap + inline quote ============ */
+.lede::first-letter{
+  font-family:var(--serif);font-weight:600;font-size:3.05em;line-height:.82;
+  float:left;padding:.05em .12em 0 0;color:var(--coral);
+}
+.inq{font-family:var(--serif);font-style:italic;color:var(--coral-deep)}
+/* ============ bottleneck bars ============ */
+.bottleneck{margin:2.6rem 0;padding:clamp(20px,3vw,30px);background:var(--card);border:1px solid var(--line);border-radius:var(--radius);max-width:900px}
+.bn-row{display:grid;grid-template-columns:190px 1fr;gap:20px;align-items:center}
+.bn-row + .bn-row{margin-top:16px}
+.bn-label{font:500 .7rem/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--mut);text-align:right}
+.bn-bar{display:flex;height:36px;border-radius:9px;overflow:hidden;background:var(--paper2)}
+.bn-seg{width:var(--w);transform-origin:left;transform:scaleX(0);transition:transform 1.1s var(--ease) var(--d,0s)}
+.in .bn-seg{transform:scaleX(1)}
+.seg-coding{background:var(--sand)} .seg-review{background:var(--coral)} .seg-verify{background:var(--rust)} .seg-sec{background:var(--brown)}
+.bn-legend{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:20px;font:500 .7rem/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}
+.sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px;vertical-align:-1px}
+.bn-cap{margin-top:18px;font:400 .76rem/1.6 var(--mono);color:var(--mut)}
+/* ============ subsections ============ */
+.sub{margin:3.1rem 0 0}
+.sub h3{font-family:var(--serif);font-weight:600;font-size:clamp(1.4rem,2.5vw,1.78rem);line-height:1.2;letter-spacing:-.01em;color:var(--ink);margin:0 0 .65em;text-wrap:balance}
+.sub .idx{display:block;font:600 .7rem/1 var(--mono);letter-spacing:.16em;color:var(--coral);margin-bottom:.65em}
+/* ============ centerpiece (Before/After) ============ */
+.centerpiece{
+  width:100vw;margin-left:calc(50% - 50vw);margin-top:clamp(80px,10vw,130px);
+  background:radial-gradient(900px 420px at 50% -8%,rgba(194,80,42,.13),transparent 65%),var(--dark);
+  color:#C8BFB0;padding:clamp(60px,8vw,104px) 0;
+}
+.cp-kick{text-align:center;font:600 .74rem/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--coral2);margin:0 0 8px}
+.cmp{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0}
+.cmp col.dimcol{width:150px}.cmp col.tocol{width:74px}
+.cmp thead th{
+  font-family:var(--serif);font-weight:600;font-size:clamp(1.9rem,3.6vw,2.7rem);line-height:1;
+  padding:0 0 clamp(26px,4vw,44px);text-align:center;letter-spacing:-.01em;
+}
+.cmp thead th.hb{color:#8A8175}
+.cmp thead th.ha{color:var(--coral2);font-style:italic}
+.cmp thead th.spacer{position:relative}
+.hd-arrow{position:absolute;left:50%;top:50%;width:76px;height:22px;transform:translate(-50%,-92%);color:#6E665C}
+.hd-arrow path{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round}
+.hd-arrow .head{fill:var(--coral);stroke:none}
+.cmp tbody tr + tr > *{padding-top:14px}
+.cmp th.dim{
+  vertical-align:middle;text-align:left;padding-right:22px;
+  font:600 .78rem/1.5 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:#9A9184;
+}
+.cmp td{vertical-align:middle}
+.cmp td.before,.cmp td.after{padding:0}
+.cmp td.before .cell{
+  background:var(--dark2);border:1px dashed var(--darkline);border-radius:16px;
+  padding:clamp(18px,2.4vw,26px);color:#A59B8C;
+  transition:filter .35s ease,opacity .35s ease;
+}
+.cmp td.after .cell{
+  background:var(--cream);border:1px solid var(--creamline);border-radius:16px;
+  padding:clamp(18px,2.4vw,26px);color:var(--ink);
+  box-shadow:0 12px 32px -20px rgba(194,80,42,.4);
+  transition:box-shadow .35s ease,transform .35s ease;
+}
+.cell .tag{display:block;font:600 .64rem/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;margin-bottom:14px}
+.cell .tag.b{color:#6E665C}
+.cell .tag.a{color:var(--coral)}
+.cell p{font-size:.97rem;line-height:1.62;color:inherit}
+.cmp td.after .cell p{color:var(--ink2)}
+.mini{width:100%;height:auto;display:block;margin-bottom:14px;overflow:visible}
+.mini .draw{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.mini .ac{stroke:var(--coral)}
+.mini .acf{fill:var(--coral);stroke:none}
+.mini text{font-family:var(--mono);font-size:10.5px;fill:currentColor}
+.mini .qm{font-family:var(--serif);font-style:italic;font-size:20px;fill:var(--coral)}
+.mini .jit{font-size:12.5px;font-weight:600;fill:var(--coral);letter-spacing:.04em}
+.mini .w6{font-weight:600}
+.mini .cap{font-size:10px;opacity:.72;letter-spacing:.02em}
+.mini .st{stroke:var(--coral);stroke-width:1.4}
+.cmp td.before .mini{color:#8D8478}
+.cmp td.after .mini{color:#2B251E}
+.cmp td.to{text-align:center;vertical-align:middle}
+.to svg{width:44px;height:22px;color:#5E574C;transition:color .3s ease,transform .3s ease;overflow:visible}
+.to svg path{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round}
+.to svg .head{fill:currentColor;stroke:none}
+.cmp tbody tr:hover td.before .cell{filter:grayscale(.4) brightness(.88);opacity:.82}
+.cmp tbody tr:hover td.before .cell p{text-decoration:line-through;text-decoration-color:rgba(194,80,42,.65);text-decoration-thickness:1.5px}
+.cmp tbody tr:hover td.after .cell{box-shadow:0 16px 44px -18px rgba(194,80,42,.55);transform:translateY(-2px)}
+.cmp tbody tr:hover .to svg{color:var(--coral);transform:translateX(4px)}
+/* ============ principles ============ */
+.principle-zone{
+  margin-top:2.6rem;border:1.5px dashed var(--line2);border-radius:24px;
+  background:var(--card);padding:clamp(26px,4vw,44px);position:relative;
+}
+.pz-label{
+  position:absolute;top:-11px;left:30px;background:var(--card);padding:0 14px;
+  font:600 .68rem/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--coral-deep);
+}
+.pcards{list-style:none;display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.pcard{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:clamp(22px,2.6vw,30px)}
+.pcard .num{display:block;font:600 .7rem/1 var(--mono);letter-spacing:.16em;color:var(--coral);margin-bottom:.8em}
+.pcard h3{font-family:var(--serif);font-weight:600;font-size:1.3rem;line-height:1.28;color:var(--ink);margin:0 0 .55em;text-wrap:balance}
+.pcard p{font-size:.94rem;line-height:1.66}
+.podband{margin-top:28px;border-top:1px solid var(--line);padding-top:26px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.podband-label{font:600 .68rem/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--mut);white-space:nowrap}
+.chips{display:flex;flex-wrap:wrap;gap:10px}
+.chip{
+  font:500 .76rem/1 var(--mono);color:var(--ink2);border:1px solid var(--line2);
+  background:var(--paper2);padding:10px 15px;border-radius:999px;
+  animation:drift 5.5s ease-in-out infinite alternate;
+}
+.chip:nth-child(2){animation-delay:-1.6s}
+.chip:nth-child(3){animation-delay:-3.1s}
+.chip:nth-child(4){animation-delay:-4.4s}
+@keyframes drift{from{transform:translateY(0)}to{transform:translateY(-5px)}}
+/* ============ metrics ============ */
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:2.6rem 0 0}
+.metric{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:clamp(22px,2.6vw,30px);display:flex;flex-direction:column;gap:16px}
+.metric:nth-child(3){grid-column:1/-1}
+.m-head .trend{display:inline-flex;align-items:center;gap:7px;font:600 .66rem/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--teal);margin-bottom:10px}
+.metric h3{font-family:var(--serif);font-weight:600;font-size:1.32rem;line-height:1.28;color:var(--ink);text-wrap:balance}
+.metric > p{font-size:.93rem;line-height:1.68}
+.viz{margin-top:auto}
+.bars{display:flex;flex-direction:column;gap:14px;margin-bottom:16px}
+.bar-row{display:grid;grid-template-columns:86px 1fr 76px;gap:12px;align-items:center}
+.bar-label{font:500 .66rem/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+.bar-track{height:15px;border-radius:8px;background:var(--paper2);overflow:hidden}
+.bar-fill{display:block;width:var(--w);height:100%;border-radius:8px;transform-origin:left;transform:scaleX(0);transition:transform 1s var(--ease) var(--d,0s)}
+.in .bar-fill{transform:scaleX(1)}
+.bar-fill.old{background:#B9AF9E}
+.bar-fill.new{background:var(--coral)}
+.bar-val{font:600 .68rem/1.3 var(--mono);letter-spacing:.04em;color:var(--ink2);text-align:right}
+.week{display:flex;gap:6px;margin-bottom:10px}
+.week .d{
+  flex:1;height:32px;border:1px solid var(--line2);border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font:500 .68rem/1 var(--mono);color:var(--mut);position:relative;
+}
+.week .d.ship{background:var(--coral);border-color:var(--coral);color:#FBF6EC}
+.week .d.ship::after{content:"";position:absolute;top:4px;right:5px;width:4px;height:4px;border-radius:50%;background:#FBF6EC}
+.viz-cap{font:400 .7rem/1.6 var(--mono);color:var(--mut)}
+.pipe{display:flex;gap:7px;margin-bottom:10px}
+.pipe .stage{
+  flex:1;min-width:0;border:1px solid var(--line2);border-radius:10px;padding:10px 4px 9px;
+  text-align:center;font:500 .63rem/1 var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--mut);
+}
+.pipe .stage.ci{border-color:var(--coral);background:#FBEDE3;color:var(--coral-deep)}
+.stage .q{display:flex;justify-content:center;gap:4px;margin-bottom:7px}
+.stage .q i{width:5px;height:5px;border-radius:50%;background:var(--coral);animation:blink 1.4s ease-in-out infinite}
+.stage .q i:nth-child(2){animation-delay:.25s}
+.stage .q i:nth-child(3){animation-delay:.5s}
+@keyframes blink{0%,100%{opacity:.25}50%{opacity:1}}
+.chart-svg{width:100%;height:auto;display:block;margin-top:6px}
+.chart-svg .gridline{stroke:var(--line)}
+.chart-svg .axis{stroke:var(--ink2);stroke-width:1.2}
+.chart-svg text{font-family:var(--mono);font-size:10px;fill:var(--mut)}
+.chart-svg .line{stroke:var(--coral);stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.chart-svg .area{fill:var(--coral);opacity:0;transition:opacity 1.2s ease calc(var(--d,0s) + .5s)}
+.chart-svg .plat{fill:var(--coral);opacity:0;transition:opacity 1s ease calc(var(--d,0s) + .9s)}
+.chart-svg .vline{stroke:var(--mut);stroke-width:1;stroke-dasharray:3 4}
+.chart-svg .enddot{fill:var(--coral)}
+.in .chart-svg .area{opacity:.13}
+.in .chart-svg .plat{opacity:.08}
+.chart-note{margin-top:26px;font:400 .74rem/1.7 var(--mono);color:var(--mut)}
+/* ============ closing ============ */
+.anecdote{
+  display:grid;grid-template-columns:minmax(230px,330px) 1fr;gap:clamp(26px,4vw,52px);
+  align-items:center;background:var(--card);border:1px solid var(--line);border-radius:24px;
+  padding:clamp(24px,4vw,44px);margin:2.6rem 0;
+}
+.scene-label{font:600 .66rem/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--mut);margin-bottom:14px}
+.scene-svg{width:100%;height:auto;display:block}
+.anecdote p{font-size:1rem;line-height:1.78}
+.scene-q{font-family:var(--serif);font-style:italic;color:var(--coral-deep);font-size:1.06em}
+.big-q{
+  font-family:var(--serif);font-weight:600;font-size:clamp(1.85rem,4.4vw,3.15rem);
+  line-height:1.18;letter-spacing:-.012em;color:var(--ink);max-width:24ch;margin-top:clamp(48px,7vw,80px);
+  text-wrap:balance;
+}
+.big-q em{color:var(--coral);font-weight:550}
+/* ============ footer ============ */
+footer{border-top:1px solid var(--line);margin-top:clamp(84px,10vw,130px);padding:38px 0 52px}
+.f-inner{display:flex;justify-content:space-between;gap:10px 30px;flex-wrap:wrap;font:500 .72rem/1.9 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+/* ============ responsive ============ */
+@media (max-width:1080px){
+  .cmp col.dimcol{width:120px}
+}
+@media (max-width:960px){
+  .metrics{grid-template-columns:1fr}
+  .metric:nth-child(3){grid-column:auto}
+  .pcards{grid-template-columns:1fr}
+  .anecdote{grid-template-columns:1fr}
+  .scene-svg{max-width:330px}
+}
+@media (max-width:880px){
+  /* Before/After table -> stacked cards */
+  .cmp{display:block}
+  .cmp thead{display:none}
+  .cmp tbody{display:block}
+  .cmp colgroup{display:none}
+  .cmp tbody tr{display:block;margin-bottom:26px}
+  .cmp tbody tr:last-child{margin-bottom:0}
+  .cmp tbody tr + tr > *{padding-top:0}
+  .cmp th.dim{display:block;padding:0 0 12px;font-size:.72rem}
+  .cmp td{display:block;width:100% !important}
+  .cmp td.to{display:none}
+  .cmp td.after{padding-top:12px}
+}
+@media (max-width:760px){
+  .eras-list{grid-template-columns:1fr;gap:30px;padding-left:44px}
+  .eras-line{top:0;left:11px;width:2px;height:100%}
+  .eras-line .h-path{display:none}
+  .eras-line .v-path{display:block}
+  .era{padding-top:0}
+  .era-node{top:-4px;left:-44px}
+  .bn-row{grid-template-columns:1fr;gap:8px}
+  .bn-label{text-align:left}
+  .bar-row{grid-template-columns:76px 1fr}
+  .bar-val{display:none}
+  .pipe{flex-wrap:wrap}
+  .pipe .stage{flex:1 1 40%}
+  .scrollcue{display:none}
+}
+/* ============ reduced motion ============ */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none !important;transition:none !important}
+  [data-reveal]{opacity:1 !important;transform:none !important}
+  .era{opacity:1 !important;transform:none !important}
+  .bn-seg,.bar-fill{transform:scaleX(1) !important}
+  .chart-svg .area{opacity:.13 !important}
+  .chart-svg .plat{opacity:.08 !important}
+  .fade{opacity:1 !important}
+}
+</style>
+</head>
+<body>
+<div id="progress" aria-hidden="true"></div>
+
+<!-- ================= HERO ================= -->
+<header class="hero">
+  <div class="wrap">
+    <p class="kicker">Code w/ Claude SF 2026 · Talk</p>
+    <h1>Running an <em>AI-native</em> engineering org</h1>
+    <p class="deck">At Code w/ Claude SF 2026, Director of Engineering for Claude Code and Claude Cowork Fiona Fung walked through how the team's processes and structure changed once agentic coding became the default way of working.</p>
+    <ul class="meta">
+      <li>Category: <a href="https://claude.com/blog/category/claude-code">Claude Code</a></li>
+      <li>Product: Claude Code</li>
+      <li>Date: June 3, 2026</li>
+      <li>Reading time: 5 min</li>
+    </ul>
+
+    <figure class="eras" data-reveal>
+      <svg class="eras-line" viewBox="0 0 1180 1180" preserveAspectRatio="none" aria-hidden="true">
+        <path class="h-path" d="M0 590 H1180"/>
+        <path class="v-path" d="M590 0 V1180"/>
+      </svg>
+      <ol class="eras-list">
+        <li class="era" style="--d:.05s">
+          <span class="era-node" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/></svg>
+          </span>
+          <span class="era-name">CD-ROM deadlines</span>
+          <span class="era-desc">Software shipped on discs with hard manufacturing deadlines.</span>
+        </li>
+        <li class="era" style="--d:.2s">
+          <span class="era-node" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 16 16"><path d="M13.6 8a5.6 5.6 0 1 1-1.6-3.9M13.6 2.6v3.1h-3.1" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="era-name">Continuous shipping</span>
+          <span class="era-desc">Online distribution meant we could ship updates continuously.</span>
+        </li>
+        <li class="era now" style="--d:.35s">
+          <span class="era-node" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 16 16"><path d="M8 1.4 9.6 6.4 14.6 8 9.6 9.6 8 14.6 6.4 9.6 1.4 8 6.4 6.4Z" fill="currentColor"/></svg>
+          </span>
+          <span class="era-name">AI-native</span>
+          <span class="era-desc">We're changing how we work again — around the time &amp; people it takes to write software.</span>
+        </li>
+      </ol>
+    </figure>
+    <p class="scrollcue" aria-hidden="true">Scroll<i></i></p>
+  </div>
+</header>
+
+<main>
+  <!-- ================= INTRO ================= -->
+  <section class="sec intro">
+    <div class="wrap">
+      <div class="prose">
+        <p class="lede">For years, engineering bandwidth was the expensive part of building applications. Every process we used to have around software planning and shipping, first waterfall and then agile, was built around that cost.</p>
+        <p>I started my career in the early 2000s working on Visual Studio. In those days we shipped software on CD-ROMs with hard manufacturing deadlines. Once we could distribute software online, we began increasing to shipping updates continuously. Now we're changing the way we work again, this time around the time and people it takes to write software.</p>
+        <p>On the Claude Code team, writing code, writing tests, and refactoring rarely slows us down anymore. But the bottlenecks didn't go away when agentic coding took away the actual need to type code. Verification, code review, and security took their place.</p>
+      </div>
+
+      <figure class="bottleneck" data-reveal>
+        <div class="bn-row">
+          <span class="bn-label">Before agentic coding</span>
+          <div class="bn-bar">
+            <span class="bn-seg seg-coding" style="--w:62%;--d:.05s"></span><span class="bn-seg seg-review" style="--w:18%;--d:.15s"></span><span class="bn-seg seg-verify" style="--w:13%;--d:.25s"></span><span class="bn-seg seg-sec" style="--w:7%;--d:.35s"></span>
+          </div>
+        </div>
+        <div class="bn-row">
+          <span class="bn-label">Now</span>
+          <div class="bn-bar">
+            <span class="bn-seg seg-coding" style="--w:14%;--d:.05s"></span><span class="bn-seg seg-review" style="--w:32%;--d:.15s"></span><span class="bn-seg seg-verify" style="--w:33%;--d:.25s"></span><span class="bn-seg seg-sec" style="--w:21%;--d:.35s"></span>
+          </div>
+        </div>
+        <div class="bn-legend">
+          <span><i class="sw" style="background:var(--sand)"></i>coding</span>
+          <span><i class="sw" style="background:var(--coral)"></i>code review</span>
+          <span><i class="sw" style="background:var(--rust)"></i>verification</span>
+          <span><i class="sw" style="background:var(--brown)"></i>security</span>
+        </div>
+        <figcaption class="bn-cap">Where the work goes — writing code shrinks; review, verification &amp; security take its place.</figcaption>
+      </figure>
+
+      <div class="prose">
+        <p>We can all generate a lot of code really fast now, but this also brings up new questions: Is this code correct? How is it maintained? And one of the top questions I get from fellow engineering leaders: <span class="inq">"How are humans keeping up with how you're doing code reviews?"</span></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= PROCESSES ================= -->
+  <section class="sec processes">
+    <div class="wrap">
+      <div class="prose">
+        <p class="sec-kick">01</p>
+        <h2>The processes that quietly stopped working</h2>
+        <p>We all put processes in place for a reason, to close a gap or make something work better. But when that gap no longer exists and those processes become obsolete, they rarely go away on their own. When the Claude Code team began using agentic coding as our default way of working, a lot of our existing processes stopped working. Here are the norms we rewrote, and why.</p>
+
+        <article class="sub" data-reveal>
+          <h3><span class="idx">01</span>Planning: shift roadmaps to just in time</h3>
+          <p>The old norm was to spend a lot more time pre-planning because coding time was expensive. When I first joined the Claude Code team, we wrote a pretty good six month roadmap, and then <em>because</em> of Claude Code, so many things changed that it was out of date by month three.</p>
+          <p>Engineering speed and throughput is different now, so the way we plan sprints has changed. I call it just-in-time (JIT) planning, almost like JIT compiling: how do you do just the right amount at the right time? Our planning ritual shifted away from design docs toward discussions in PRs or prototypes. The space moves fast so we don't do a lot of product reviews. Our process now is let's prototype, get a lot of internal users on it, and start acting on their feedback.</p>
+        </article>
+
+        <article class="sub" data-reveal>
+          <h3><span class="idx">02</span>Context gathering: ask Claude, not the author</h3>
+          <p>When engineers wrote code, the first step to getting an answer to most questions was to find the person who wrote the code. Now, since all our PRs are assisted by Claude, "Who made this change?" is no longer sufficient. Our new norm is to go a level deeper: what do you actually need to know? For instance: Are you looking for who caused a regression? An expert to answer a customer question? Or context on a decision? You ask Claude that question, and consider whether Claude can answer it directly, also with more data and context.</p>
+          <p>On the Claude Code team, no matter what that question is, our process is to also ask "Is there a way to automate it?" For example, having Claude summarize customer feedback channels every morning went from a ritual I did manually with my coffee to something I just have running automatically in the background.</p>
+        </article>
+
+        <article class="sub" data-reveal>
+          <h3><span class="idx">03</span>Code review: trust but verify</h3>
+          <p>We use <a href="https://code.claude.com/docs/en/code-review">Code Review</a> heavily. Claude handles all the style and linting, PR feedback requests, catching bugs and fixing them before a full commit, and adding tests. Where we still definitely want a human is expertise.</p>
+          <p>The new norm is human review where it matters: for legal review, I always want my legal partner involved in risk tolerance. For trust boundaries and security-sensitive code, I want the domain experts. Product managers and designers also need to be involved with product sense and taste.</p>
+          <p>It's important to continually evaluate, though, because the right balance of trust vs. verify will keep changing as the models improve. What you need humans for today might look different with the next model.</p>
+        </article>
+
+        <article class="sub" data-reveal>
+          <h3><span class="idx">04</span>Team makeup: blurring roles</h3>
+          <p>Claude and AI have reshaped roles across the team. Our PMs code a lot now, which is fun to see. With Claude, you have nontraditional coders now being able to do more engineering, and you have engineers who take on things like content and design, work that were traditionally not on the technical side.</p>
+          <p>On the Claude Code engineering team, I've indexed heavily on two profiles. One is creative builders with product sense: the dreamers who are deeply curious and passionate about shipping products that solve problems. The other one is engineers with deep systems expertise. For example, when I joined the team, I noticed we were missing experts with systems backgrounds and we needed that when building <a href="https://www.anthropic.com/news/claude-code-on-the-web">Claude Code on the Web</a>, to ensure we can run Claude everywhere.</p>
+          <p>What I index on less, on the other hand, is raw throughput; the models handle that. The more important question is where you still need human expertise, and that's where I'd focus.</p>
+        </article>
+      </div>
+    </div>
+
+    <!-- ---------- the anchor: Before / After ---------- -->
+    <div class="centerpiece" data-reveal>
+      <div class="wrap">
+        <p class="cp-kick">The norms we rewrote</p>
+        <table class="cmp">
+          <colgroup><col class="dimcol"><col><col class="tocol"><col></colgroup>
+          <thead>
+            <tr>
+              <th></th>
+              <th scope="col" class="hb">Before</th>
+              <th scope="col" class="spacer" aria-hidden="true">
+                <svg class="hd-arrow" data-draw viewBox="0 0 84 22">
+                  <path class="draw" d="M0 11 C28 1 58 21 82 11"/>
+                  <path class="head" d="M69 3 83 11 69 19Z"/>
+                </svg>
+              </th>
+              <th scope="col" class="ha">After</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row" class="dim" data-reveal style="--d:.1s">Planning</th>
+              <td class="before" data-reveal style="--d:.15s">
+                <div class="cell">
+                  <span class="tag b">Before</span>
+                  <svg class="mini" data-draw viewBox="0 0 460 116" role="img" aria-label="A six-month roadmap that goes stale at month three">
+                    <line class="draw" x1="16" y1="62" x2="444" y2="62"/>
+                    <g class="draw">
+                      <line x1="60" y1="54" x2="60" y2="70"/><line x1="131" y1="54" x2="131" y2="70"/><line x1="202" y1="54" x2="202" y2="70"/><line x1="273" y1="54" x2="273" y2="70"/><line x1="344" y1="54" x2="344" y2="70"/><line x1="415" y1="54" x2="415" y2="70"/>
+                    </g>
+                    <rect class="fade" x="16" y="58" width="210" height="8" rx="4" fill="currentColor" opacity=".32"/>
+                    <g class="fade">
+                      <line class="ac" x1="202" y1="58" x2="202" y2="36"/>
+                      <path class="acf" d="M202 36 L230 42 L202 48 Z"/>
+                    </g>
+                    <text x="16" y="98">six-month roadmap</text>
+                    <text class="ac" x="222" y="98" fill="#E08A63">stale by month three</text>
+                  </svg>
+                  <p>Six-month product roadmaps.</p>
+                </div>
+              </td>
+              <td class="to" aria-hidden="true">
+                <svg data-draw viewBox="0 0 44 22">
+                  <path class="draw" d="M2 11 C12 4 26 18 36 11"/>
+                  <path class="head" d="M24 4 38 11 24 18Z"/>
+                </svg>
+              </td>
+              <td class="after" data-reveal style="--d:.3s">
+                <div class="cell">
+                  <span class="tag a">After</span>
+                  <svg class="mini" data-draw viewBox="0 0 460 116" role="img" aria-label="A just-in-time loop: prototype, internal users, feedback, iterate">
+                    <circle class="draw" cx="230" cy="55" r="38"/>
+                    <g class="draw">
+                      <path fill="currentColor" d="M261 32 252 29 257 24Z"/><path fill="currentColor" d="M253 86 262 82 257 77Z"/><path fill="currentColor" d="M199 78 203 81 208 86Z"/><path fill="currentColor" d="M207 24 203 33 198 28Z"/>
+                    </g>
+                    <circle class="fade" cx="230" cy="17" r="15" style="fill:#FDF9F0"/>
+                    <circle class="fade" cx="268" cy="55" r="15" style="fill:#FDF9F0"/>
+                    <circle class="fade" cx="230" cy="93" r="15" style="fill:#FDF9F0"/>
+                    <circle class="fade" cx="192" cy="55" r="15" style="fill:#FDF9F0"/>
+                    <text x="230" y="40" text-anchor="middle">prototype</text>
+                    <text class="jit" x="230" y="60" text-anchor="middle">JIT</text>
+                    <text x="296" y="59">internal users</text>
+                    <text x="164" y="59" text-anchor="end">iterate</text>
+                    <text x="230" y="113" text-anchor="middle">feedback</text>
+                  </svg>
+                  <p>Just-in-time (JIT) planning: prototype, put internal users on it, and act on their feedback.</p>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <th scope="row" class="dim" data-reveal style="--d:.1s">Context gathering</th>
+              <td class="before" data-reveal style="--d:.15s">
+                <div class="cell">
+                  <span class="tag b">Before</span>
+                  <svg class="mini" data-draw viewBox="0 0 460 116" role="img" aria-label="Find the person who wrote the code and ask them">
+                    <g class="draw">
+                      <circle cx="52" cy="48" r="10"/>
+                      <path d="M34 78 C34 64 42 56 52 56 C62 56 70 64 70 78"/>
+                    </g>
+                    <text class="qm" x="52" y="26" text-anchor="middle">?</text>
+                    <line class="draw" x1="72" y1="58" x2="122" y2="58"/>
+                    <path class="acf" d="M116 52 130 58 116 64Z"/>
+                    <rect class="draw" x="140" y="38" width="130" height="40" rx="8"/>
+                    <text x="205" y="62" text-anchor="middle">find the author</text>
+                    <line class="draw" x1="270" y1="58" x2="320" y2="58"/>
+                    <path class="acf" d="M314 52 328 58 314 64Z"/>
+                    <g class="draw">
+                      <circle cx="352" cy="48" r="10"/>
+                      <path d="M334 78 C334 64 342 56 352 56 C362 56 370 64 370 78"/>
+                    </g>
+                    <text x="352" y="26" text-anchor="middle">author</text>
+                    <text class="cap" x="230" y="106" text-anchor="middle">walk over, ask whoever wrote it</text>
+                  </svg>
+                  <p>Find the person who wrote the code and ask them.</p>
+                </div>
+              </td>
+              <td class="to" aria-hidden="true">
+                <svg data-draw viewBox="0 0 44 22">
+                  <path class="draw" d="M2 11 C12 4 26 18 36 11"/>
+                  <path class="head" d="M24 4 38 11 24 18Z"/>
+                </svg>
+              </td>
+              <td class="after" data-reveal style="--d:.3s">
+                <div class="cell">
+                  <span class="tag a">After</span>
+                  <svg class="mini" data-draw viewBox="0 0 460 116" role="img" aria-label="Ask Claude first, then ask whether it can be automated">
+                    <text class="qm" x="30" y="64">?</text>
+                    <line class="draw" x1="42" y1="58" x2="82" y2="58"/>
+                    <path class="acf" d="M76 52 90 58 76 64Z"/>
+                    <circle class="fade" cx="114" cy="58" r="20" style="fill:#C2502A"/>
+                    <path class="fade" d="M114 49 L117 55 L123 58 L117 61 L114 67 L111 61 L105 58 L111 55Z" style="fill:#F7EFDD"/>
+                    <path class="draw" d="M134 52 L168 52 L168 30 L198 30"/>
+                    <path class="acf" d="M192 24 206 30 192 36Z"/>
+                    <rect class="draw" x="212" y="8" width="228" height="44" rx="8"/>
+                    <text x="326" y="26" text-anchor="middle" class="w6">ask Claude first</text>
+                    <text x="326" y="42" text-anchor="middle">answer — with more data &amp; context</text>
+                    <path class="draw" d="M134 64 L168 64 L168 84 L198 84"/>
+                    <path class="acf" d="M192 78 206 84 192 90Z"/>
+                    <rect class="draw" x="212" y="62" width="228" height="44" rx="8"/>
+                    <text x="326" y="86" text-anchor="middle">then ask: can it be automated?</text>
+                  </svg>
+                  <p>Ask Claude first. Then ask whether what you are asking about can be automated.</p>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <th scope="row" class="dim" data-reveal style="--d:.1s">Code review</th>
+              <td class="before" data-reveal style="--d:.15s">
+                <div class="cell">
+                  <span class="tag b">Before</span>
+                  <svg class="mini" data-draw viewBox="0 0 460 116" role="img" aria-label="Every change passes through every human">
+                    <circle class="fade" cx="32" cy="58" r="8" style="fill:currentColor;opacity:.55"/>
+                    <g class="draw">
+                      <circle cx="110" cy="48" r="10"/><path d="M92 78 C92 64 100 56 110 56 C120 56 128 64 128 78"/>
+                      <circle cx="215" cy="48" r="10"/><path d="M197 78 C197 64 205 56 215 56 C225 56 233 64 233 78"/>
+                      <circle cx="320" cy="48" r="10"/><path d="M302 78 C302 64 310 56 320 56 C330 56 338 64 338 78"/>
+                    </g>
+                    <line class="draw" x1="44" y1="58" x2="92" y2="58"/><path class="acf" d="M86 52 100 58 86 64Z"/>
+                    <line class="draw" x1="126" y1="58" x2="197" y2="58"/><path class="acf" d="M191 52 205 58 191 64Z"/>
+                    <line class="draw" x1="231" y1="58" x2="302" y2="58"/><path class="acf" d="M296 52 310 58 296 64Z"/>
+                    <line class="draw" x1="336" y1="58" x2="394" y2="58"/><path class="acf" d="M388 52 402 58 388 64Z"/>
+                    <circle class="draw" cx="428" cy="58" r="8"/>
+                    <path class="ac" d="M423 58 l4 4 l7 -8"/>
+                    <text x="230" y="24" text-anchor="middle">every change, every human</text>
+                    <text class="cap" x="230" y="106" text-anchor="middle">manual gate after manual gate</text>
+                  </svg>
+                  <p>Humans review everything.</p>
+                </div>
+              </td>
+              <td class="to" aria-hidden="true">
+                <svg data-draw viewBox="0 0 44 22">
+                  <path class="draw" d="M2 11 C12 4 26 18 36 11"/>
+                  <path class="head" d="M24 4 38 11 24 18Z"/>
+                </svg>
+              </td>
+              <td class="after" data-reveal style="--d:.3s">
+                <div class="cell">
+                  <span class="tag a">After</span>
+                  <svg class="mini" data-draw viewBox="0 0 460 116" role="img" aria-label="Claude handles style, bugs and tests; humans review where expertise matters">
+                    <circle class="fade" cx="32" cy="58" r="8" style="fill:#2B251E"/>
+                    <line class="draw" x1="44" y1="58" x2="84" y2="58"/><path class="acf" d="M78 52 92 58 78 64Z"/>
+                    <rect class="st draw" x="96" y="34" width="186" height="48" rx="10"/>
+                    <text x="189" y="52" text-anchor="middle" class="w6">Claude</text>
+                    <text x="189" y="69" text-anchor="middle">style · lint · bugs · tests</text>
+                    <line class="draw" x1="282" y1="58" x2="318" y2="58"/><path class="acf" d="M312 52 326 58 312 64Z"/>
+                    <g class="draw">
+                      <circle cx="358" cy="44" r="9"/>
+                      <path d="M340 74 C340 61 348 53 358 53 C368 53 376 61 376 74"/>
+                    </g>
+                    <text x="358" y="24" text-anchor="middle">humans</text>
+                    <line class="draw" x1="376" y1="58" x2="394" y2="58"/><path class="acf" d="M388 52 402 58 388 64Z"/>
+                    <circle class="draw" cx="428" cy="58" r="8"/>
+                    <path class="ac" d="M423 58 l4 4 l7 -8"/>
+                    <text class="cap" x="358" y="100" text-anchor="middle">where expertise matters</text>
+                  </svg>
+                  <p>Claude handles style, bugs, and tests. Humans review where domain expertise is important.</p>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <th scope="row" class="dim" data-reveal style="--d:.1s">Team makeup</th>
+              <td class="before" data-reveal style="--d:.15s">
+                <div class="cell">
+                  <span class="tag b">Before</span>
+                  <svg class="mini" data-draw viewBox="0 0 460 116" role="img" aria-label="Fixed roles: engineers write code, PMs plan, designers design">
+                    <rect class="draw" x="16" y="20" width="134" height="74" rx="10"/>
+                    <rect class="draw" x="163" y="20" width="134" height="74" rx="10"/>
+                    <rect class="draw" x="310" y="20" width="134" height="74" rx="10"/>
+                    <text x="83" y="48" text-anchor="middle" class="w6">engineers</text><text x="83" y="70" text-anchor="middle">write code</text>
+                    <text x="230" y="48" text-anchor="middle" class="w6">PMs</text><text x="230" y="70" text-anchor="middle">plan</text>
+                    <text x="377" y="48" text-anchor="middle" class="w6">designers</text><text x="377" y="70" text-anchor="middle">design</text>
+                    <text class="cap" x="230" y="108" text-anchor="middle">fixed roles, clean walls</text>
+                  </svg>
+                  <p>Fixed roles: engineers write code, PMs plan, designers design.</p>
+                </div>
+              </td>
+              <td class="to" aria-hidden="true">
+                <svg data-draw viewBox="0 0 44 22">
+                  <path class="draw" d="M2 11 C12 4 26 18 36 11"/>
+                  <path class="head" d="M24 4 38 11 24 18Z"/>
+                </svg>
+              </td>
+              <td class="after" data-reveal style="--d:.3s">
+                <div class="cell">
+                  <span class="tag a">After</span>
+                  <svg class="mini" data-draw viewBox="0 0 460 116" role="img" aria-label="Roles blur: PMs prototype, engineers take on design and content">
+                    <g class="fade">
+                      <circle cx="150" cy="58" r="46" style="fill:rgba(194,80,42,.08)"/>
+                      <circle cx="290" cy="58" r="46" style="fill:rgba(194,80,42,.08)"/>
+                      <circle cx="220" cy="58" r="46" style="fill:rgba(194,80,42,.13)"/>
+                    </g>
+                    <circle class="draw" cx="150" cy="58" r="46"/>
+                    <circle class="draw" cx="290" cy="58" r="46"/>
+                    <circle class="draw" cx="220" cy="58" r="46"/>
+                    <path class="draw" d="M172 36 C200 22 240 22 268 36"/>
+                    <path class="acf" d="M256 28 268 36 254 41Z"/>
+                    <path class="draw" d="M268 80 C240 94 200 94 172 80"/>
+                    <path class="acf" d="M182 88 168 80 182 74Z"/>
+                    <text x="150" y="62" text-anchor="middle">PMs</text>
+                    <text x="290" y="62" text-anchor="middle">engineers</text>
+                    <text x="220" y="62" text-anchor="middle">designers</text>
+                    <text class="cap" x="220" y="112" text-anchor="middle">roles blur across the team</text>
+                  </svg>
+                  <p>Roles blur: PMs prototype, engineers take on design and context. Hire for creative builders and deep systems expertise.</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= PRINCIPLES ================= -->
+  <section class="sec principles">
+    <div class="wrap">
+      <div class="prose">
+        <p class="sec-kick">02</p>
+        <h2>How we rolled out our new norms</h2>
+        <p>As these norms changed, some aspects were mandated as team principles and others we let small sub-teams (pods) figure out on their own. There is a set of the Claude Code core team principles that are non-negotiable "must dos":</p>
+      </div>
+
+      <div class="principle-zone" data-reveal>
+        <p class="pz-label">Core team principles — non-negotiable</p>
+        <ol class="pcards">
+          <li class="pcard">
+            <span class="num">01</span>
+            <h3>Relentlessly dogfood your product:</h3>
+            <p>Every Claude Code team member, including cross-functional partners, uses Claude Code (and also Claude Cowork). We're always thinking of ways to get Claude to help us do our work faster, and more efficiently.</p>
+          </li>
+          <li class="pcard">
+            <span class="num">02</span>
+            <h3>Keep the team flat as possible.</h3>
+            <p>When I joined Claude Code I wanted every manager to start out as an IC first, learn how to be an effective engineer on the team by shipping, and really live through and understand what it's like to be an engineer at Anthropic. We have one overall team mission on Claude Code and Claude Cowork. Managers support pods of work while keeping the team agile so people can move to where the work is.</p>
+          </li>
+          <li class="pcard">
+            <span class="num">03</span>
+            <h3>Don't hesitate to kill processes that no longer work:</h3>
+            <p>Finally, we relentlessly question why we do things the way we do. When something doesn't make sense anymore, team members have explicit permission to question and kill old processes.</p>
+          </li>
+        </ol>
+        <div class="podband">
+          <span class="podband-label">Inside the boundary: pod agency</span>
+          <div class="chips">
+            <span class="chip">Claude for triage</span>
+            <span class="chip">Planning rituals</span>
+            <span class="chip">Standups</span>
+            <span class="chip">What gets "Claudified" first</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="prose">
+        <p style="margin-top:2.6rem">Within these few rules, though, each pod has a lot of agency. They have room to adapt how they use Claude to do triage, how they run any planning rituals or standups, and which workflows get "Claudified" first.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= METRICS ================= -->
+  <section class="sec metrics-sec">
+    <div class="wrap">
+      <div class="prose">
+        <p class="sec-kick">03</p>
+        <h2>How to know your new processes are sticking</h2>
+        <p>Here are three numbers every engineering leader should start tracking now as they roll out changes.</p>
+      </div>
+
+      <div class="metrics">
+        <article class="metric" data-reveal>
+          <header class="m-head">
+            <span class="trend">▼ better</span>
+            <h3>Onboarding ramp time goes down:</h3>
+          </header>
+          <p>How soon can an engineer, a designer, or a PM start being effective? On our team this is much faster than a year ago, and engineers ship real code now within their first week.</p>
+          <div class="viz">
+            <div class="bars">
+              <div class="bar-row">
+                <span class="bar-label">A year ago</span>
+                <span class="bar-track"><span class="bar-fill old" style="--w:100%;--d:.05s"></span></span>
+                <span class="bar-val">≈ months</span>
+              </div>
+              <div class="bar-row">
+                <span class="bar-label">Now</span>
+                <span class="bar-track"><span class="bar-fill new" style="--w:18%;--d:.25s"></span></span>
+                <span class="bar-val">first week</span>
+              </div>
+            </div>
+            <div class="week" aria-hidden="true">
+              <span class="d">1</span><span class="d">2</span><span class="d">3</span><span class="d ship">4</span><span class="d">5</span><span class="d">6</span><span class="d">7</span>
+            </div>
+            <p class="viz-cap">engineers ship real code within their first week</p>
+          </div>
+        </article>
+
+        <article class="metric" data-reveal>
+          <header class="m-head">
+            <span class="trend">▼ better</span>
+            <h3>PR cycle time goes down:</h3>
+          </header>
+          <p>This one's interesting to dig into because it might help you identify where your pipeline is struggling to scale. As we're generating so much more code, sometimes build systems and continuous integration (CI) may struggle to keep up.</p>
+          <div class="viz">
+            <div class="bars">
+              <div class="bar-row">
+                <span class="bar-label">Before</span>
+                <span class="bar-track"><span class="bar-fill old" style="--w:100%;--d:.05s"></span></span>
+                <span class="bar-val">slower</span>
+              </div>
+              <div class="bar-row">
+                <span class="bar-label">Now</span>
+                <span class="bar-track"><span class="bar-fill new" style="--w:44%;--d:.25s"></span></span>
+                <span class="bar-val">faster</span>
+              </div>
+            </div>
+            <div class="pipe" aria-hidden="true">
+              <span class="stage">open</span>
+              <span class="stage">review</span>
+              <span class="stage ci"><span class="q"><i></i><i></i><i></i></span>build · CI</span>
+              <span class="stage">merge</span>
+            </div>
+            <p class="viz-cap">build systems &amp; CI may struggle to keep up</p>
+          </div>
+        </article>
+
+        <article class="metric" data-reveal>
+          <header class="m-head">
+            <span class="trend">▲ better</span>
+            <h3>Claude-assisted commits going up:</h3>
+          </header>
+          <p>For us, by default, every commit is Claude-assisted. I don't think I've seen a non-Claude-assisted commit in the last four months.</p>
+          <div class="viz">
+            <svg class="chart-svg" data-draw viewBox="0 0 460 250" role="img" aria-label="Share of Claude-assisted commits rising to 100 percent, held for the last four months">
+              <line class="gridline" x1="40" y1="20" x2="440" y2="20"/>
+              <line class="gridline" x1="40" y1="67.5" x2="440" y2="67.5"/>
+              <line class="gridline" x1="40" y1="115" x2="440" y2="115"/>
+              <line class="gridline" x1="40" y1="162.5" x2="440" y2="162.5"/>
+              <line class="gridline" x1="40" y1="210" x2="440" y2="210"/>
+              <text x="448" y="24">100%</text>
+              <text x="448" y="71">75</text>
+              <text x="448" y="119">50</text>
+              <text x="448" y="167">25</text>
+              <text x="448" y="214">0</text>
+              <rect class="plat" x="330.9" y="20" width="109.1" height="190"/>
+              <path class="area" d="M40 99.8 L76.4 88.4 L112.7 75.1 L149.1 61.8 L185.5 50.4 L221.8 40.9 L258.2 31.4 L294.5 23.8 L330.9 20 L440 20 L440 210 L40 210Z"/>
+              <path class="line draw" d="M40 99.8 L76.4 88.4 L112.7 75.1 L149.1 61.8 L185.5 50.4 L221.8 40.9 L258.2 31.4 L294.5 23.8 L330.9 20 L440 20"/>
+              <line class="vline fade" x1="330.9" y1="20" x2="330.9" y2="210"/>
+              <circle class="enddot fade" cx="440" cy="20" r="4"/>
+              <text class="fade" x="338" y="40">4 months, every commit</text>
+              <text class="fade" x="338" y="56">Claude-assisted</text>
+              <text x="40" y="232">12 months ago</text>
+              <text x="440" y="232" text-anchor="end">now</text>
+            </svg>
+          </div>
+        </article>
+      </div>
+
+      <div class="prose">
+        <p style="margin-top:2.6rem">On the third bullet, don't confuse throughput with success. Throughput is one metric, but the real metric is measuring the thing you're trying to solve. With the right alignment, throughput can help you solve problems faster.</p>
+      </div>
+      <p class="chart-note">Charts are illustrative — the talk anchors direction, not exact figures.</p>
+    </div>
+  </section>
+
+  <!-- ================= CLOSING ================= -->
+  <section class="sec closing">
+    <div class="wrap">
+      <div class="prose">
+        <p class="sec-kick">04</p>
+        <h2>Getting started</h2>
+        <p>If I were to leave you with one thing: <strong>pick your noisiest workflow.</strong> That could be your most expensive workflow, the one you might be dreading, or that your team doesn't look forward to. And ask: is it still serving its purpose? If so, can you automate it?</p>
+      </div>
+
+      <figure class="anecdote" data-reveal>
+        <div>
+          <p class="scene-label">The expensive weekly review</p>
+          <svg class="scene-svg" viewBox="0 0 360 220" role="img" aria-label="A meeting room where everyone is on their laptop except when giving a status report">
+            <rect x="6" y="6" width="348" height="208" rx="18" style="fill:#F1EADA;stroke:#E2DAC8;stroke-width:1.2"/>
+            <g style="fill:#6C6356">
+              <circle cx="70" cy="132" r="10"/>
+              <rect x="58" y="138" width="24" height="16" rx="7"/>
+              <circle cx="125" cy="132" r="10"/>
+              <rect x="113" y="138" width="24" height="16" rx="7"/>
+              <circle cx="235" cy="132" r="10"/>
+              <rect x="223" y="138" width="24" height="16" rx="7"/>
+              <circle cx="290" cy="132" r="10"/>
+              <rect x="278" y="138" width="24" height="16" rx="7"/>
+            </g>
+            <circle cx="180" cy="122" r="11" style="fill:#C2502A"/>
+            <rect x="167" y="132" width="26" height="18" rx="8" style="fill:#C2502A"/>
+            <rect x="36" y="148" width="288" height="14" rx="7" style="fill:#D9CFBA"/>
+            <g style="fill:#B3A893">
+              <rect x="58" y="154" width="26" height="11" rx="3"/>
+              <rect x="113" y="154" width="26" height="11" rx="3"/>
+              <rect x="167" y="154" width="26" height="11" rx="3"/>
+              <rect x="223" y="154" width="26" height="11" rx="3"/>
+              <rect x="278" y="154" width="26" height="11" rx="3"/>
+            </g>
+            <rect x="206" y="92" width="96" height="32" rx="10" style="fill:#FDFBF6;stroke:#C2502A;stroke-width:1.3"/>
+            <path d="M216 124 L208 138 L226 124Z" style="fill:#FDFBF6;stroke:#C2502A;stroke-width:1.3;stroke-linejoin:round"/>
+            <text x="254" y="112" text-anchor="middle" style="font-family:var(--mono);font-size:11px;fill:#4C463C">status</text>
+            <text x="180" y="196" text-anchor="middle" style="font-family:var(--mono);font-size:10px;fill:#746C5F">everyone on laptops, heads down</text>
+          </svg>
+        </div>
+        <p>I was once on a team that had an expensive weekly review, with a large number of people in a meeting room. I noticed everybody was on their laptops except when it was their time to give a status report. They would pop their head up, say the status, and go back down to their laptops. I asked one simple question: <span class="scene-q">"Why are we having this meeting again? It seems like an expensive use of our time."</span> And just that one question made everyone realize it wasn't needed. So we canceled it.</p>
+      </figure>
+
+      <p class="big-q" data-reveal>So, ask yourself: <em>what's one piece of your engineering workflow that you might consider automating or even dropping altogether?</em></p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="f-inner">
+      <span>Fiona Fung · Director of Engineering, Claude Code &amp; Claude Cowork</span>
+      <span>Code w/ Claude SF 2026 · <a href="https://claude.com/blog/category/claude-code">Claude Code</a> · June 3, 2026</span>
+    </div>
+  </div>
+</footer>
+
+<noscript><style>[data-reveal]{opacity:1 !important;transform:none !important}.era{opacity:1 !important;transform:none !important}.bn-seg,.bar-fill{transform:scaleX(1) !important}.fade{opacity:1 !important}.chart-svg .area{opacity:.13 !important}.chart-svg .plat{opacity:.08 !important}</style></noscript>
+
+<script>
+(function () {
+  "use strict";
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function qsa(sel, root) {
+    return Array.prototype.slice.call((root || document).querySelectorAll(sel));
+  }
+
+  /* ---------- reveal on scroll ---------- */
+  if (reduced || !("IntersectionObserver" in window)) {
+    qsa("[data-reveal]").forEach(function (el) { el.classList.add("in"); });
+  } else {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.12, rootMargin: "0px 0px -6% 0px" });
+    qsa("[data-reveal]").forEach(function (el) { io.observe(el); });
+  }
+
+  /* ---------- stroke drawing ---------- */
+  function drawPaths(root) {
+    var els = [];
+    qsa(".draw", root).forEach(function (p) {
+      if (typeof p.getTotalLength === "function") {
+        els.push(p);
+      } else {
+        p.querySelectorAll("path,line,circle,rect,polyline,polygon,ellipse").forEach(function (c) {
+          els.push(c);
+        });
+      }
+    });
+    els.forEach(function (p, i) {
+      var L;
+      try { L = p.getTotalLength(); } catch (err) { return; }
+      if (!L) return;
+      p.style.strokeDasharray = L;
+      p.style.strokeDashoffset = L;
+      p.getBoundingClientRect(); /* force reflow so the transition runs */
+      p.style.transitionDelay = (i * 0.12) + "s";
+      p.style.strokeDashoffset = "0";
+    });
+  }
+  if (reduced || !("IntersectionObserver" in window)) {
+    qsa("[data-draw]").forEach(function (el) { drawPaths(el); });
+  } else {
+    var io2 = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { drawPaths(e.target); io2.unobserve(e.target); }
+      });
+    }, { threshold: 0.15 });
+    qsa("[data-draw]").forEach(function (el) { io2.observe(el); });
+  }
+
+  /* ---------- hero era line ---------- */
+  function drawEraLine() {
+    var desktop = window.innerWidth > 760;
+    var svg = document.querySelector(".eras-line");
+    if (!svg) return;
+    var p = desktop ? svg.querySelector(".h-path") : svg.querySelector(".v-path");
+    if (!p) return;
+    var L = p.getTotalLength();
+    p.style.strokeDasharray = L;
+    p.style.strokeDashoffset = L;
+    p.getBoundingClientRect();
+    p.style.transition = "stroke-dashoffset 1.6s cubic-bezier(.4,0,.2,1) .3s";
+    p.style.strokeDashoffset = "0";
+  }
+  if (reduced) {
+    document.querySelector(".eras").classList.add("in");
+  } else {
+    window.addEventListener("load", drawEraLine);
+  }
+  window.addEventListener("resize", function () {
+    var p = document.querySelector(".eras-line .h-path");
+    if (p) { p.removeAttribute("style"); }
+    var q = document.querySelector(".eras-line .v-path");
+    if (q) { q.removeAttribute("style"); }
+    if (!reduced) drawEraLine();
+  });
+
+  /* ---------- reading progress ---------- */
+  var bar = document.getElementById("progress");
+  var ticking = false;
+  function update() {
+    var h = document.documentElement;
+    var max = h.scrollHeight - h.clientHeight;
+    bar.style.transform = "scaleX(" + (max > 0 ? h.scrollTop / max : 0) + ")";
+    ticking = false;
+  }
+  window.addEventListener("scroll", function () {
+    if (!ticking) { window.requestAnimationFrame(update); ticking = true; }
+  }, { passive: true });
+  update();
+})();
+</script>
+</body>
+</html>

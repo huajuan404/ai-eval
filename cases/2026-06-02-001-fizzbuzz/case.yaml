@@ -17,3 +17,8 @@ judge:
   dimensions: [correctness, code_quality]
 
 # requires_engine 省略 → 所有引擎均可参与对比
+
+# 公开站点
+core: true
+publish:
+  artifacts: [solution.py]
